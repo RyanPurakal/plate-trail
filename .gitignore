@@ -19,3 +19,4 @@ cache/
 # Env / OS
 .env
 .DS_Store
+*.tsbuildinfo
