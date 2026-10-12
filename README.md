@@ -1,34 +1,92 @@
 # Plate Trail
 
 A privacy-audit tool that measures what a history of automated license plate
-reader (ALPR) reads could reveal about a driver, using only public camera
-locations and synthetic drivers. See
-[the proposal](KTP-Capstone-Proposal-Plate-Trail.md).
+reader (ALPR) reads could reveal about a driver. It uses **only public camera
+locations and synthetic drivers**: real ALPR camera positions in Edison and
+New Brunswick, NJ (from OpenStreetMap), simulated weekly routines routed on
+the real road network, direction-aware camera matching, and a sensor noise
+model. See [the proposal](KTP-Capstone-Proposal-Plate-Trail.md),
+[architecture](docs/architecture.md) and [findings](docs/findings.md).
 
-Setup instructions, ethics statement, and build status are added as the
-project is built.
+## Ethics statement
 
-## Quick start (development)
+From the proposal:
+
+- **No real plate reads are used.** Every plate in this project is synthetic
+  and carries the made-up state code `ZZ`, so it cannot match a real
+  registration.
+- **Only public camera data is used** (OpenStreetMap; later DeFlock and
+  agency transparency portals).
+- **Real location data comes only from consenting individuals**, is processed
+  locally, and is never stored. (Real-data validation is planned, not built.)
+- **The project measures what the data can and cannot reveal rather than
+  advocating a side.** Assumptions are labelled as such, and results are
+  reported across their ranges.
+
+## Status
+
+This is the first vertical slice (about a third of the proposal).
+
+| Component | Status |
+|---|---|
+| Infra: docker-compose (PostGIS, FastAPI, Next.js), migrations, pytest + GitHub Actions | ✅ Built |
+| Camera ETL from OpenStreetMap (Overpass), cached; dedupe; GeoJSON export | ✅ Built |
+| Additional camera sources (DeFlock export, agency portals) | 🔲 Planned (loader interface + dedupe ready) |
+| Road network (OSMnx drive + service roads), camera snapping, lot and service-road cameras | ✅ Built |
+| Routing + direction-aware matching (configurable facing, tolerance, undirected modes) | ✅ Built |
+| Sensor noise model (misses, look-alike misreads, downtime, jitter; seeded) | ✅ Built |
+| Routine generator: template drivers (commuter, student, shift worker) | ✅ Built |
+| Routine generator from NHTS trip diaries | 🔲 Planned (interface + stub) |
+| Stored runs: ground truth + noisy read log | ✅ Built |
+| API: `/cameras`, `/simulate`, `/runs`, `/runs/{id}` | ✅ Built |
+| Frontend: map, routes, reads, read-log table, "cameras saw vs. what happened" | 🚧 In progress |
+| Naive home/work guess from the read log | 🔲 Stretch |
+| Celery queue + Redis cache | 🔲 Planned (`SimulationRunner` seam) |
+| Population simulation, unicity analysis | 🔲 Planned |
+| Inference engine (HDBSCAN anchors, schedule, anomalies) | 🔲 Planned |
+| Policy comparison (retention, rounding, aggregation, search windows) | 🔲 Planned |
+| "Your week" mode, real location-history validation | 🔲 Planned |
+
+## Setup
 
 Requires Docker. PostGIS is published on host port **5434** (override with
 `PLATETRAIL_DB_PORT`) to avoid clashing with other local Postgres instances.
+Raw source data and the road graph are cached under `data/` (gitignored).
 
 ```bash
-docker compose up -d --build      # db :5434, api :8000, web :3000
-curl localhost:8000/health
+# 1. Start everything: db :5434, api :8000, web :3000
+docker compose up -d --build
+
+# 2. Build the data (first run downloads from OpenStreetMap; reruns use data/ caches)
+docker compose exec api python -m platetrail.etl.run_etl         # ALPR cameras (Overpass)
+docker compose exec api python -m platetrail.roads.run_roads     # road graph (several minutes the first time), snapping
+docker compose exec api python -m platetrail.routines.places     # towns + candidate anchor places
+docker compose restart api                                       # the API caches cameras and the graph
+
+# 3. Simulate a driver and look at it
+curl -X POST localhost:8000/simulate -H 'content-type: application/json' \
+     -d '{"template": "commuter", "weeks": 2, "seed": 1}'
+open http://localhost:3000
 ```
 
-Backend tests locally (Python 3.12):
+Rerun steps in that order: reloading cameras clears their snaps, so
+`run_roads` must follow `run_etl`. Then restart the API.
+
+### Development
+
+Backend (Python 3.12):
 
 ```bash
 cd backend
 python3.12 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-docker compose up -d db
-DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/platetrail .venv/bin/pytest
+export DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/platetrail
+.venv/bin/pytest                                   # db tests use a separate platetrail_test database
+.venv/bin/uvicorn platetrail.api.main:app --reload
 ```
 
 Tests marked `db` are skipped when `DATABASE_URL` is unset. CI always runs them
-against a PostGIS service container.
+against a PostGIS service container. Frontend: `cd frontend && npm install &&
+npm run dev` (expects the API on `localhost:8000`).
 
 ## Camera ETL
 
@@ -266,6 +324,23 @@ time zone. Camera references store the id and the stable OSM id
 renumbers cameras) doesn't delete stored runs. Runs are reproducible: the
 same request on the same data stores the same run. `SimulationRunner` is the
 seam for a future Celery-backed runner; `LocalRunner` runs synchronously.
+
+## API
+
+FastAPI on `:8000` (interactive docs at `/docs`):
+
+| Endpoint | Returns |
+|---|---|
+| `GET /health` | status and PostGIS version |
+| `GET /cameras[?rays=true]` | cameras as GeoJSON: kind (`public_road` / `private_lot` / `service_road`), directions, ambiguity flags, lot info; optional 30 m direction rays |
+| `POST /simulate` | simulates and stores one driver. Body: `template`, `weeks` (1–8), `start` (a Monday), `seed`, `zero_noise`, `match` {`tolerance_deg`, `facing`, `undirected`, `ambiguous_direction`, `lot_entrance`}, `noise` {`p_miss`, `p_char_misread`, `downtime_rate_per_week`, `downtime_mean_hours`, `jitter_sd_s`}. Returns `run_id`, summary, plate. |
+| `GET /runs` | stored runs, newest first |
+| `GET /runs/{id}` | the run (config, anchors, summary), trips as GeoJSON, every camera pass (matcher decision and noise outcome), the read log (`plate_state` + `plate`, recorded and true time), outages |
+
+Simulation runs synchronously through `LocalRunner`. The road graph and
+cameras load once on first use (about 5 s), and later requests take well
+under a second. A queue-backed runner can replace it behind the same
+endpoint.
 
 ## Known limitations
 
