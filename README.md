@@ -158,8 +158,19 @@ That figure is a share of hotlist **alerts**, a sample skewed toward misreads,
 not a share of all reads, so it isn't used as a default. Results should be
 reported across a range of these settings.
 
-Synthetic plates follow the current NJ passenger shape (`A12BCD`) and are
-generated at random.
+**Synthetic plates** are random strings in the current NJ passenger shape
+(`A12BCD`: letter, two digits, three letters), so misreads exercise a
+realistic letter/digit mix. That shape is still issued in NJ
+([Wikipedia](https://en.wikipedia.org/wiki/Vehicle_registration_plates_of_New_Jersey)
+lists `A12-BCD` as the passenger format since July 2010). NJ MVC publishes no
+list of unused layouts; its
+[Advisory 2010-005](https://nj.gov/mvc/pdf/about/advisories/advisory-2010-005.pdf)
+says passenger plates can begin with any letter, including S, T and X. So no
+string in this shape is guaranteed unissued. Instead, every synthetic plate
+carries the made-up jurisdiction code **`ZZ`** (`SYNTHETIC_STATE`; not a USPS
+or ISO 3166-2:US code). A plate's identity is `(state, plate)`, which can't
+collide with a real registration. A read with the wrong state counts as a
+misread, ready for a future wrong-state error type.
 
 Every read may also pass through `extra_read_errors`, a hook for error types
 not modelled yet. Each error type draws from its own random stream, so adding

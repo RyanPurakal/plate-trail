@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from platetrail.sim.noise import NoiseConfig, Outage, TruePass, apply_noise, outage_windows, true_passes
-from platetrail.sim.plates import LOOKALIKES, PLATE_PATTERN, misread, synthetic_plate
+from platetrail.sim.plates import LOOKALIKES, PLATE_PATTERN, SYNTHETIC_STATE, misread, synthetic_plate
 
 START = datetime(2026, 10, 12)
 END = START + timedelta(weeks=4)
@@ -193,6 +193,15 @@ def test_true_passes_numbering():
             self.time, self.camera_id = t, c
     ps = true_passes([P(START + timedelta(hours=2), 5), P(START, 9)], "A12BCD", first_id=10)
     assert [(p.pass_id, p.camera_id, p.plate) for p in ps] == [(10, 9, "A12BCD"), (11, 5, "A12BCD")]
+    assert all(p.state == SYNTHETIC_STATE == "ZZ" for p in ps)
+
+
+def test_reads_carry_synthetic_state_and_state_errors_count_as_misreads():
+    result = apply_noise(passes(n=50), START, END, NoiseConfig.noiseless())
+    assert all(r.state == r.true_state == "ZZ" and not r.misread for r in result.reads)
+    from dataclasses import replace
+    wrong_state = replace(result.reads[0], state="NJ")
+    assert wrong_state.misread and wrong_state.plate == wrong_state.true_plate
 
 
 def test_noiseless_pipeline_equals_matcher_output_end_to_end():

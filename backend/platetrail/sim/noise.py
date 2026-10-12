@@ -34,7 +34,7 @@ from typing import Protocol
 
 import numpy as np
 
-from platetrail.sim.plates import misread
+from platetrail.sim.plates import SYNTHETIC_STATE, misread
 
 _STREAM_OUTAGE = 1
 _STREAM_PASS = 2
@@ -98,6 +98,7 @@ class TruePass:
     camera_id: int
     time: datetime
     plate: str
+    state: str = SYNTHETIC_STATE
 
 
 @dataclass(frozen=True)
@@ -120,10 +121,12 @@ class Read:
     true_plate: str  # kept for evaluation only; not part of what a camera reports
     true_time: datetime
     jitter_s: float
+    state: str = SYNTHETIC_STATE  # as recorded
+    true_state: str = SYNTHETIC_STATE
 
     @property
     def misread(self) -> bool:
-        return self.plate != self.true_plate
+        return self.plate != self.true_plate or self.state != self.true_state
 
 
 @dataclass(frozen=True)
@@ -193,15 +196,16 @@ def apply_noise(
         for err in cfg.extra_read_errors:
             plate = err.apply(plate, np.random.default_rng([cfg.seed, err.stream, p.pass_id]))
         jitter = z * cfg.jitter_sd_s
-        reads.append(Read(0, p.pass_id, p.camera_id, p.time + timedelta(seconds=jitter), plate, p.plate, p.time, jitter))
+        reads.append(Read(0, p.pass_id, p.camera_id, p.time + timedelta(seconds=jitter), plate, p.plate, p.time,
+                          jitter, p.state, p.state))
 
     reads.sort(key=lambda r: (r.time, r.pass_id))
-    reads = [Read(i, r.pass_id, r.camera_id, r.time, r.plate, r.true_plate, r.true_time, r.jitter_s)
-             for i, r in enumerate(reads)]
+    reads = [Read(i, r.pass_id, r.camera_id, r.time, r.plate, r.true_plate, r.true_time, r.jitter_s,
+                  r.state, r.true_state) for i, r in enumerate(reads)]
     return NoiseResult(reads, dropped, outages)
 
 
-def true_passes(captured: list, plate: str, first_id: int = 0) -> list[TruePass]:
+def true_passes(captured: list, plate: str, first_id: int = 0, state: str = SYNTHETIC_STATE) -> list[TruePass]:
     """Number captured CameraPass objects (any order) into TruePasses for one vehicle."""
     ordered = sorted(captured, key=lambda p: (p.time, p.camera_id))
-    return [TruePass(first_id + i, p.camera_id, p.time, plate) for i, p in enumerate(ordered)]
+    return [TruePass(first_id + i, p.camera_id, p.time, plate, state) for i, p in enumerate(ordered)]

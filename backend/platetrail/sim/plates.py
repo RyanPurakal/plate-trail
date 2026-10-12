@@ -1,9 +1,18 @@
 """Synthetic plates and the look-alike character table used for misreads.
 
-Plates follow the shape of current New Jersey passenger plates (letter,
-two digits, three letters, e.g. "D12ABC") so misreads exercise a realistic
-mix of letters and digits. They are generated at random; any match with a
-real plate is coincidental, and no real plate data is ever used.
+Plate strings follow the shape of current New Jersey passenger plates
+(letter, two digits, three letters, e.g. "D12ABC"), so misreads exercise a
+realistic mix of letters and digits.
+
+That shape is live in NJ: per Wikipedia's "Vehicle registration plates of
+New Jersey", A12-BCD has been the passenger serial format since July 2010.
+NJ MVC publishes no list of unused layouts; its Advisory 2010-005 says
+passenger plates may begin with any letter, including S, T and X. So no
+string in this shape is guaranteed never to be issued. Instead every
+synthetic plate carries the jurisdiction code SYNTHETIC_STATE ("ZZ", not a
+USPS state code or an ISO 3166-2:US subdivision). A plate's identity is
+(state, plate), which cannot collide with a real registration. No real plate
+data is ever used.
 """
 
 import string
@@ -32,6 +41,7 @@ LOOKALIKES: dict[str, tuple[str, ...]] = {
 }
 
 PLATE_PATTERN = "LDDLLL"  # L = letter, D = digit
+SYNTHETIC_STATE = "ZZ"  # made-up jurisdiction; see module docstring
 
 
 def synthetic_plate(rng: np.random.Generator, pattern: str = PLATE_PATTERN) -> str:

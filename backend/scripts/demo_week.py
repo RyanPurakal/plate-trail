@@ -17,7 +17,7 @@ from platetrail.db import get_engine
 from platetrail.roads.graph import load_or_build_graph
 from platetrail.sim.matcher import MatchConfig
 from platetrail.sim.noise import NoiseConfig, apply_noise, true_passes
-from platetrail.sim.plates import synthetic_plate
+from platetrail.sim.plates import SYNTHETIC_STATE, synthetic_plate
 from platetrail.sim.routing import Router
 from platetrail.sim.trip import load_camera_set, simulate_trip
 
@@ -45,7 +45,7 @@ def summarize(result) -> dict:
         "misreads": len(result.misreads),
         "lost_downtime": len(result.dropped_for("downtime")),
         "lost_missed": len(result.dropped_for("missed")),
-        "distinct_plates": len({r.plate for r in result.reads}),
+        "distinct_plates": len({(r.state, r.plate) for r in result.reads}),
     }
 
 
@@ -72,7 +72,7 @@ def main() -> None:
     zero = apply_noise(tp, *period, NoiseConfig.noiseless(args.seed), all_ids)
     default = apply_noise(tp, *period, NoiseConfig(seed=args.seed), all_ids)
 
-    print(f"Synthetic plate {plate}; match config: facing={cfg.facing.value}, tolerance={cfg.tolerance_deg:g}, "
+    print(f"Synthetic plate {SYNTHETIC_STATE} {plate}; match config: facing={cfg.facing.value}, tolerance={cfg.tolerance_deg:g}, "
           f"lot_entrance={cfg.lot_entrance.value}")
     print(f"Trips: {len(week_trips())}   camera passes: {len(passes)}   "
           f"captured by matcher (true passes): {len(tp)}   skipped for direction: "
@@ -80,11 +80,11 @@ def main() -> None:
     print(f"Cameras involved: {dict(Counter(cameras.by_id[x.camera_id].label for x in tp))}\n")
 
     z, d = summarize(zero), summarize(default)
-    print(f"{'':<28}{'zero noise':>12}{'default noise (seed ' + str(args.seed) + ')':>30}")
+    print(f"{'':<36}{'zero noise':>12}{'default noise (seed ' + str(args.seed) + ')':>30}")
     for k, label in [("reads", "reads after noise"), ("misreads", "misread reads"),
                      ("lost_downtime", "lost to downtime"), ("lost_missed", "lost to missed reads"),
-                     ("distinct_plates", "distinct plate strings")]:
-        print(f"{label:<28}{z[k]:>12}{d[k]:>30}")
+                     ("distinct_plates", "distinct (state, plate) identities")]:
+        print(f"{label:<36}{z[k]:>12}{d[k]:>30}")
 
     for r in default.misreads:
         print(f"  misread: pass {r.pass_id} at {r.true_time:%a %H:%M} read as {r.plate} (true {r.true_plate})")
