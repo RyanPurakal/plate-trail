@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: platetrail
+      POSTGRES_PASSWORD: platetrail
+      POSTGRES_DB: platetrail
+    ports:
+      - "${PLATETRAIL_DB_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platetrail -d platetrail"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://platetrail:platetrail@db:5432/platetrail
+      PLATETRAIL_DATA_DIR: /data
+      CORS_ORIGINS: http://localhost:3000
+    volumes:
+      # Overpass and OSMnx caches persist on the host so reruns don't refetch.
+      - ./data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
