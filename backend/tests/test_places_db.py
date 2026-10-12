@@ -19,6 +19,7 @@ class FakeCache:
 def test_large_building_attaches_at_outline(engine):
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE road_edges CASCADE"))
+        conn.execute(text("TRUNCATE places RESTART IDENTITY"))  # earlier runs reference the test town
         conn.execute(text("DELETE FROM towns WHERE name = 'Testtown'"))
         conn.execute(text("INSERT INTO towns (name, osm_id, geom) VALUES ('Testtown', 'relation/1',"
                           " ST_Multi(ST_MakeEnvelope(-74.5, 40.4, -74.3, 40.6, 4326)))"))
