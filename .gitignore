@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+.coverage
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+
+# Data caches (Overpass responses, OSMnx graphs) - regenerable, never committed
+data/
+cache/
+
+# Env / OS
+.env
+.DS_Store
