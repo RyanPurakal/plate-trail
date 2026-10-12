@@ -64,9 +64,9 @@ def cameras_feature_collection(engine: Engine, ray_m: float = 30.0) -> dict:
                 "watched_way_osm_id": r["watched_way_osm_id"],
                 "lot_facings": r["facings"],
                 "lot_alt_facings": r["alt_facings"],
-                # geojson.io styling: red public road, blue private lot, grey undirected
+                # geojson.io styling: red public road, blue private lot, orange service road, grey undirected
                 "marker-color": "#7f8c8d" if not r["has_direction"]
-                else ("#2471a3" if r["camera_kind"] == "private_lot" else "#c0392b"),
+                else {"private_lot": "#2471a3", "service_road": "#d68910"}.get(r["camera_kind"], "#c0392b"),
             }
             features.append(
                 {"type": "Feature", "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]}, "properties": props}

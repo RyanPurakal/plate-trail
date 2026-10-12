@@ -78,14 +78,17 @@ snaps.
 ### Camera kinds
 
 - **public_road**: snapped to a drive-network edge, as above.
-- **private_lot**: the camera watches a parking/retail lot or its driveway,
-  not a public road. A camera counts as private_lot if it is more than 50 m
-  from the drive network, or if it faces closer to perpendicular than
-  parallel to its road with a parallel service road within 10 m. It is
+- **service_road**: more than 50 m from any public road (deep inside a lot or
+  business park). Snapped to the internal service street it watches and
+  matched like a road camera (4 cameras, including Raritan Center's
+  14174561401 on Mayfield Ave).
+- **private_lot**: the camera watches a lot's driveway from beside a public
+  road. It faces closer to perpendicular than parallel to that road, with a
+  parallel service road within 10 m. It is
   attached to its lot polygon (retail > commercial > industrial > parking >
-  shop) and gets no public-road snap. Each of its directions is recorded as
-  pointing `into_lot` or `toward_road`. There are 10 such cameras, including
-  4 at Menlo Park Mall and 2 in Raritan Center.
+  shop) and gets no road snap. Each of its directions is recorded as pointing
+  `into_lot` or `toward_road`. There are 6 such cameras, including 3 at Menlo
+  Park Mall and 1 in Raritan Center.
 - **snap_ambiguous** (flag): a public-road camera still more than 45° off its
   road axis after direction-aware snapping, so it is unclear which street it
   watches. It keeps the nearest snap (3 cameras).
@@ -166,24 +169,24 @@ counts only if it is on the part actually driven.
   (e.g. downtown New Brunswick) are likely under-represented. Census housing
   counts would fix this.
 - **Places** (1,310) are OSM shops, food, services, leisure, worship,
-  workplaces, university and hospitals inside the two towns. Places more than
-  **100 m** from the network (service roads included) are not sampled: 21 of
-  1,310, mostly very large buildings whose OSM centre point is deep inside
-  the footprint (three Amazon facilities, Macy's logistics, Arizona
-  Beverages) and a few parks. Excluding them under-represents those large
-  employers. Snapping to the building outline instead of its centre would
-  fix this.
+  workplaces, university and hospitals inside the two towns. A place
+  attaches to the network at its OSM centre point. If that is more than
+  100 m from the network, it attaches at the **point on its building outline
+  nearest the network** instead. That brings back 18 of 21 such places,
+  including Amazon LGA5, LGA9 and DJE1, Macy's Logistics, Arizona Beverages,
+  Europastry, C+A Global and CarMax. Places still more than **100 m** away are
+  not sampled (3).
 - **Errands** pick a category from a fixed mix (grocery 28%, retail 22%,
   food 25%, services 15%, leisure 10%; **assumption**), then a place in it,
   weighted by `exp(-distance / 4 km)` from the trip's origin. Drivers reuse a
   "usual" place per category 60% of the time. **Camera locations are never
-  used.** Check (`scripts/check_camera_lot_share.py`): 6.4% of errand trips
-  end inside a camera-covered lot (95% interval 5.3–8.1% across 50 seeds), vs
-  7.3% of errand places lying inside one. The gap comes from the category mix
+  used.** Check (`scripts/check_camera_lot_share.py`): 5.3% of errand trips
+  end inside a camera-covered lot (95% interval 4.0–6.7% across 50 seeds), vs
+  6.6% of errand places lying inside one. The gap comes from the category mix
   the templates actually produce. Evening outings are food/leisure, which
   raises food to 34% and leisure to 16% of errands, and leisure has no places
-  in camera lots while retail has 18%. That realized mix alone predicts 6.6%.
-  So it isn't a bias against camera lots.
+  in camera lots while retail has the most. That realized mix alone predicts
+  5.6%. So it isn't a bias against camera lots.
 
 ## Sensor noise model
 
@@ -275,11 +278,6 @@ seam for a future Celery-backed runner; `LocalRunner` runs synchronously.
   published per-read rate.
 - **Free-flow routing.** No traffic model, so departure time only stamps
   timestamps.
-- **Deep-lot cameras.** The 4 cameras more than 50 m from any public road
-  (inside Raritan Center and retail lots) are modelled as lot cameras at
-  their nearest entrance, up to 758 m away. They really watch internal
-  service streets, so snapping them to those streets as road cameras would
-  be more faithful.
 - **Private (`access=private`) service roads are excluded**, including 92
   ways in Raritan Center.
 - **Facing convention is unverified.** `rear_plate` is a default assumption;

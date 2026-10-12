@@ -19,9 +19,11 @@ Works on a projected (metric) graph. For each camera:
    test under the configured capture convention (rear_plate / oncoming), so
    no convention is baked into the stored snaps.
 
-Cameras snap to public roads only (EdgeIndex(..., public_only=True)).
-Service roads are in the graph for routing to places inside lots; cameras
-watching lots and driveways are handled as private_lot cameras (roads.lots).
+Cameras snap to public roads first (EdgeIndex(..., public_only=True)).
+Cameras more than 50 m from any public road (deep inside lots and business
+parks) are then snapped to service streets (service_only=True) and matched
+like road cameras. Cameras watching driveways from beside a public road are
+handled as private_lot cameras (roads.lots).
 4. Each snap records the travel bearing u->v at the snap point, from the
    edge's own geometry rather than the u->v chord, so curved roads are right.
    Bearings are true-north geodesic azimuths, not UTM grid angles.
@@ -101,12 +103,14 @@ def is_service(highway) -> bool:
 
 
 class EdgeIndex:
-    def __init__(self, G_proj: nx.MultiDiGraph, public_only: bool = False):
+    def __init__(self, G_proj: nx.MultiDiGraph, public_only: bool = False, service_only: bool = False):
         if not G_proj.graph.get("crs") or "4326" in str(G_proj.graph["crs"]):
             raise ValueError("EdgeIndex needs a projected graph (use ox.project_graph)")
         gdf = ox.graph_to_gdfs(G_proj, nodes=False)
         if public_only and "highway" in gdf:
             gdf = gdf[~gdf["highway"].map(is_service)]
+        if service_only and "highway" in gdf:
+            gdf = gdf[gdf["highway"].map(is_service)]
         self.keys: list[EdgeKey] = [(int(u), int(v), int(k)) for u, v, k in gdf.index]
         self.geoms: list[LineString] = list(gdf.geometry)
         self.names: list[str | None] = [_name(n) for n in gdf.get("name", [None] * len(gdf))]
@@ -221,6 +225,25 @@ def _twin_carriageway(index: EdgeIndex, pt: Point, chosen: list[int], max_distan
         if angle_diff(bearing, other) >= 180.0 - PARALLEL_DEG:
             return i
     return None
+
+
+def snap_with_service_fallback(
+    public: EdgeIndex, service: EdgeIndex, cameras: list[CameraInput]
+) -> tuple[list[SnapResult], set[int]]:
+    """Snap to public roads; cameras dropped there (>50 m) get a second try on service streets.
+
+    Returns the results and the ids of cameras that ended up on service streets.
+    """
+    results, on_service = [], set()
+    for cam in cameras:
+        r = snap_camera(public, cam)
+        if r.dropped:
+            s = snap_camera(service, cam)
+            if not s.dropped:
+                r = s
+                on_service.add(cam.camera_id)
+        results.append(r)
+    return results, on_service
 
 
 def road_axis_offset(result: SnapResult) -> float | None:

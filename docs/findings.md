@@ -113,6 +113,25 @@ opposite carriageways are recorded and then skipped for direction under
 The previous "top camera's share" column (63% / 67% / 74%) was a mean over
 true captures; it is now a median over reads.
 
+**After deep-lot cameras and building outlines** (2026-10-12). The 4 cameras
+deep inside lots are now road cameras on the service streets they watch, and
+18 of 21 large buildings attach at their outline instead of being excluded.
+Same command and seed:
+
+| Template | Camera passes | Captures | Reads after noise | Top camera (median) | No reads |
+|---|---|---|---|---|---|
+| Commuter | 10.5 → 11.5 | 7.7 → 8.1 | 7.2 → 7.6 | 70% → 71% | 11% → 12% |
+| Student | 10.5 → 10.5 | 7.5 → 7.6 | 7.0 → 7.1 | 71% → 75% | 10% → 9% |
+| Shift worker | 9.9 → 9.4 | 7.7 → 7.3 | 7.2 → 6.9 | 86% → 88% | 6% → 4% |
+
+Reads per driver-week: median 6 → **7**, interquartile range 3–10 → 3–10.25,
+max 30 → 32; no reads 10% → 10%. **Median share of reads from one camera:
+73% → 75%.** Across all 300 drivers, captures by camera kind: 2,294 public
+road, 46 private lot, 21 service road (the 4 re-modelled cameras). Some
+template rows shift because the place pool changed (18 places added), which
+changes which anchors each seed draws. That's sampling variation, not a
+model effect for that template.
+
 **What it says.** F1 wasn't an unlucky pick. A typical driver is read about 6
 times a week by about 2 cameras, and for the median driver 73% of reads come
 from one camera. About one driver in ten is never read in a week. Templates
@@ -123,7 +142,10 @@ driver's anchors more than on how much they drive.
 
 - **Camera lots** (`scripts/check_camera_lot_share.py`, 50 seeds × 300
   drivers): 6.4% of errand trips end inside a camera-covered lot (95%
-  interval 5.3–8.1%), vs 7.3% of errand places lying in one. Breakdown: the
+  interval 5.3–8.1%), vs 7.3% of errand places lying in one. After the
+  deep-lot cameras became service-road cameras, fewer lots count as
+  camera-covered: 5.3% (4.0–6.7%) vs 6.6% of places, and the realized
+  category mix predicts 5.6%. Same explanation as below. Breakdown: the
   configured category mix gives 7.4%, and adding distance decay from homes
   gives 7.9%. The templates' realized mix (evening outings push food to 34%
   and leisure to 16%; leisure has no places in camera lots, retail has 18%)
@@ -135,6 +157,9 @@ driver's anchors more than on how much they drive.
   added).
 - **Lot-camera events** (`scripts/lot_events_by_mode.py`, 300 drivers): 110
   under `access_road` (default), 622 under `nearest`, 1,440 under `all`.
+  After the deep-lot change (6 lot cameras left): 75 / 534 / 742. Raritan
+  Center's remaining lot camera (12760383248) sees 40 events; the other one
+  (14174561401) is now a service-road camera on Mayfield Ave.
   Raritan Center's 2 cameras see 68 events under `access_road` (all at the
   driveway camera 12760383248), vs 788 if both saw every visit. Menlo Park
   Mall: 13271071475 sees 20 and 13370492601 sees 10. 13370466401 sees none in

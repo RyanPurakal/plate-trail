@@ -24,7 +24,8 @@ from dataclasses import dataclass
 import numpy as np
 import osmnx as ox
 from shapely import wkb
-from shapely.geometry import LineString, MultiPolygon, Point
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
+from shapely.ops import polygonize, unary_union
 from sqlalchemy import Engine, text
 
 from platetrail.config import get_settings
@@ -133,8 +134,62 @@ def store_places(engine: Engine, places: list[dict]) -> None:
         conn.execute(text("UPDATE places p SET town = t.name FROM towns t WHERE ST_Covers(t.geom, p.geom)"))
         conn.execute(text("DELETE FROM places WHERE town IS NULL"))
         conn.execute(text(
-            "UPDATE places p SET network_distance_m = (SELECT ST_Distance(p.geom::geography, e.geom::geography)"
-            " FROM road_edges e ORDER BY e.geom <-> p.geom LIMIT 1)"))
+            "UPDATE places p SET attach_geom = p.geom, attach_method = 'centre', network_distance_m ="
+            " (SELECT ST_Distance(p.geom::geography, e.geom::geography) FROM road_edges e"
+            " ORDER BY e.geom <-> p.geom LIMIT 1)"))
+
+
+def _outline(el: dict):
+    """Polygon (or line) for an Overpass way/relation returned with `out geom`."""
+    if el["type"] == "way" and len(el.get("geometry", [])) >= 2:
+        coords = [(q["lon"], q["lat"]) for q in el["geometry"]]
+        return Polygon(coords) if len(coords) >= 4 and coords[0] == coords[-1] else LineString(coords)
+    if el["type"] == "relation":
+        outers = [LineString([(q["lon"], q["lat"]) for q in m["geometry"]])
+                  for m in el.get("members", []) if m.get("role") == "outer" and len(m.get("geometry", [])) >= 2]
+        polys = list(polygonize(outers))
+        return unary_union(polys) if polys else None
+    return None
+
+
+def attach_far_places_by_outline(engine: Engine, cache: RawCache, refresh: bool = False) -> list[dict]:
+    """Re-attach places whose centre point is > MAX_PLACE_NETWORK_M from the network via their outline.
+
+    Very large buildings (warehouses, fulfilment centres) have an OSM centre
+    point deep inside the footprint, though they front a road. Their
+    attachment point becomes the point on the outline nearest the network.
+    Returns one row per re-attached place (name, category, before/after distance).
+    """
+    with engine.connect() as conn:
+        far = conn.execute(text(
+            "SELECT id, osm_id, name, category, network_distance_m d FROM places"
+            " WHERE network_distance_m > :m AND osm_id !~ '^node/' ORDER BY id"), {"m": MAX_PLACE_NETWORK_M}).all()
+    if not far:
+        return []
+    ways = [r.osm_id.split("/")[1] for r in far if r.osm_id.startswith("way/")]
+    rels = [r.osm_id.split("/")[1] for r in far if r.osm_id.startswith("relation/")]
+    parts = ([f"way(id:{','.join(ways)});"] if ways else []) + ([f"relation(id:{','.join(rels)});"] if rels else [])
+    query = "[out:json][timeout:90];\n(" + "".join(parts) + ");\nout geom;"
+    response = cache.get_or_fetch(query, lambda: OverpassClient().fetch(query), refresh=refresh)
+    outlines = {f"{el['type']}/{el['id']}": g for el in response.get("elements", []) if (g := _outline(el)) is not None}
+
+    changed = []
+    with engine.begin() as conn:
+        for r in far:
+            g = outlines.get(r.osm_id)
+            if g is None:
+                continue
+            boundary = g.boundary if g.geom_type in ("Polygon", "MultiPolygon") else g
+            row = conn.execute(text(
+                "WITH b AS (SELECT ST_GeomFromText(:w, 4326) g), e AS (SELECT geom FROM road_edges, b"
+                " ORDER BY road_edges.geom <-> b.g LIMIT 1)"
+                " SELECT ST_AsText(ST_ClosestPoint(b.g, e.geom)) pt,"
+                " ST_Distance(ST_ClosestPoint(b.g, e.geom)::geography, e.geom::geography) d FROM b, e"),
+                {"w": boundary.wkt}).one()
+            conn.execute(text("UPDATE places SET attach_geom = ST_GeomFromText(:pt, 4326), attach_method = 'outline',"
+                              " network_distance_m = :d WHERE id = :id"), {"pt": row.pt, "d": row.d, "id": r.id})
+            changed.append({"name": r.name, "category": r.category, "before_m": r.d, "after_m": row.d})
+    return changed
 
 
 def run(refresh: bool = False, engine: Engine | None = None) -> str:
@@ -145,6 +200,7 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
     query = build_query()
     response = cache.get_or_fetch(query, lambda: OverpassClient().fetch(query), refresh=refresh)
     store_places(engine, parse_places(response))
+    changed = attach_far_places_by_outline(engine, cache, refresh=refresh)
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT town, category, count(*) n FROM places GROUP BY 1, 2 ORDER BY 1, 2")).all()
     lines = ["Places loaded (category counts per town):"]
@@ -155,6 +211,12 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
             "SELECT count(*) FILTER (WHERE network_distance_m > 100) gt100,"
             " count(*) FILTER (WHERE network_distance_m > :m) excluded, count(*) n FROM places"),
             {"m": MAX_PLACE_NETWORK_M}).one()
+    back = [c for c in changed if c["after_m"] <= MAX_PLACE_NETWORK_M]
+    lines.append(f"Re-attached by building outline: {len(changed)} places whose centre was > {MAX_PLACE_NETWORK_M:g} m "
+                 f"away; {len(back)} now within {MAX_PLACE_NETWORK_M:g} m")
+    for c in sorted(changed, key=lambda c: c["before_m"], reverse=True):
+        lines.append(f"  {c['category']:<10} {c['name'] or '(unnamed)':<38} centre {c['before_m']:5.0f} m -> "
+                     f"outline {c['after_m']:5.1f} m")
     lines.append(f"Excluded from sampling (more than {MAX_PLACE_NETWORK_M:g} m from the drive network): "
                  f"{far.excluded} of {far.n}")
     return "\n".join(lines)
@@ -198,7 +260,8 @@ class PlacePool:
             places = [
                 Place(f"place/{r.id}", r.category, r.lon, r.lat, r.town, r.name, r.osm_id)
                 for r in conn.execute(text(
-                    "SELECT id, category, ST_X(geom) lon, ST_Y(geom) lat, town, name, osm_id FROM places"
+                    "SELECT id, category, ST_X(coalesce(attach_geom, geom)) lon, ST_Y(coalesce(attach_geom, geom)) lat,"
+                    " town, name, osm_id FROM places"
                     " WHERE network_distance_m IS NULL OR network_distance_m <= :m ORDER BY id"),
                     {"m": MAX_PLACE_NETWORK_M})
             ]

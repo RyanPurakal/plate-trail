@@ -28,6 +28,7 @@ from platetrail.roads.snap import (
     alignment_flags,
     road_axis_offset,
     snap_camera,
+    snap_with_service_fallback,
 )
 
 CLOSE_PAIR_M = 30.0
@@ -47,9 +48,12 @@ def load_alt_directions(engine: Engine) -> dict[int, list[float]]:
     return {r.id: list(r.alt_directions_deg) for r in rows}
 
 
-def store_classification(engine: Engine, cls: Classification) -> None:
+def store_classification(engine: Engine, cls: Classification, service_cams: set[int] = frozenset()) -> None:
     with engine.begin() as conn:
         conn.execute(text("UPDATE cameras SET camera_kind = 'public_road', snap_ambiguous = false"))
+        if service_cams:
+            conn.execute(text("UPDATE cameras SET camera_kind = 'service_road' WHERE id = ANY(:ids)"),
+                         {"ids": sorted(service_cams)})
         conn.execute(text("DELETE FROM camera_lots"))
         if cls.snap_ambiguous:
             conn.execute(
@@ -136,7 +140,8 @@ def classify_pair(a: SnapResult, b: SnapResult) -> str:
 
 
 def summarize(
-    G, n_edges_stored: int, results: list[SnapResult], flags: list[AlignmentFlag], cls: Classification
+    G, n_edges_stored: int, results: list[SnapResult], flags: list[AlignmentFlag], cls: Classification,
+    service_cams: set[int] = frozenset(),
 ) -> str:
     lines = ["Road network summary", "===================="]
     lines.append(f"Graph: {G.number_of_nodes():,} nodes, {G.number_of_edges():,} directed edges (stored {n_edges_stored:,})")
@@ -184,7 +189,16 @@ def summarize(
 
     lines.append("")
     by_id = {r.camera.camera_id: r for r in results}
-    lines.append(f"Camera kinds: {len(results) - len(cls.lots)} public_road, {len(cls.lots)} private_lot")
+    lines.append(f"Camera kinds: {len(results) - len(cls.lots) - len(service_cams)} public_road, "
+                 f"{len(cls.lots)} private_lot, {len(service_cams)} service_road")
+    for r in results:
+        if r.camera.camera_id in service_cams:
+            dirs = "/".join(f"{d:g}" for d in r.camera.directions_deg or [])
+            lines.append(
+                f"  SERVICE {r.camera.label} faces {dirs}: "
+                + ", ".join(f"{s.name or 'unnamed'} {s.bearing_deg:.0f} deg at {s.distance_m:.1f} m" for s in r.snaps)
+                + (f" (re-snapped from {r.resnapped_from})" if r.resnapped_from else "")
+            )
     for cid, a in sorted(cls.lots.items(), key=lambda t: t[1].camera.label):
         lot = f"{a.lot.kind} {a.lot.osm_id} ({a.lot.name or 'unnamed'})" if a.lot else "NO LOT POLYGON FOUND"
         way = f", watches service road {a.watched_way.osm_id}" if a.watched_way else ""
@@ -239,21 +253,25 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
     G = load_or_build_graph(refresh=refresh)
     n_stored = store_edges(engine, G)
     G_proj = ox.project_graph(G)
-    index = EdgeIndex(G_proj, public_only=True)  # cameras snap to public roads only
-    results = [snap_camera(index, cam) for cam in load_cameras(engine)]
+    index = EdgeIndex(G_proj, public_only=True)  # cameras snap to public roads first
+    # Cameras deep inside lots/business parks (>50 m from any public road) watch internal
+    # service streets: snap them to those and match them like road cameras.
+    results, service_cams = snap_with_service_fallback(
+        index, EdgeIndex(G_proj, service_only=True), load_cameras(engine))
+    public = [r for r in results if r.camera.camera_id not in service_cams]
 
     candidates = [
-        r.camera for r in results if r.dropped or ((road_axis_offset(r) or 0) > PERPENDICULAR_DEG)
+        r.camera for r in public if r.dropped or ((road_axis_offset(r) or 0) > PERPENDICULAR_DEG)
     ]
     cache = RawCache(get_settings().data_dir / "raw" / "overpass_lots")
     features = fetch_lot_features(candidates, cache, index, refresh=refresh)
-    cls = classify(results, features, index, load_alt_directions(engine), EntranceIndex(G_proj))
+    cls = classify(public, features, index, load_alt_directions(engine), EntranceIndex(G_proj))
 
-    # Lot cameras watch private lots, so they get no public-road snap.
+    # Lot cameras watch private lots, so they get no road snap.
     store_snaps(engine, [r for r in results if r.camera.camera_id not in cls.lots])
-    store_classification(engine, cls)
-    flags = [f for r in results for f in alignment_flags(index, r)]
-    return summarize(G, n_stored, results, flags, cls)
+    store_classification(engine, cls, service_cams)
+    flags = [f for r in public for f in alignment_flags(index, r)]
+    return summarize(G, n_stored, results, flags, cls, service_cams)
 
 
 def main() -> None:

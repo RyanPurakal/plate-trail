@@ -248,3 +248,26 @@ def test_is_service():
     from platetrail.roads.snap import is_service
     assert is_service("service") and is_service(["service", "service"])
     assert not is_service("residential") and not is_service(["service", "residential"])
+
+
+def test_deep_lot_camera_falls_back_to_service_street():
+    from platetrail.roads.snap import snap_with_service_fallback
+
+    G = toy_graph()
+    for _, _, d in G.edges(data=True):
+        d["highway"] = "residential"
+    # A service street 200 m north of the E-W road, far from every public edge.
+    G.add_node(40, x=X0 + 50, y=Y0 + 200)
+    G.add_node(41, x=X0 + 150, y=Y0 + 200)
+    for a, b in ((40, 41), (41, 40)):
+        G.add_edge(a, b, key=0, highway="service",
+                   geometry=LineString([(X0 + G.nodes[a]["x"] - X0, Y0 + 200), (X0 + G.nodes[b]["x"] - X0, Y0 + 200)]))
+    public, service = EdgeIndex(G, public_only=True), EdgeIndex(G, service_only=True)
+    deep = cam(100, 206, [90], cid=1)  # 6 m from the service street, 194 m from the public road
+    near_public = cam(100, 10, [90], cid=2)  # ordinary public-road camera
+    nowhere = cam(600, 600, [90], cid=3)  # far from everything
+    results, on_service = snap_with_service_fallback(public, service, [deep, near_public, nowhere])
+    assert on_service == {1}
+    assert {s.edge for s in results[0].snaps} == {(40, 41, 0), (41, 40, 0)}
+    assert {s.edge for s in results[1].snaps} == {(1, 2, 0), (2, 1, 0)}
+    assert results[2].dropped

@@ -46,6 +46,7 @@ def main() -> None:
     period = (START, START + timedelta(weeks=args.weeks, days=1))  # +1 day for night shifts ending Monday
 
     stats = defaultdict(list)
+    by_kind = Counter()
     attach, errand_in_lot, errands = [], 0, 0
     examples = {}
     for i in range(args.drivers):
@@ -57,6 +58,7 @@ def main() -> None:
                             datetime.combine(period[1], datetime.min.time()), NoiseConfig(seed=args.seed * 100_000 + i),
                             list(cameras.by_id))
         cams = Counter(r.camera_id for r in noisy.reads)
+        by_kind.update(cameras.by_id[p.camera_id].kind for p in sim.captured)
         row = {
             "trips": len(sim.trips),
             "km": sum(t.result.route.length_m for t in sim.trips) / 1000,
@@ -101,6 +103,7 @@ def main() -> None:
           f"p75 {np.percentile(reads, 75):g}, max {reads[-1]}; drivers with 0 reads: "
           f"{sum(r == 0 for r in reads) / len(reads):.0%}")
     print(f"Trips skipped (anchor > 500 m from network): {sum(r['skipped'] for r in all_rows)}")
+    print("Captures by camera kind (all drivers): " + ", ".join(f"{k}={v}" for k, v in sorted(by_kind.items())))
     print("Share of a driver's reads from their single most-read camera (drivers with >= 1 read), median: "
           + ", ".join(
               f"{name} {statistics.median(r['top_camera_share'] for r in stats[name] if r['top_camera_share'] is not None):.0%}"
