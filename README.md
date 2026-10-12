@@ -29,3 +29,18 @@ DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/platetrai
 
 Tests marked `db` are skipped when `DATABASE_URL` is unset. CI always runs them
 against a PostGIS service container.
+
+## Camera ETL
+
+```bash
+cd backend
+DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/platetrail \
+  .venv/bin/python -m platetrail.etl.run_etl            # add --refresh to refetch
+```
+
+Pulls ALPR cameras (`man_made=surveillance` + `surveillance:type=ALPR`) for
+Edison and New Brunswick from OpenStreetMap via Overpass. Raw responses are
+cached in `data/raw/overpass/`, so reruns don't hit Overpass. Direction comes
+from `camera:direction`, falling back to `direction`. When both are present and
+disagree, the summary lists the camera. New sources plug in as additional
+`CameraLoader`s and go through the same deduplication step.
