@@ -9,6 +9,12 @@ mid-block doesn't "pass" a camera behind it.
 Points farther than MAX_ATTACH_M from any edge are rejected (AnchorTooFar).
 That is a data guard; normal places are within tens of metres.
 
+Service roads (lot entrances, business-park streets) are in the graph so
+places inside lots are reachable. Route choice multiplies their travel time
+by SERVICE_ROUTING_PENALTY so through traffic stays on public roads and only
+uses service roads to get into or out of a place. Timestamps use real
+travel times.
+
 Departure time only stamps timestamps; there is no traffic model, so travel
 times are free-flow (OSMnx speed_kph from maxspeed tags or highway defaults).
 """
@@ -21,10 +27,12 @@ import osmnx as ox
 from shapely.geometry import LineString, Point
 from shapely.ops import substring
 
-from platetrail.roads.snap import EdgeIndex
+from platetrail.roads.snap import EdgeIndex, is_service
 
 EdgeKey = tuple[int, int, int]
 MAX_ATTACH_M = 500.0
+# ASSUMPTION: route-choice cost multiplier for service roads (not applied to timestamps).
+SERVICE_ROUTING_PENALTY = 4.0
 _O, _D = "__origin__", "__dest__"
 
 
@@ -44,6 +52,7 @@ class RouteEdge:
     name: str | None
     frac_from: float = 0.0  # driven part of the edge, as fractions u->v
     frac_to: float = 1.0
+    service: bool = False  # a service road (lot entrance, business-park street)
 
     @property
     def full_travel_time_s(self) -> float:
@@ -74,6 +83,31 @@ class Route:
     def arrive(self) -> datetime:
         return self.depart + timedelta(seconds=self.duration_s)
 
+    def lot_entry_node(self, end: str) -> int | None:
+        """Junction where the route turns from a public road onto service roads to reach ("dest") or
+        leave ("origin") the place, i.e. the entrance actually used. None if that end has no service roads."""
+        seq = self.edges if end == "origin" else list(reversed(self.edges))
+        if not seq or not seq[0].service:
+            return None
+        for e in seq:
+            if not e.service:
+                return e.edge[1] if end == "dest" else e.edge[0]
+        return None
+
+    def lot_side_public_edge(self, end: str) -> EdgeKey:
+        """The public edge the route arrives on ("dest") or leaves by ("origin").
+
+        That is the last public edge before the final run of service roads (or
+        the first after the initial run). This is the entrance actually used to
+        reach a place inside a lot. Falls back to the snapped edge if the whole
+        route is on service roads.
+        """
+        seq = self.edges if end == "origin" else list(reversed(self.edges))
+        for e in seq:
+            if not e.service:
+                return e.edge
+        return (self.origin if end == "origin" else self.dest).edge
+
     @property
     def origin_snap_m(self) -> float:
         return self.origin.distance_m
@@ -103,6 +137,9 @@ class Router:
         """G: unprojected (EPSG:4326) graph with travel_time and length on edges."""
         core = max(nx.strongly_connected_components(G), key=len)
         self.G = G.subgraph(core).copy()
+        for _, _, d in self.G.edges(data=True):
+            d["_svc"] = is_service(d.get("highway"))
+            d["_cost"] = float(d["travel_time"]) * (SERVICE_ROUTING_PENALTY if d["_svc"] else 1.0)
         self.index = EdgeIndex(ox.project_graph(self.G))
 
     # ---- snapping ------------------------------------------------------------------
@@ -151,7 +188,7 @@ class Router:
         data = self._data(e)
         span = f1 - f0
         return RouteEdge(e, float(data["length"]) * span, float(data["travel_time"]) * span, offset,
-                         _edge_name(data), f0, f1)
+                         _edge_name(data), f0, f1, bool(data.get("_svc")))
 
     # ---- routing -----------------------------------------------------------------------
 
@@ -176,15 +213,15 @@ class Router:
         G = self.G
         try:
             for e, f0, f1, node in exits:
-                G.add_edge(_O, node, key=hash((e, "x")), travel_time=self._data(e)["travel_time"] * (f1 - f0), _via=(e, f0, f1))
+                G.add_edge(_O, node, key=hash((e, "x")), _cost=self._data(e)["_cost"] * (f1 - f0), _via=(e, f0, f1))
             for e, f0, f1, node in entries:
-                G.add_edge(node, _D, key=hash((e, "n")), travel_time=self._data(e)["travel_time"] * (f1 - f0), _via=(e, f0, f1))
+                G.add_edge(node, _D, key=hash((e, "n")), _cost=self._data(e)["_cost"] * (f1 - f0), _via=(e, f0, f1))
             try:
-                cost, path = nx.single_source_dijkstra(G, _O, _D, weight="travel_time")
+                cost, path = nx.single_source_dijkstra(G, _O, _D, weight="_cost")
             except nx.NetworkXNoPath as err:
                 raise NoRoute(f"no route from {o} to {d}") from err
-            first = min(G[_O][path[1]].values(), key=lambda a: a["travel_time"])["_via"]
-            last = min(G[path[-2]][_D].values(), key=lambda a: a["travel_time"])["_via"]
+            first = min(G[_O][path[1]].values(), key=lambda a: a["_cost"])["_via"]
+            last = min(G[path[-2]][_D].values(), key=lambda a: a["_cost"])["_via"]
         finally:
             if _O in G:
                 G.remove_node(_O)
@@ -196,7 +233,7 @@ class Router:
         for e, f0, _, _ in exits:
             for e2, _, f1, _ in entries:
                 if e == e2 and f1 >= f0:
-                    t = self._data(e)["travel_time"] * (f1 - f0)
+                    t = self._data(e)["_cost"] * (f1 - f0)
                     if direct is None or t < direct[0]:
                         direct = (t, e, f0, f1)
         if direct is not None and direct[0] <= cost:
@@ -204,7 +241,7 @@ class Router:
         else:
             pieces = [first]
             for u, v in zip(path[1:-2], path[2:-1]):
-                k = min(G[u][v], key=lambda k: G[u][v][k]["travel_time"])
+                k = min(G[u][v], key=lambda k: G[u][v][k]["_cost"])
                 pieces.append(((u, v, k), 0.0, 1.0))
             pieces.append(last)
 

@@ -12,9 +12,17 @@ Works on a projected (metric) graph. For each camera:
    two-way road (same geometry, reversed), one on a one-way road. If the
    chosen road is one carriageway of a divided road, the opposite
    carriageway (one-way, parallel, opposite travel, within 30 m of the
-   camera) is snapped too, so a divided road is treated like a two-way road.
-   Without this a camera beside, e.g., Albany St's westbound carriageway
-   never sees eastbound traffic.
+   camera) is snapped too, but only if one of the camera's facings is
+   within 45 deg of that carriageway's travel bearing (undirected cameras
+   always get it). Without this a camera beside, e.g., Albany St's westbound
+   carriageway never sees eastbound traffic. Note the facing check assumes
+   the rear-plate convention (a camera faces the traffic it reads); under
+   the oncoming convention a camera that fails it can't see that
+   carriageway.
+
+Cameras snap to public roads only (EdgeIndex(..., public_only=True)).
+Service roads are in the graph for routing to places inside lots; cameras
+watching lots and driveways are handled as private_lot cameras (roads.lots).
 4. Each snap records the travel bearing u->v at the snap point, from the
    edge's own geometry rather than the u->v chord, so curved roads are right.
    Bearings are true-north geodesic azimuths, not UTM grid angles.
@@ -34,6 +42,7 @@ MAX_SNAP_M = 50.0
 PREFER_PARALLEL_WITHIN_M = 10.0  # extra distance allowed to reach a parallel road
 PARALLEL_DEG = 30.0  # axis difference that counts as "parallel"
 TWIN_CARRIAGEWAY_M = 30.0  # max camera distance to the opposite carriageway of a divided road
+TWIN_FACING_DEG = 45.0  # a camera facing must be within this of the opposite carriageway's bearing
 TIE_TOL_M = 0.01  # distances this close count as the same road geometry
 BEARING_STEP_M = 2.0  # half-width of the window used to measure local bearing
 
@@ -87,11 +96,19 @@ def _name(value) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def is_service(highway) -> bool:
+    """True for service-road edges (OSMnx merges tags into lists on simplified edges)."""
+    values = highway if isinstance(highway, list) else [highway]
+    return bool(values) and all(v == "service" for v in values)
+
+
 class EdgeIndex:
-    def __init__(self, G_proj: nx.MultiDiGraph):
+    def __init__(self, G_proj: nx.MultiDiGraph, public_only: bool = False):
         if not G_proj.graph.get("crs") or "4326" in str(G_proj.graph["crs"]):
             raise ValueError("EdgeIndex needs a projected graph (use ox.project_graph)")
         gdf = ox.graph_to_gdfs(G_proj, nodes=False)
+        if public_only and "highway" in gdf:
+            gdf = gdf[~gdf["highway"].map(is_service)]
         self.keys: list[EdgeKey] = [(int(u), int(v), int(k)) for u, v, k in gdf.index]
         self.geoms: list[LineString] = list(gdf.geometry)
         self.names: list[str | None] = [_name(n) for n in gdf.get("name", [None] * len(gdf))]
@@ -184,7 +201,7 @@ def snap_camera(
             chosen = min(parallel, key=lambda r: (road_dist[r], sorted(r)))
 
     chosen_edges = list(roads[chosen])
-    twin = _twin_carriageway(index, pt, chosen_edges, max_distance_m)
+    twin = _twin_carriageway(index, pt, chosen_edges, max_distance_m, cam.directions_deg)
     if twin is not None:
         chosen_edges.append(twin)
     snaps = sorted((index.make_snap(cam.camera_id, i, pt) for i in chosen_edges), key=lambda s: s.edge)
@@ -192,8 +209,10 @@ def snap_camera(
                       resnapped_from=resnapped_from, twin_added=twin is not None)
 
 
-def _twin_carriageway(index: EdgeIndex, pt: Point, chosen: list[int], max_distance_m: float) -> int | None:
-    """Nearest opposite-direction one-way edge parallel to a one-way chosen edge, if any."""
+def _twin_carriageway(
+    index: EdgeIndex, pt: Point, chosen: list[int], max_distance_m: float, directions: list[float] | None
+) -> int | None:
+    """Nearest opposite-direction one-way edge parallel to a one-way chosen edge that a facing points along."""
     if len(chosen) != 1 or not index.is_one_way(chosen[0]):
         return None
     line = index.geoms[chosen[0]]
@@ -203,8 +222,11 @@ def _twin_carriageway(index: EdgeIndex, pt: Point, chosen: list[int], max_distan
         if _road_id(index.keys[i]) == own or not index.is_one_way(i):
             continue
         other = index.bearing_at(index.geoms[i], index.geoms[i].project(pt))
-        if angle_diff(bearing, other) >= 180.0 - PARALLEL_DEG:
-            return i
+        if angle_diff(bearing, other) < 180.0 - PARALLEL_DEG:
+            continue
+        if directions and min(angle_diff(d, other) for d in directions) > TWIN_FACING_DEG:
+            return None  # nearest opposite carriageway, but no facing points along it
+        return i
     return None
 
 

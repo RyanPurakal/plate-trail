@@ -121,16 +121,18 @@ def test_undirected_camera_modes(router):
 
 LOT_CENTER = (600, 30)  # a plaza beside Main St, between A and B
 IN_LOT = (600, 25)  # destination inside the lot; snaps to Main St (edge 1-2) at fraction 0.6
-MAIN_ST = frozenset((1, 2))
+# The plaza fronts Main St directly (no service roads in this toy graph), so its
+# entrance nodes are Main St's endpoints, 1 and 2.
+MAIN_ST_NODE = 1
 
 
-def lot_camera(facings, alt=None, cid=5, at=(600, 5), access=MAIN_ST):
+def lot_camera(facings, alt=None, cid=5, at=(600, 5), access=MAIN_ST_NODE):
     clon, clat = xy(*LOT_CENTER)
     lot = box(clon - 0.0005, clat - 0.0002, clon + 0.0005, clat + 0.0002)  # ~85 m x 44 m
     lon, lat = xy(*at)
     return SimCamera(cid, f"lot{cid}", "private_lot", [0.0], alt_directions_deg=[180.0] if alt else None,
                      lot_geom=lot, lot_id="way/77", lot_name="Test Plaza", facings=facings, alt_facings=alt,
-                     lon=lon, lat=lat, access_road=access)
+                     lon=lon, lat=lat, access_node=access)
 
 
 def test_lot_arrival_captured_at_arrival_time(router):
@@ -138,7 +140,7 @@ def test_lot_arrival_captured_at_arrival_time(router):
     assert [(p.event, p.captured) for p in result.passes] == [("arrival", True)]
     assert result.passes[0].time == result.route.arrive
     assert result.passes[0].road_name == "Test Plaza"
-    assert frozenset(result.route.dest.edge[:2]) == MAIN_ST
+    assert set(result.route.dest.edge[:2]) == {1, 2}
 
 
 def test_lot_departure_needs_toward_road_facing(router):
@@ -162,18 +164,18 @@ def test_trip_not_touching_lot_has_no_lot_events(router):
     assert simulate_trip(router, cams, xy(0, 0), xy(2000, 0), DEPART).passes == []
 
 
-def test_access_road_rule_ignores_cameras_on_other_roads(router):
-    # Same lot, but this camera's driveway meets the bypass, not Main St.
-    cams = CameraSet([lot_camera(["into_lot"], access=frozenset((1, 4)))])
+def test_access_road_rule_ignores_cameras_at_other_entrances(router):
+    # Same lot, but this camera's entrance is on the bypass (node 4), not Main St.
+    cams = CameraSet([lot_camera(["into_lot"], access=4)])
     assert simulate_trip(router, cams, xy(0, 0), xy(*IN_LOT), DEPART).passes == []
     nearest = simulate_trip(router, cams, xy(0, 0), xy(*IN_LOT), DEPART, MatchConfig(lot_entrance="nearest"))
     assert [p.label for p in nearest.passes] == ["lot5"]
 
 
-def test_access_road_rule_fires_every_camera_on_that_road(router):
+def test_access_road_rule_fires_every_camera_at_that_entrance(router):
     a = lot_camera(["into_lot"], cid=6, at=(560, 5))
     b = lot_camera(["into_lot"], cid=7, at=(640, 5))
-    other = lot_camera(["into_lot"], cid=8, at=(600, 60), access=frozenset((1, 4)))
+    other = lot_camera(["into_lot"], cid=8, at=(600, 60), access=4)
     r = simulate_trip(router, CameraSet([a, b, other]), xy(0, 0), xy(*IN_LOT), DEPART)
     assert sorted(p.label for p in r.passes) == ["lot6", "lot7"]
 
@@ -241,3 +243,164 @@ def test_anchor_too_far_rejected(router):
     from platetrail.sim.routing import AnchorTooFar
     with pytest.raises(AnchorTooFar):
         router.route(xy(0, 3000), xy(1000, 0), DEPART)
+
+
+# ---- service roads -------------------------------------------------------------------------
+
+def lot_graph():
+    """Public approach roads 0-1 and 3-4, a slow public detour 1-2-3, and a service road through a lot 1-10-3."""
+    G = nx.MultiDiGraph(crs="EPSG:4326")
+    pts = {0: (-500, 0), 1: (0, 0), 2: (500, 1400), 3: (1000, 0), 4: (1500, 0), 10: (500, 0)}
+    for n, (e, nn) in pts.items():
+        lon, lat = xy(e, nn)
+        G.add_node(n, x=lon, y=lat)
+
+    def both(u, v, length, kph, name, highway):
+        for a, b in ((u, v), (v, u)):
+            G.add_edge(a, b, key=0, length=length, travel_time=length / (kph / 3.6), name=name, highway=highway)
+
+    both(0, 1, 500, 40, "West Rd", "tertiary")
+    both(3, 4, 500, 40, "East Rd", "tertiary")
+    both(1, 2, 1500, 25, "Public Rd", "tertiary")  # detour: 3000 m at 25 km/h = 432 s
+    both(2, 3, 1500, 25, "Public Rd", "tertiary")
+    both(1, 10, 500, 15, None, "service")  # through the lot: 1000 m at 15 km/h = 240 s (960 s penalized)
+    both(10, 3, 500, 15, None, "service")
+    return G
+
+
+def test_through_route_does_not_cut_through_lot():
+    # Via the lot: 240 s real time but 960 s penalized; the public detour is 432 s.
+    r = Router(lot_graph()).route(xy(-500, 0), xy(1500, 0), DEPART)
+    assert [e.edge[:2] for e in r.edges] == [(0, 1), (1, 2), (2, 3), (3, 4)]
+    assert not any(e.service for e in r.edges)
+
+
+def test_through_route_takes_lot_shortcut_only_if_penalty_removed(monkeypatch):
+    import platetrail.sim.routing as routing
+    monkeypatch.setattr(routing, "SERVICE_ROUTING_PENALTY", 1.0)
+    r = Router(lot_graph()).route(xy(-500, 0), xy(1500, 0), DEPART)
+    assert any(e.service for e in r.edges)  # sanity check: the shortcut exists and is otherwise attractive
+
+
+def test_destination_inside_lot_uses_service_road_and_reports_entrance():
+    router = Router(lot_graph())
+    r = router.route(xy(-400, 0), xy(450, 5), DEPART)  # a shop inside the lot, on the service road
+    assert r.edges[-1].service
+    assert frozenset(r.lot_side_public_edge("dest")[:2]) == frozenset((0, 1))
+    # Arriving from the east enters from the other side.
+    r2 = router.route(xy(1400, 0), xy(450, 5), DEPART)
+    assert r2.edges[-1].service
+    assert frozenset(r2.lot_side_public_edge("dest")[:2]) == frozenset((3, 4))
+
+
+def test_timestamps_use_real_travel_time_not_penalty():
+    r = Router(lot_graph()).route(xy(0, 0), xy(250, 5), DEPART)  # halfway along service edge 1-10
+    assert r.duration_s == pytest.approx(250 / (15 / 3.6), rel=0.02)
+
+
+def test_lot_side_public_edge_is_last_public_edge_before_service_run():
+    from platetrail.sim.routing import RouteEdge
+    from platetrail.sim.routing import Route as R
+    edges = [RouteEdge((1, 2, 0), 1, 1, 0, None), RouteEdge((2, 3, 0), 1, 1, 1, None),
+             RouteEdge((3, 9, 0), 1, 1, 2, None, service=True), RouteEdge((9, 8, 0), 1, 1, 3, None, service=True)]
+    from platetrail.sim.routing import EdgePoint
+    route = R(EdgePoint((1, 2, 0), 0, 0), EdgePoint((9, 8, 0), 1, 0), DEPART, edges, [])
+    assert route.lot_side_public_edge("dest") == (2, 3, 0)
+    assert route.lot_side_public_edge("origin") == (1, 2, 0)
+    all_service = R(EdgePoint((3, 9, 0), 0, 0), EdgePoint((9, 8, 0), 1, 0), DEPART, edges[2:], [])
+    assert all_service.lot_side_public_edge("dest") == (9, 8, 0)
+
+
+def test_lot_camera_fires_on_the_entrance_the_route_uses():
+    """Two entrances to one lot; the camera at each fires only for trips approaching from its side."""
+    router = Router(lot_graph())
+    clon, clat = xy(500, 0)
+    lot = box(clon - 0.003, clat - 0.0002, clon + 0.003, clat + 0.0002)
+    west = SimCamera(1, "west-gate", "private_lot", [90.0], lot_geom=lot, lot_id="way/1", facings=["into_lot"],
+                     lon=xy(20, 0)[0], lat=xy(20, 0)[1], access_node=1)
+    east = SimCamera(2, "east-gate", "private_lot", [270.0], lot_geom=lot, lot_id="way/1", facings=["into_lot"],
+                     lon=xy(980, 0)[0], lat=xy(980, 0)[1], access_node=3)
+    cams = CameraSet([west, east])
+    # Same shop (just west of centre), approached from either side.
+    from_west = simulate_trip(router, cams, xy(-400, 0), xy(480, 5), DEPART)
+    from_east = simulate_trip(router, cams, xy(1400, 0), xy(480, 5), DEPART)
+    assert [p.label for p in from_west.passes] == ["west-gate"]
+    assert [p.label for p in from_east.passes] == ["east-gate"]
+
+
+def test_lot_entry_node_is_where_route_turns_onto_service_roads():
+    router = Router(lot_graph())
+    from_west = router.route(xy(-400, 0), xy(450, 5), DEPART)
+    from_east = router.route(xy(1400, 0), xy(450, 5), DEPART)
+    assert from_west.lot_entry_node("dest") == 1
+    assert from_east.lot_entry_node("dest") == 3
+    leaving = router.route(xy(450, 5), xy(-400, 0), DEPART)
+    assert leaving.lot_entry_node("origin") == 1
+    assert router.route(xy(-400, 0), xy(1400, 0), DEPART).lot_entry_node("dest") is None  # no service roads
+
+
+def test_entrance_index_finds_public_service_junctions():
+    import osmnx as ox
+
+    from platetrail.roads.lots import EntranceIndex
+    from shapely.geometry import Point
+
+    G = ox.project_graph(lot_graph())
+    idx = EntranceIndex(G)
+    assert set(idx.nodes) == {1, 3}  # node 10 is service-only; 0, 2, 4 are public-only
+    x, y = G.nodes[3]["x"], G.nodes[3]["y"]
+    node, dist = idx.nearest(Point(x + 30, y))
+    assert node == 3 and abs(dist - 30) < 0.5
+
+
+def test_entrance_for_camera_is_junction_of_nearest_driveway():
+    import osmnx as ox
+    from shapely.geometry import Point
+
+    from platetrail.roads.lots import EntranceIndex
+
+    G = ox.project_graph(lot_graph())
+    idx = EntranceIndex(G)
+    (x1, y1), (x3, y3) = (G.nodes[1]["x"], G.nodes[1]["y"]), (G.nodes[3]["x"], G.nodes[3]["y"])
+    # 3 m beside the service road leaving junction 1, but the junction-3 *point* is nearer than junction 1.
+    cam = Point(x1 + 260, y1 + 3)
+    assert idx.for_camera(cam)[0] == 1
+    cam2 = Point(x3 - 100, y3 + 3)  # beside the service road leaving junction 3
+    assert idx.for_camera(cam2)[0] == 3
+
+
+def test_entrance_for_camera_prefers_driveway_parallel_to_facing():
+    import osmnx as ox
+    from shapely.geometry import Point
+
+    from platetrail.roads.lots import EntranceIndex
+
+    G = lot_graph()
+    # A second junction (5) on West Rd with a north-south service spur passing right by the camera.
+    G.add_node(5, x=xy(-100, 0)[0], y=xy(-100, 0)[1])
+    G.add_node(6, x=xy(250, 60)[0], y=xy(250, 60)[1])
+    G.remove_edge(0, 1); G.remove_edge(1, 0)
+    for a, b, length, hw in ((0, 5, 400, "tertiary"), (5, 1, 100, "tertiary"), (5, 6, 360, "service")):
+        for x, y in ((a, b), (b, a)):
+            G.add_edge(x, y, key=0, length=length, travel_time=length / 10, highway=hw)
+    Gp = ox.project_graph(G)
+    idx = EntranceIndex(Gp)
+    # Camera 1 m from the diagonal spur (junction 5) and 3 m from the lot road 1-10 (junction 1), facing east.
+    p1 = Gp.nodes[1]
+    cam = Point(p1["x"] + 250, p1["y"] + 3)
+    assert idx.for_camera(cam, [90.0])[0] == 1  # the east-west driveway matches the facing
+
+
+def test_entrance_between_two_junctions_follows_facing():
+    import osmnx as ox
+    from shapely.geometry import Point
+
+    from platetrail.roads.lots import EntranceIndex
+
+    Gp = ox.project_graph(lot_graph())  # service road 1-10-3 links junctions 1 (west) and 3 (east)
+    idx = EntranceIndex(Gp)
+    p10 = Gp.nodes[10]
+    cam = Point(p10["x"] + 5, p10["y"] + 2)  # mid-lot on the service road, roughly equidistant
+    assert idx.for_camera(cam, [90.0], ["into_lot"])[0] == 1  # faces east into the lot: came from the west
+    assert idx.for_camera(cam, [270.0], ["into_lot"])[0] == 3
+    assert idx.for_camera(cam, [90.0], ["toward_road"])[0] == 3  # faces east toward its exit

@@ -2,7 +2,14 @@
 
 The study area is the union of the Edison and New Brunswick boundaries,
 buffered so routes that briefly leave town (Route 1, the Turnpike, I-287)
-stay on the graph. The graph is cached as GraphML; OSMnx's own HTTP cache
+stay on the graph.
+
+The network is OSMnx's drive network plus service roads, except parking
+aisles, drive-throughs, emergency access and private roads (CUSTOM_FILTER).
+Service roads are needed to reach places inside large lots and business
+parks: Raritan Center's internal streets are all tagged highway=service.
+Their speed is set to SERVICE_SPEED_KPH, and the router penalizes them for
+through traffic (sim.routing) so routes don't cut through lots. The graph is cached as GraphML; OSMnx's own HTTP cache
 also lives under the data dir so a rebuild doesn't refetch.
 """
 
@@ -20,7 +27,17 @@ from platetrail.config import get_settings
 # OSM boundary relations (confirmed by the camera ETL's Overpass responses).
 STUDY_AREA_RELATIONS = {"Edison": 171019, "New Brunswick": 170536}
 BUFFER_M = 2000.0
-NETWORK_TYPE = "drive"
+NETWORK_TYPE = "drive_service"  # label for the cache file; the actual filter is CUSTOM_FILTER
+# OSMnx's drive_service filter, additionally excluding parking aisles and drive-throughs.
+CUSTOM_FILTER = (
+    '["highway"]["area"!~"yes"]["access"!~"private"]'
+    '["highway"!~"abandoned|bridleway|bus_guideway|construction|corridor|cycleway|elevator|escalator|footway|no|'
+    'path|pedestrian|planned|platform|proposed|raceway|razed|rest_area|services|steps|track"]'
+    '["motor_vehicle"!~"no"]["motorcar"!~"no"]'
+    '["service"!~"emergency_access|parking_aisle|private|drive-through|drive_through"]'
+)
+# ASSUMPTION: free-flow speed on service roads (lot entrances, business-park streets).
+SERVICE_SPEED_KPH = 15.0
 
 
 def _configure_osmnx(data_dir: Path) -> None:
@@ -49,8 +66,8 @@ def load_or_build_graph(refresh: bool = False, data_dir: Path | None = None) -> 
     if path.exists() and not refresh:
         return ox.load_graphml(path)
 
-    G = ox.graph_from_polygon(study_area_polygon(), network_type=NETWORK_TYPE, truncate_by_edge=True)
-    G = ox.add_edge_speeds(G)
+    G = ox.graph_from_polygon(study_area_polygon(), custom_filter=CUSTOM_FILTER, truncate_by_edge=True)
+    G = ox.add_edge_speeds(G, hwy_speeds={"service": SERVICE_SPEED_KPH})
     G = ox.add_edge_travel_times(G)
     path.parent.mkdir(parents=True, exist_ok=True)
     ox.save_graphml(G, path)
@@ -61,6 +78,8 @@ def load_or_build_graph(refresh: bool = False, data_dir: Path | None = None) -> 
                 "relations": STUDY_AREA_RELATIONS,
                 "buffer_m": BUFFER_M,
                 "network_type": NETWORK_TYPE,
+                "custom_filter": CUSTOM_FILTER,
+                "service_speed_kph": SERVICE_SPEED_KPH,
                 "osmnx_version": ox.__version__,
                 "nodes": G.number_of_nodes(),
                 "edges": G.number_of_edges(),

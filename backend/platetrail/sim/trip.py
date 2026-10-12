@@ -48,7 +48,7 @@ class SimCamera:
     edges: list[CameraEdge] = field(default_factory=list)
     lot_geom: BaseGeometry | None = None
     lot_id: str | None = None  # OSM id of the lot polygon; cameras sharing it share entrances
-    access_road: frozenset | None = None  # {u, v} of the public road nearest the camera
+    access_node: int | None = None  # lot entrance junction the camera watches
     lot_name: str | None = None
     lon: float | None = None
     lat: float | None = None
@@ -98,13 +98,13 @@ def load_camera_set(engine: Engine) -> CameraSet:
         for r in conn.execute(
             text(
                 "SELECT camera_id, ST_AsBinary(lot_geom) AS g, lot_osm_id, lot_name, facings, alt_facings,"
-                " access_u, access_v FROM camera_lots"
+                " access_node FROM camera_lots"
             )
         ):
             c = cams[r.camera_id]
             c.lot_geom = wkb.loads(bytes(r.g)) if r.g is not None else None
             c.lot_id = r.lot_osm_id
-            c.access_road = frozenset((r.access_u, r.access_v)) if r.access_u is not None else None
+            c.access_node = r.access_node
             c.lot_name = r.lot_name
             c.facings = list(r.facings) if r.facings else None
             c.alt_facings = list(r.alt_facings) if r.alt_facings else None
@@ -156,18 +156,17 @@ def match_route(
             )
 
     events = (
-        (LotEvent.DEPARTURE, Point(origin), route.depart, route.coords[0], route.origin.edge),
-        (LotEvent.ARRIVAL, Point(dest), route.arrive, route.coords[-1], route.dest.edge),
+        (LotEvent.DEPARTURE, Point(origin), route.depart, route.coords[0], "origin"),
+        (LotEvent.ARRIVAL, Point(dest), route.arrive, route.coords[-1], "dest"),
     )
     for group in cameras.lot_groups.values():
-        for event, pt, t, network_end, lot_side_edge in events:
+        for event, pt, t, network_end, end in events:
             if not group[0].lot_geom.covers(pt):
                 continue
             seen = group
             if cfg.lot_entrance is LotEntrance.ACCESS_ROAD:
-                # The place connects to the network at lot_side_edge; only cameras on that access road see it.
-                road = frozenset(lot_side_edge[:2])
-                seen = [c for c in group if c.access_road == road]
+                # Only cameras at the entrance the route actually uses (approach direction) see it.
+                seen = [c for c in group if c.access_node is not None and c.access_node in _entrance_nodes(route, end)]
             elif cfg.lot_entrance is LotEntrance.NEAREST and len(group) > 1:
                 seen = [min(group, key=lambda c: _distance_m(c, network_end))]
             for cam in seen:
@@ -177,6 +176,20 @@ def match_route(
                                decision.captured, decision.reason)
                 )
     return sorted(passes, key=lambda p: (p.time, p.camera_id))
+
+
+def _entrance_nodes(route: Route, end: str) -> set[int]:
+    """Nodes where this end of the route enters the lot.
+
+    Normally the single junction where the route turns from a public road
+    onto service roads. If the place sits directly on a public edge (no
+    service roads at that end), the endpoints of that edge stand in.
+    """
+    node = route.lot_entry_node(end)
+    if node is not None:
+        return {node}
+    edge = route.origin.edge if end == "origin" else route.dest.edge
+    return {edge[0], edge[1]}
 
 
 def _distance_m(cam: SimCamera, lonlat: tuple[float, float]) -> float:

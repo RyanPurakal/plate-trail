@@ -197,8 +197,8 @@ def test_divided_road_snaps_both_carriageways(index):
 
 def test_twin_must_run_opposite_and_be_close(index):
     # 5 m from the eastbound carriageway (y=1020); westbound one-ways at 15 m (y=1040)
-    # and 25 m (y=1000). The nearer opposite carriageway is the twin.
-    r = snap_camera(index, cam(100, 1025, [80]))
+    # and 25 m (y=1000). The nearer opposite carriageway is the twin; the camera faces both ways.
+    r = snap_camera(index, cam(100, 1025, [80, 260]))
     assert {s.edge for s in r.snaps} == {(22, 23, 0), (25, 24, 0)}
     far = snap_camera(index, cam(100, 975, [260]))  # 25 m from westbound, eastbound 45 m away
     assert {s.edge for s in far.snaps} == {(21, 20, 0)} and not far.twin_added
@@ -207,3 +207,41 @@ def test_twin_must_run_opposite_and_be_close(index):
 def test_two_way_road_gets_no_twin(index):
     r = snap_camera(index, cam(100, 10, [90]))
     assert not r.twin_added and len(r.snaps) == 2
+
+
+def test_twin_requires_a_facing_along_it(index):
+    # 8 m from the westbound carriageway; the eastbound one (bearing 90) is 12 m away, but the only
+    # facing (260) points along the westbound side, 170 deg from the twin's bearing.
+    r = snap_camera(index, cam(100, 1008, [260]))
+    assert {s.edge for s in r.snaps} == {(21, 20, 0)} and not r.twin_added
+    # A facing within 45 deg of the twin's bearing passes: 80 is 10 deg from eastbound 90.
+    r2 = snap_camera(index, cam(100, 1008, [260, 80]))
+    assert r2.twin_added
+
+
+def test_twin_facing_tolerance_boundary(index):
+    assert snap_camera(index, cam(100, 1008, [270 - 180 + 44])).twin_added  # 44 deg from eastbound 90
+    assert not snap_camera(index, cam(100, 1008, [90 + 46])).twin_added  # 46 deg
+
+
+def test_undirected_camera_gets_twin(index):
+    assert snap_camera(index, cam(100, 1008, None)).twin_added
+
+
+def test_public_only_index_skips_service_edges():
+    G = toy_graph()
+    for _, _, d in G.edges(data=True):
+        d["highway"] = "residential"
+    G.add_node(30, x=X0 + 100, y=Y0 + 3)
+    G.add_node(31, x=X0 + 150, y=Y0 + 3)
+    G.add_edge(30, 31, key=0, geometry=LineString([(X0 + 100, Y0 + 3), (X0 + 150, Y0 + 3)]), highway="service")
+    full, public = EdgeIndex(G), EdgeIndex(G, public_only=True)
+    c = cam(120, 4, [90])
+    assert snap_camera(full, c).snaps[0].edge == (30, 31, 0)
+    assert {s.edge for s in snap_camera(public, c).snaps} == {(1, 2, 0), (2, 1, 0)}
+
+
+def test_is_service():
+    from platetrail.roads.snap import is_service
+    assert is_service("service") and is_service(["service", "service"])
+    assert not is_service("residential") and not is_service(["service", "residential"])

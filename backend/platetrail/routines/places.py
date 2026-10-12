@@ -33,7 +33,12 @@ from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
 from platetrail.geo import WGS84
 from platetrail.roads.graph import STUDY_AREA_RELATIONS, _configure_osmnx
-from platetrail.sim.routing import MAX_ATTACH_M
+
+# Places farther than this from the drive network (service roads included) are
+# not sampled as anchors. The user's requirement: snap or reject anchors more
+# than ~100 m from the network. With service roads in the graph only 21 of
+# 1,310 places exceed it.
+MAX_PLACE_NETWORK_M = 100.0
 
 GROCERY_SHOPS = {"supermarket", "convenience", "greengrocer", "butcher", "bakery", "deli", "grocery"}
 FOOD = {"restaurant", "fast_food", "cafe", "bar", "pub", "ice_cream", "food_court"}
@@ -148,9 +153,10 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
     with engine.connect() as conn:
         far = conn.execute(text(
             "SELECT count(*) FILTER (WHERE network_distance_m > 100) gt100,"
-            " count(*) FILTER (WHERE network_distance_m > :m) excluded, count(*) n FROM places"), {"m": MAX_ATTACH_M}).one()
-    lines.append(f"More than 100 m from the drive network: {far.gt100} of {far.n} (attach to nearest edge point); "
-                 f"more than {MAX_ATTACH_M:g} m, excluded from sampling: {far.excluded}")
+            " count(*) FILTER (WHERE network_distance_m > :m) excluded, count(*) n FROM places"),
+            {"m": MAX_PLACE_NETWORK_M}).one()
+    lines.append(f"Excluded from sampling (more than {MAX_PLACE_NETWORK_M:g} m from the drive network): "
+                 f"{far.excluded} of {far.n}")
     return "\n".join(lines)
 
 
@@ -193,7 +199,8 @@ class PlacePool:
                 Place(f"place/{r.id}", r.category, r.lon, r.lat, r.town, r.name, r.osm_id)
                 for r in conn.execute(text(
                     "SELECT id, category, ST_X(geom) lon, ST_Y(geom) lat, town, name, osm_id FROM places"
-                    " WHERE network_distance_m IS NULL OR network_distance_m <= :m ORDER BY id"), {"m": MAX_ATTACH_M})
+                    " WHERE network_distance_m IS NULL OR network_distance_m <= :m ORDER BY id"),
+                    {"m": MAX_PLACE_NETWORK_M})
             ]
             # One direction per street so two-way streets aren't counted twice.
             residential = [

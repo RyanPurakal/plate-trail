@@ -58,10 +58,17 @@ or QGIS. Each camera is a point, plus a 30 m ray for each direction it faces:
 .venv/bin/python -m platetrail.roads.run_roads      # add --refresh to re-download
 ```
 
-Downloads the OSMnx `drive` graph for Edison + New Brunswick, buffered by
-2 km, and caches it as GraphML under `data/graphs/`. The first download takes
-several minutes. Edges are stored in `road_edges`. Each camera is snapped to
-its nearest edge within 50 m. On a two-way road it gets one `camera_edges` row
+Downloads the road graph for Edison + New Brunswick, buffered by 2 km, and
+caches it as GraphML under `data/graphs/`. The first download takes several
+minutes. The graph is OSMnx's drive network **plus service roads**, except
+parking aisles, drive-throughs, emergency access and private roads. Service
+roads are needed to reach places inside lots and business parks: Raritan
+Center's internal streets are all `highway=service`. That gives 22,261 nodes
+and 55,421 directed edges, 21,775 of them service roads. Service roads get
+15 km/h (**assumption**), and route choice multiplies their travel time by 4
+(**assumption**; timestamps use real times) so through traffic doesn't cut
+through lots. Edges are stored in `road_edges`. Each camera is snapped to its
+nearest **public** (non-service) edge within 50 m. On a two-way road it gets one `camera_edges` row
 per direction, with that direction's true-north bearing taken at the snap
 point. The summary lists dropped cameras, snap distances, close camera pairs,
 and cameras whose direction is closer to perpendicular than parallel to their
@@ -88,8 +95,12 @@ snaps.
 
 Divided roads: when a camera snaps to one carriageway of a divided road, the
 opposite carriageway (one-way, parallel, opposite travel, within 30 m) is
-snapped too. Without this, a camera beside Albany St's westbound carriageway
-never registered eastbound traffic (5 cameras affected).
+snapped too, **if one of the camera's facings is within 45° of that
+carriageway's travel bearing**. Without this, a camera beside Albany St's
+westbound carriageway never registered eastbound traffic. Of the 5 cameras
+next to an opposite carriageway, only Albany St (node 14181989101) passes the
+facing check. This check assumes `rear_plate`; under `oncoming`, the 4 that
+fail it face along their own carriageway and so capture nothing.
 
 Snapping is direction-aware: if the nearest road isn't parallel to the camera
 (more than 30° off) but a parallel road is at most 10 m farther, the parallel
@@ -107,7 +118,7 @@ settings (`MatchConfig`):
 | `tolerance_deg` | 45 | Maximum difference between the travel bearing and the captured bearing |
 | `undirected` | `best` | Cameras without a direction capture both ways (`best`) or neither (`worst`) |
 | `ambiguous_direction` | `primary` | For cameras with disagreeing tags, use `direction` (`primary`) or the other tag (`alternate`) |
-| `lot_entrance` | `access_road` | A vehicle uses one lot entrance. A lot camera sees an arrival or departure only if the trip's lot-side edge (the edge the place attaches to) is the camera's access road, the public road nearest the camera. `nearest` instead picks the lot camera nearest the route's end; `all` lets every camera at the lot see it (an upper bound). |
+| `lot_entrance` | `access_road` | A vehicle uses one lot entrance: the junction where its route turns between a public road and the lot's service roads (approach direction). A lot camera sees an arrival or departure only if that junction is the camera's entrance, i.e. the junction of the driveway it sits on (parallel to its facing; for a service road linking two junctions, the one behind an into-lot camera or ahead of a toward-road one). `nearest` instead picks the lot camera nearest the route's end; `all` lets every camera at the lot see it (an upper bound). |
 
 The rear-plate default is an assumption, not something established from the
 data. OSM documents `direction` as the way a camera faces, but it doesn't
@@ -147,18 +158,30 @@ counts only if it is on the part actually driven.
   length, not OSM buildings. Building coverage is uneven: 2.37 typed
   residential buildings per residential street in Edison vs 0.63 in New
   Brunswick, so building sampling would under-represent New Brunswick.
+  **Assumption:** homes are spread in proportion to residential street length.
+  This ignores housing density: a street of apartment blocks gets the same
+  weight per metre as a street of single-family houses, so dense areas
+  (e.g. downtown New Brunswick) are likely under-represented. Census housing
+  counts would fix this.
 - **Places** (1,310) are OSM shops, food, services, leisure, worship,
-  workplaces, university and hospitals inside the two towns. 207 are more
-  than 100 m from the drive network (mostly inside Raritan Center and large
-  retail lots) and attach to the nearest edge point. 6 are more than 500 m
-  away and are excluded.
+  workplaces, university and hospitals inside the two towns. Places more than
+  **100 m** from the network (service roads included) are not sampled: 21 of
+  1,310, mostly very large buildings whose OSM centre point is deep inside
+  the footprint (three Amazon facilities, Macy's logistics, Arizona
+  Beverages) and a few parks. Excluding them under-represents those large
+  employers. Snapping to the building outline instead of its centre would
+  fix this.
 - **Errands** pick a category from a fixed mix (grocery 28%, retail 22%,
   food 25%, services 15%, leisure 10%; **assumption**), then a place in it,
   weighted by `exp(-distance / 4 km)` from the trip's origin. Drivers reuse a
   "usual" place per category 60% of the time. **Camera locations are never
-  used.** In a 300-driver run, 5.5% of errand trips end inside a camera-covered
-  lot, vs 7.3% of errand places lying inside one, so there is no bias toward
-  camera lots.
+  used.** Check (`scripts/check_camera_lot_share.py`): 6.4% of errand trips
+  end inside a camera-covered lot (95% interval 5.3–8.1% across 50 seeds), vs
+  7.3% of errand places lying inside one. The gap comes from the category mix
+  the templates actually produce. Evening outings are food/leisure, which
+  raises food to 34% and leisure to 16% of errands, and leisure has no places
+  in camera lots while retail has 18%. That realized mix alone predicts 6.6%.
+  So it isn't a bias against camera lots.
 
 ## Sensor noise model
 
@@ -226,21 +249,22 @@ identical.
   published per-read rate.
 - **Free-flow routing.** No traffic model, so departure time only stamps
   timestamps.
-- **Private service roads aren't in the drive graph.** Places inside Raritan
-  Center and big retail lots attach to the nearest public edge, up to 500 m
-  away, and the drive through the lot isn't modelled.
-- **One entrance per place.** A place always uses the public road nearest to
-  it, so a lot camera whose driveway meets a road no shop is nearest to (two
-  Menlo Park Mall cameras) never fires under `access_road`.
+- **Deep-lot cameras.** The 4 cameras more than 50 m from any public road
+  (inside Raritan Center and retail lots) are modelled as lot cameras at
+  their nearest entrance, up to 758 m away. They really watch internal
+  service streets, so snapping them to those streets as road cameras would
+  be more faithful.
+- **Private (`access=private`) service roads are excluded**, including 92
+  ways in Raritan Center.
 - **Facing convention is unverified.** `rear_plate` is a default assumption;
   report results under both settings.
 
 ## Findings
 
 Results recorded as the project is built are in
-[docs/findings.md](docs/findings.md): F1 (one commuter's week is about 10
-reads, over 90% from one camera) and F2 (across 300 template drivers, median
-6 reads per week and 11% of drivers never read).
+[docs/findings.md](docs/findings.md): F1 (one commuter's week is 12
+captures, 10 from one camera) and F2 (across 300 template drivers, median 6
+reads per week and 10% of drivers never read).
 
 ```bash
 .venv/bin/python scripts/demo_week.py [--seed 0] [--runs 1000]

@@ -27,6 +27,7 @@ keep the nearest snap, but it is unclear which street they watch. Cameras
 matcher's bearing tolerance.
 """
 
+import math
 from dataclasses import dataclass, field
 
 from pyproj import Transformer
@@ -45,6 +46,7 @@ PERPENDICULAR_DEG = 45.0
 SERVICE_WITHIN_M = 10.0
 SERVICE_SEARCH_M = 60
 LOT_SEARCH_M = 150
+DRIVEWAY_SEARCH_M = 15.0
 LOT_KIND_PRIORITY = ("retail", "commercial", "industrial", "parking", "shop")
 
 
@@ -71,6 +73,8 @@ class LotAssignment:
     reason: str  # "dropped" or "driveway"
     access_edge: tuple[int, int, int] | None = None  # nearest public drive edge to the camera
     access_distance_m: float | None = None
+    access_node: int | None = None  # nearest public/service junction node: the lot entrance the camera watches
+    access_node_distance_m: float | None = None
 
 
 @dataclass
@@ -203,11 +207,91 @@ def _pick_lot(pt: Point, polygons: list[OsmFeature], watched: OsmFeature | None)
     return min(near, key=score) if near else None
 
 
+class EntranceIndex:
+    """Junction nodes where a public road meets a service road (lot and business-park entrances).
+
+    A camera's entrance is the junction of the driveway the camera sits on:
+    among service edges touching a junction within DRIVEWAY_SEARCH_M of the
+    camera, keep those parallel (within PARALLEL_DEG) to one of its facings.
+    If they lead to different junctions (a service road linking two
+    entrances), the facing decides: an "into_lot" camera's entrance is behind
+    it, a "toward_road" camera's is in front. Otherwise the nearest wins.
+    """
+
+    def __init__(self, G_proj):
+        from platetrail.roads.snap import is_service
+
+        kinds: dict[int, set[bool]] = {}
+        for u, v, d in G_proj.edges(data=True):
+            svc = is_service(d.get("highway"))
+            kinds.setdefault(u, set()).add(svc)
+            kinds.setdefault(v, set()).add(svc)
+        junctions = {n for n, k in kinds.items() if k == {True, False}}
+        self.nodes = sorted(junctions)
+        self.points = [Point(G_proj.nodes[n]["x"], G_proj.nodes[n]["y"]) for n in self.nodes]
+        self.tree = STRtree(self.points) if self.points else None
+        # Service edges touching a junction, each tagged with that junction.
+        self.drive_geoms, self.drive_junction = [], []
+        for u, v, d in G_proj.edges(data=True):
+            if not is_service(d.get("highway")):
+                continue
+            geom = d.get("geometry") or LineString(
+                [(G_proj.nodes[u]["x"], G_proj.nodes[u]["y"]), (G_proj.nodes[v]["x"], G_proj.nodes[v]["y"])])
+            for n in (u, v):
+                if n in junctions:
+                    self.drive_geoms.append(geom)
+                    self.drive_junction.append(n)
+        self.drive_tree = STRtree(self.drive_geoms) if self.drive_geoms else None
+
+    def nearest(self, pt: Point) -> tuple[int, float] | None:
+        """Nearest junction point."""
+        if self.tree is None:
+            return None
+        i = int(self.tree.query_nearest(pt)[0])
+        return self.nodes[i], self.points[i].distance(pt)
+
+    def for_camera(
+        self, pt: Point, directions: list[float] | None = None, facings: list[str] | None = None
+    ) -> tuple[int, float] | None:
+        """(junction, camera-to-junction distance) for the driveway the camera watches."""
+        if self.drive_tree is None:
+            return self.nearest(pt)
+        near = [int(i) for i in self.drive_tree.query(pt, predicate="dwithin", distance=DRIVEWAY_SEARCH_M)]
+        if not near:
+            near = [int(self.drive_tree.query_nearest(pt)[0])]
+
+        def misaligned(i: int) -> bool:
+            if not directions:
+                return False
+            g = self.drive_geoms[i]
+            s = g.project(pt)
+            a, b = g.interpolate(max(0.0, s - 2)), g.interpolate(min(g.length, s + 2))
+            axis = math.degrees(math.atan2(b.x - a.x, b.y - a.y)) % 360  # grid bearing; fine for a 30 deg test
+            return min(axis_diff(axis, d) for d in directions) > PARALLEL_DEG
+
+        aligned = [i for i in near if not misaligned(i)] or near
+        junctions = {self.drive_junction[i] for i in aligned}
+        if len(junctions) > 1 and directions and facings:
+            # Where the camera expects traffic to come from: behind it if it faces into the lot.
+            targets = [(d + 180) % 360 if f == "into_lot" else d for d, f in zip(directions, facings)]
+
+            def off_target(n: int) -> float:
+                q = self.points[self.nodes.index(n)]
+                brg = math.degrees(math.atan2(q.x - pt.x, q.y - pt.y)) % 360
+                return min(angle_diff(brg, t) for t in targets)
+
+            n = min(junctions, key=lambda n: (off_target(n), self.points[self.nodes.index(n)].distance(pt)))
+        else:
+            n = self.drive_junction[min(aligned, key=lambda i: self.drive_geoms[i].distance(pt))]
+        return n, self.points[self.nodes.index(n)].distance(pt)
+
+
 def classify(
     results: list[SnapResult],
     features: list[OsmFeature],
     index: EdgeIndex,
     alt_directions: dict[int, list[float]] | None = None,
+    entrances: "EntranceIndex | None" = None,
 ) -> Classification:
     alt_directions = alt_directions or {}
     service = [f for f in features if f.kind == "service"]
@@ -245,6 +329,8 @@ def classify(
 
         outward = outward_bearing(index, cam)
         edge, edge_d = access_edge(index, cam)
+        facings = facings_for(cam.directions_deg, outward)
+        entrance = entrances.for_camera(pt, cam.directions_deg, facings) if entrances is not None else None
         out.lots[cam.camera_id] = LotAssignment(
             camera=cam,
             lot=lot,
@@ -254,5 +340,7 @@ def classify(
             reason=reason,
             access_edge=edge,
             access_distance_m=edge_d,
+            access_node=entrance[0] if entrance else None,
+            access_node_distance_m=entrance[1] if entrance else None,
         )
     return out

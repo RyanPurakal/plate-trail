@@ -18,7 +18,7 @@ from platetrail.db import apply_migrations, get_engine
 from platetrail.etl.cache import RawCache
 from platetrail.geo import WGS84, angle_diff
 from platetrail.roads.graph import load_or_build_graph, store_edges
-from platetrail.roads.lots import PERPENDICULAR_DEG, Classification, classify, fetch_lot_features
+from platetrail.roads.lots import PERPENDICULAR_DEG, Classification, EntranceIndex, classify, fetch_lot_features
 from platetrail.roads.snap import (
     MAX_SNAP_M,
     AlignmentFlag,
@@ -60,9 +60,10 @@ def store_classification(engine: Engine, cls: Classification) -> None:
             conn.execute(
                 text(
                     "INSERT INTO camera_lots (camera_id, lot_osm_id, lot_kind, lot_name, lot_geom, watched_way_osm_id,"
-                    " watched_way_geom, facings, alt_facings, access_u, access_v, access_distance_m)"
-                    " VALUES (:cid, :lot_id, :lot_kind, :lot_name, ST_GeomFromText(:lot_wkt, 4326), :way_id,"
-                    " ST_GeomFromText(:way_wkt, 4326), :facings, :alt, :au, :av, :ad)"
+                    " watched_way_geom, facings, alt_facings, access_u, access_v, access_distance_m, access_node,"
+                    " access_node_distance_m) VALUES (:cid, :lot_id, :lot_kind, :lot_name,"
+                    " ST_GeomFromText(:lot_wkt, 4326), :way_id, ST_GeomFromText(:way_wkt, 4326), :facings, :alt,"
+                    " :au, :av, :ad, :an, :and)"
                 ),
                 {
                     "cid": cid,
@@ -77,6 +78,8 @@ def store_classification(engine: Engine, cls: Classification) -> None:
                     "au": a.access_edge[0] if a.access_edge else None,
                     "av": a.access_edge[1] if a.access_edge else None,
                     "ad": a.access_distance_m,
+                    "an": a.access_node,
+                    "and": a.access_node_distance_m,
                 },
             )
 
@@ -191,7 +194,8 @@ def summarize(
         way = f", watches service road {a.watched_way.osm_id}" if a.watched_way else ""
         facing = "/".join(f"{d:g}->{f}" for d, f in zip(a.camera.directions_deg or [], a.facings))
         alt = f"; alternate reading: {'/'.join(a.alt_facings)}" if a.alt_facings else ""
-        access = f"; access road {a.access_edge[0]}-{a.access_edge[1]} at {a.access_distance_m:.0f} m" if a.access_edge else ""
+        access = (f"; entrance node {a.access_node} at {a.access_node_distance_m:.0f} m"
+                  if a.access_node is not None else "; NO ENTRANCE NODE")
         lines.append(f"  LOT {a.camera.label} [{a.reason}]: {lot}{way}; {facing}{alt}{access}")
     for cam in cls.unresolved_dropped:
         lines.append(f"  STILL DROPPED {cam.label}: no lot polygon within range")
@@ -238,7 +242,8 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
     apply_migrations(engine)
     G = load_or_build_graph(refresh=refresh)
     n_stored = store_edges(engine, G)
-    index = EdgeIndex(ox.project_graph(G))
+    G_proj = ox.project_graph(G)
+    index = EdgeIndex(G_proj, public_only=True)  # cameras snap to public roads only
     results = [snap_camera(index, cam) for cam in load_cameras(engine)]
 
     candidates = [
@@ -246,7 +251,7 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
     ]
     cache = RawCache(get_settings().data_dir / "raw" / "overpass_lots")
     features = fetch_lot_features(candidates, cache, index, refresh=refresh)
-    cls = classify(results, features, index, load_alt_directions(engine))
+    cls = classify(results, features, index, load_alt_directions(engine), EntranceIndex(G_proj))
 
     # Lot cameras watch private lots, so they get no public-road snap.
     store_snaps(engine, [r for r in results if r.camera.camera_id not in cls.lots])
