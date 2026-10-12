@@ -116,3 +116,46 @@ direction captures departures; `oncoming` flips both.
 ```bash
 .venv/bin/python scripts/sample_trips.py [--facing oncoming] [--tolerance 30] [--lot-entrance all]
 ```
+
+## Sensor noise model
+
+`platetrail.sim.noise` turns the matcher's captures into a noisy read log.
+For each true pass, in order:
+
+1. **Downtime:** each camera has its own outage windows over the simulation
+   period. A pass inside an outage is dropped, not delayed.
+2. **Missed read:** the pass is dropped with probability `p_miss`.
+3. **Read:** each plate character that has a look-alike (`0/O/D/Q`, `1/I/7`,
+   `2/Z`, `5/S`, `6/G`, `8/B`) is swapped with probability `p_char_misread`.
+   The timestamp gets Gaussian jitter.
+
+Every read keeps `pass_id`, the link back to its true pass, so later analysis
+can measure how misreads break linking reads to one driver. All randomness
+comes from `seed`, with separate streams per camera (outages) and per pass
+(noise). The same seed always gives the same read log, and changing one
+setting doesn't reshuffle the others.
+
+| Setting | Default | Status |
+|---|---|---|
+| `p_miss` | 0.05 | **Assumption**, not measured |
+| `p_char_misread` | 0.01 per confusable character (~3–4% of reads) | **Assumption**, not measured |
+| look-alike table | see above | **Assumption** (visual similarity), not a measured confusion matrix |
+| `downtime_rate_per_week` | 0.25 outages per camera (Poisson) | **Assumption**, not measured |
+| `downtime_mean_hours` | 12 (exponential); ~1.8% downtime | **Assumption**, not measured |
+| `jitter_sd_s` | 2 s (Gaussian) | **Assumption**, not measured |
+
+I found no published per-read rate that maps directly onto these settings.
+For context only: Potts (2018) reports that in a Vallejo, CA randomized trial,
+"35 percent of all hits were misreads for the mobile readers, with a similar
+number (37 percent) for the fixed readers"
+([*Research in Brief: Assessing the Effectiveness of Automatic License Plate Readers*, The Police Chief, IACP](https://www.theiacp.org/sites/default/files/2018-08/March%202018%20RIB.pdf)).
+That figure is a share of hotlist **alerts**, a sample skewed toward misreads,
+not a share of all reads, so it isn't used as a default. Results should be
+reported across a range of these settings.
+
+Synthetic plates follow the current NJ passenger shape (`A12BCD`) and are
+generated at random.
+
+```bash
+.venv/bin/python scripts/demo_week.py [--seed 0] [--runs 1000]
+```
