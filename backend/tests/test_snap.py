@@ -209,19 +209,22 @@ def test_two_way_road_gets_no_twin(index):
     assert not r.twin_added and len(r.snaps) == 2
 
 
-def test_twin_requires_a_facing_along_it(index):
-    # 8 m from the westbound carriageway; the eastbound one (bearing 90) is 12 m away, but the only
-    # facing (260) points along the westbound side, 170 deg from the twin's bearing.
-    r = snap_camera(index, cam(100, 1008, [260]))
-    assert {s.edge for s in r.snaps} == {(21, 20, 0)} and not r.twin_added
-    # A facing within 45 deg of the twin's bearing passes: 80 is 10 deg from eastbound 90.
-    r2 = snap_camera(index, cam(100, 1008, [260, 80]))
-    assert r2.twin_added
+def test_twin_attached_regardless_of_facing(index):
+    # 8 m from the westbound carriageway; the eastbound one is 12 m away. The camera faces 260 (along
+    # its own carriageway) but snapping ignores facing: both carriageways are attached.
+    for dirs in ([260], [80], [175], [260, 80]):
+        r = snap_camera(index, cam(100, 1008, dirs))
+        assert {s.edge for s in r.snaps} == {(21, 20, 0), (22, 23, 0)} and r.twin_added
 
 
-def test_twin_facing_tolerance_boundary(index):
-    assert snap_camera(index, cam(100, 1008, [270 - 180 + 44])).twin_added  # 44 deg from eastbound 90
-    assert not snap_camera(index, cam(100, 1008, [90 + 46])).twin_added  # 46 deg
+@pytest.mark.parametrize("facing, captured_edge", [("rear_plate", (21, 20, 0)), ("oncoming", (22, 23, 0))])
+def test_matcher_not_snapping_decides_which_carriageway_is_captured(index, facing, captured_edge):
+    from platetrail.sim.matcher import MatchConfig, edge_decision
+
+    r = snap_camera(index, cam(100, 1008, [260]))  # faces west, along the westbound carriageway
+    cfg = MatchConfig(facing=facing)
+    captured = [s.edge for s in r.snaps if edge_decision([260], s.bearing_deg, cfg).captured]
+    assert captured == [captured_edge]
 
 
 def test_undirected_camera_gets_twin(index):

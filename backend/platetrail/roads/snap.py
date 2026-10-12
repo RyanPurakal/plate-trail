@@ -12,13 +12,12 @@ Works on a projected (metric) graph. For each camera:
    two-way road (same geometry, reversed), one on a one-way road. If the
    chosen road is one carriageway of a divided road, the opposite
    carriageway (one-way, parallel, opposite travel, within 30 m of the
-   camera) is snapped too, but only if one of the camera's facings is
-   within 45 deg of that carriageway's travel bearing (undirected cameras
-   always get it). Without this a camera beside, e.g., Albany St's westbound
-   carriageway never sees eastbound traffic. Note the facing check assumes
-   the rear-plate convention (a camera faces the traffic it reads); under
-   the oncoming convention a camera that fails it can't see that
-   carriageway.
+   camera) is always snapped too. Without this a camera beside, e.g.,
+   Albany St's westbound carriageway never sees eastbound traffic.
+   Snapping does not look at which way the camera faces. Whether a pass on
+   either carriageway is captured is decided later by the matcher's bearing
+   test under the configured capture convention (rear_plate / oncoming), so
+   no convention is baked into the stored snaps.
 
 Cameras snap to public roads only (EdgeIndex(..., public_only=True)).
 Service roads are in the graph for routing to places inside lots; cameras
@@ -42,7 +41,6 @@ MAX_SNAP_M = 50.0
 PREFER_PARALLEL_WITHIN_M = 10.0  # extra distance allowed to reach a parallel road
 PARALLEL_DEG = 30.0  # axis difference that counts as "parallel"
 TWIN_CARRIAGEWAY_M = 30.0  # max camera distance to the opposite carriageway of a divided road
-TWIN_FACING_DEG = 45.0  # a camera facing must be within this of the opposite carriageway's bearing
 TIE_TOL_M = 0.01  # distances this close count as the same road geometry
 BEARING_STEP_M = 2.0  # half-width of the window used to measure local bearing
 
@@ -201,7 +199,7 @@ def snap_camera(
             chosen = min(parallel, key=lambda r: (road_dist[r], sorted(r)))
 
     chosen_edges = list(roads[chosen])
-    twin = _twin_carriageway(index, pt, chosen_edges, max_distance_m, cam.directions_deg)
+    twin = _twin_carriageway(index, pt, chosen_edges, max_distance_m)
     if twin is not None:
         chosen_edges.append(twin)
     snaps = sorted((index.make_snap(cam.camera_id, i, pt) for i in chosen_edges), key=lambda s: s.edge)
@@ -209,10 +207,8 @@ def snap_camera(
                       resnapped_from=resnapped_from, twin_added=twin is not None)
 
 
-def _twin_carriageway(
-    index: EdgeIndex, pt: Point, chosen: list[int], max_distance_m: float, directions: list[float] | None
-) -> int | None:
-    """Nearest opposite-direction one-way edge parallel to a one-way chosen edge that a facing points along."""
+def _twin_carriageway(index: EdgeIndex, pt: Point, chosen: list[int], max_distance_m: float) -> int | None:
+    """Nearest opposite-direction one-way edge parallel to a one-way chosen edge, within TWIN_CARRIAGEWAY_M."""
     if len(chosen) != 1 or not index.is_one_way(chosen[0]):
         return None
     line = index.geoms[chosen[0]]
@@ -222,11 +218,8 @@ def _twin_carriageway(
         if _road_id(index.keys[i]) == own or not index.is_one_way(i):
             continue
         other = index.bearing_at(index.geoms[i], index.geoms[i].project(pt))
-        if angle_diff(bearing, other) < 180.0 - PARALLEL_DEG:
-            continue
-        if directions and min(angle_diff(d, other) for d in directions) > TWIN_FACING_DEG:
-            return None  # nearest opposite carriageway, but no facing points along it
-        return i
+        if angle_diff(bearing, other) >= 180.0 - PARALLEL_DEG:
+            return i
     return None
 
 

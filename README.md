@@ -95,12 +95,11 @@ snaps.
 
 Divided roads: when a camera snaps to one carriageway of a divided road, the
 opposite carriageway (one-way, parallel, opposite travel, within 30 m) is
-snapped too, **if one of the camera's facings is within 45° of that
-carriageway's travel bearing**. Without this, a camera beside Albany St's
-westbound carriageway never registered eastbound traffic. Of the 5 cameras
-next to an opposite carriageway, only Albany St (node 14181989101) passes the
-facing check. This check assumes `rear_plate`; under `oncoming`, the 4 that
-fail it face along their own carriageway and so capture nothing.
+**always** snapped too (5 cameras). Without this, a camera beside Albany St's
+westbound carriageway never registered eastbound traffic. Snapping ignores
+which way the camera faces. Which carriageway's traffic is actually captured
+is decided by the matcher's bearing test under the capture convention (see
+below), so the stored snaps don't encode either convention.
 
 Snapping is direction-aware: if the nearest road isn't parallel to the camera
 (more than 30° off) but a parallel road is at most 10 m farther, the parallel
@@ -120,10 +119,13 @@ settings (`MatchConfig`):
 | `ambiguous_direction` | `primary` | For cameras with disagreeing tags, use `direction` (`primary`) or the other tag (`alternate`) |
 | `lot_entrance` | `access_road` | A vehicle uses one lot entrance: the junction where its route turns between a public road and the lot's service roads (approach direction). A lot camera sees an arrival or departure only if that junction is the camera's entrance, i.e. the junction of the driveway it sits on (parallel to its facing; for a service road linking two junctions, the one behind an into-lot camera or ahead of a toward-road one). `nearest` instead picks the lot camera nearest the route's end; `all` lets every camera at the lot see it (an upper bound). |
 
-The rear-plate default is an assumption, not something established from the
-data. OSM documents `direction` as the way a camera faces, but it doesn't
-say which plate the camera reads. Results should be reported under both
-settings.
+**Capture convention (assumption).** `rear_plate` is a default assumption,
+not something established from the data. OSM documents `direction` as the
+way a camera faces, but it doesn't say which plate the camera reads. The
+convention is applied in exactly one place, the matcher's bearing test.
+Snapping, lot classification and the stored camera data are
+convention-neutral, so switching `facing` changes only which passes count as
+captured. Results should be reported under both settings.
 
 Private-lot cameras see arrivals and departures at their lot. Under
 `rear_plate`, an `into_lot` direction captures arrivals and a `toward_road`
