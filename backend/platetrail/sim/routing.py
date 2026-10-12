@@ -94,20 +94,6 @@ class Route:
                 return e.edge[1] if end == "dest" else e.edge[0]
         return None
 
-    def lot_side_public_edge(self, end: str) -> EdgeKey:
-        """The public edge the route arrives on ("dest") or leaves by ("origin").
-
-        That is the last public edge before the final run of service roads (or
-        the first after the initial run). This is the entrance actually used to
-        reach a place inside a lot. Falls back to the snapped edge if the whole
-        route is on service roads.
-        """
-        seq = self.edges if end == "origin" else list(reversed(self.edges))
-        for e in seq:
-            if not e.service:
-                return e.edge
-        return (self.origin if end == "origin" else self.dest).edge
-
     @property
     def origin_snap_m(self) -> float:
         return self.origin.distance_m

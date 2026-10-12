@@ -262,3 +262,24 @@ def test_extra_error_changes_only_plates_not_existing_draws():
 def test_extra_error_streams_validated(streams):
     with pytest.raises(ValueError):
         NoiseConfig(extra_read_errors=tuple(DropLastChar(0.5, s) for s in streams))
+
+
+def test_noise_never_changes_the_state_code():
+    """Misreads, extra read errors and drops touch the plate string only; the state is copied through."""
+
+    class Garble:
+        stream = 101
+
+        def apply(self, plate, rng):
+            return "".join(reversed(plate)) + "X"
+
+    ps = [TruePass(i, i % 5, START + timedelta(minutes=10 * i), "D10BOS", SYNTHETIC_STATE) for i in range(300)]
+    cfg = NoiseConfig(seed=4, p_miss=0.3, p_char_misread=1.0, downtime_rate_per_week=3, jitter_sd_s=30,
+                      extra_read_errors=(Garble(),))
+    result = apply_noise(ps, START, END, cfg)
+    assert result.reads and all(r.misread for r in result.reads)
+    assert all(r.state == r.true_state == "ZZ" for r in result.reads)
+    # A pass with a different state keeps its own state through the same noise.
+    other = apply_noise([TruePass(0, 1, START, "D10BOS", "QQ")], START, END,
+                        NoiseConfig(seed=1, p_miss=0, downtime_rate_per_week=0, p_char_misread=1.0))
+    assert [r.state for r in other.reads] == ["QQ"]

@@ -56,7 +56,7 @@ def main() -> None:
         noisy = apply_noise(tp, datetime.combine(period[0], datetime.min.time()),
                             datetime.combine(period[1], datetime.min.time()), NoiseConfig(seed=args.seed * 100_000 + i),
                             list(cameras.by_id))
-        cams = Counter(p.camera_id for p in tp)
+        cams = Counter(r.camera_id for r in noisy.reads)
         row = {
             "trips": len(sim.trips),
             "km": sum(t.result.route.length_m for t in sim.trips) / 1000,
@@ -67,7 +67,7 @@ def main() -> None:
             "lost_downtime": len(noisy.dropped_for("downtime")),
             "lost_missed": len(noisy.dropped_for("missed")),
             "distinct_cameras": len(cams),
-            "top_camera_share": (max(cams.values()) / len(tp)) if tp else 0.0,
+            "top_camera_share": (max(cams.values()) / len(noisy.reads)) if noisy.reads else None,
             "lot_events": sum(1 for p in sim.captured if p.event != "road"),
             "skipped": len(sim.skipped),
         }
@@ -90,14 +90,22 @@ def main() -> None:
         if not rows:
             continue
         zero = sum(r["reads"] == 0 for r in rows) / len(rows)
-        print(f"{name:<14}{len(rows):>5}" + "".join(f"{statistics.mean(r[k] for r in rows):>14.2f}" for k in keys)
-              + f"{zero:>11.0%}")
+        def mean_of(k):
+            vals = [r[k] for r in rows if r[k] is not None]
+            return statistics.mean(vals) if vals else float("nan")
+
+        print(f"{name:<14}{len(rows):>5}" + "".join(f"{mean_of(k):>14.2f}" for k in keys) + f"{zero:>11.0%}")
     all_rows = [r for rows in stats.values() for r in rows]
     reads = sorted(r["reads"] for r in all_rows)
     print(f"\nReads per driver-week: median {statistics.median(reads):g}, p25 {np.percentile(reads, 25):g}, "
           f"p75 {np.percentile(reads, 75):g}, max {reads[-1]}; drivers with 0 reads: "
           f"{sum(r == 0 for r in reads) / len(reads):.0%}")
     print(f"Trips skipped (anchor > 500 m from network): {sum(r['skipped'] for r in all_rows)}")
+    print("Share of a driver's reads from their single most-read camera (drivers with >= 1 read), median: "
+          + ", ".join(
+              f"{name} {statistics.median(r['top_camera_share'] for r in stats[name] if r['top_camera_share'] is not None):.0%}"
+              for name in TEMPLATE_WEIGHTS if any(r["top_camera_share"] is not None for r in stats.get(name, [])))
+          + f"; all {statistics.median(r['top_camera_share'] for r in all_rows if r['top_camera_share'] is not None):.0%}")
 
     a = np.array(attach)
     print(f"\nAnchor attachment distance to nearest edge (m): median {np.median(a):.0f}, p90 "

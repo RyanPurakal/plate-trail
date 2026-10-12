@@ -218,8 +218,9 @@ def main() -> None:
                             noise=NoiseConfig.noiseless(args.seed) if args.zero_noise else None)
     run_id = runner.run(req)
     with runner.engine.connect() as conn:
-        summary, gen = conn.execute(text("SELECT summary, generator FROM runs WHERE id = :i"), {"i": run_id}).one()
-    print(f"Stored run {run_id} ({gen}, {args.weeks} week(s), seed {args.seed}): {summary}")
+        summary, gen, state, plate = conn.execute(
+            text("SELECT summary, generator, plate_state, plate FROM runs WHERE id = :i"), {"i": run_id}).one()
+    print(f"Stored run {run_id} ({gen}, plate {state} {plate}, {args.weeks} week(s), seed {args.seed}): {summary}")
 
 
 if __name__ == "__main__":

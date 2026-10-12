@@ -41,6 +41,7 @@ How this number changed as the model was fixed (same driver and trips):
 | + divided-road snapping (evening commute now sees Albany St) | 11 |
 | + `ZZ` state code | 11 (plate identity change only) |
 | + service roads, edge-point attachment, entrance-based lot rule | 12 |
+| + opposite carriageway always snapped (`b86ddb4`) | 12 (rerun: every number in the table above unchanged) |
 
 The "all counts identical" check after the `ZZ` change compared against the
 11-capture run. The jump from 6 to 11 had come one commit earlier, from the
@@ -91,15 +92,29 @@ defaults (assumptions).
 
 | Template | Drivers | Trips/wk | km/wk | Camera passes | Reads after noise | Distinct cameras | Top camera's share | No reads |
 |---|---|---|---|---|---|---|---|---|
-| Commuter | 183 | 18.5 | 138 | 10.4 | 7.2 | 2.1 | 63% | 11% |
-| Student | 67 | 15.5 | 74 | 10.5 | 7.0 | 1.9 | 67% | 10% |
-| Shift worker | 50 | 11.8 | 104 | 9.7 | 7.2 | 1.7 | 74% | 6% |
+Rerun on `b86ddb4` (opposite carriageway always snapped). "Top camera" is
+the share of a driver's **reads** from their most-read camera, median across
+drivers with at least one read.
+
+| Template | Drivers | Trips/wk | km/wk | Camera passes | Reads after noise | Distinct cameras | Top camera (median) | No reads |
+|---|---|---|---|---|---|---|---|---|
+| Commuter | 183 | 18.5 | 138 | 10.5 | 7.2 | 2.1 | 70% | 11% |
+| Student | 67 | 15.5 | 74 | 10.5 | 7.0 | 1.8 | 71% | 10% |
+| Shift worker | 50 | 11.8 | 104 | 9.9 | 7.2 | 1.7 | 86% | 6% |
 
 Reads per driver-week: median 6, interquartile range 3–10, max 30. 10% of
-drivers are never read.
+drivers are never read. **Across all drivers, the median driver gets 73% of
+their reads from a single camera.**
+
+Change from the previous run: camera passes rose slightly (commuter 10.39 →
+10.54, shift worker 9.70 → 9.94), because passes on the newly snapped
+opposite carriageways are recorded and then skipped for direction under
+`rear_plate`. Captures, reads and the share of unread drivers are identical.
+The previous "top camera's share" column (63% / 67% / 74%) was a mean over
+true captures; it is now a median over reads.
 
 **What it says.** F1 wasn't an unlucky pick. A typical driver is read about 6
-times a week by about 2 cameras, and two-thirds or more of their reads come
+times a week by about 2 cameras, and for the median driver 73% of reads come
 from one camera. About one driver in ten is never read in a week. Templates
 differ little, because coverage depends on where cameras sit relative to a
 driver's anchors more than on how much they drive.

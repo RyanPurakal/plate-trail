@@ -114,8 +114,8 @@ settings (`MatchConfig`):
 | Setting | Default | Meaning |
 |---|---|---|
 | `facing` | `rear_plate` | **Assumption:** a camera's direction tag is the way it faces, and it reads the rear plates of vehicles travelling that way. It captures travel bearing = camera direction. `oncoming` instead assumes it faces oncoming traffic (front plates) and captures camera direction + 180. |
-| `tolerance_deg` | 45 | Maximum difference between the travel bearing and the captured bearing |
-| `undirected` | `best` | Cameras without a direction capture both ways (`best`) or neither (`worst`) |
+| `tolerance_deg` | 45 | **Assumption.** Maximum difference between the travel bearing and the captured bearing |
+| `undirected` | `best` | **Assumption.** Cameras without a direction capture both ways (`best`) or neither (`worst`) |
 | `ambiguous_direction` | `primary` | For cameras with disagreeing tags, use `direction` (`primary`) or the other tag (`alternate`) |
 | `lot_entrance` | `access_road` | A vehicle uses one lot entrance: the junction where its route turns between a public road and the lot's service roads (approach direction). A lot camera sees an arrival or departure only if that junction is the camera's entrance, i.e. the junction of the driveway it sits on (parallel to its facing; for a service road linking two junctions, the one behind an into-lot camera or ahead of a toward-road one). `nearest` instead picks the lot camera nearest the route's end; `all` lets every camera at the lot see it (an upper bound). |
 

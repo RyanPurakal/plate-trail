@@ -87,7 +87,8 @@ def main() -> None:
         print(f"{label:<36}{z[k]:>12}{d[k]:>30}")
 
     for r in default.misreads:
-        print(f"  misread: pass {r.pass_id} at {r.true_time:%a %H:%M} read as {r.plate} (true {r.true_plate})")
+        print(f"  misread: pass {r.pass_id} at {r.true_time:%a %H:%M} read as {r.state} {r.plate} "
+              f"(true {r.true_state} {r.true_plate})")
 
     sums = Counter()
     for s in range(args.runs):

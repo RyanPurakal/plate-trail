@@ -286,11 +286,11 @@ def test_destination_inside_lot_uses_service_road_and_reports_entrance():
     router = Router(lot_graph())
     r = router.route(xy(-400, 0), xy(450, 5), DEPART)  # a shop inside the lot, on the service road
     assert r.edges[-1].service
-    assert frozenset(r.lot_side_public_edge("dest")[:2]) == frozenset((0, 1))
+    assert r.lot_entry_node("dest") == 1
     # Arriving from the east enters from the other side.
     r2 = router.route(xy(1400, 0), xy(450, 5), DEPART)
     assert r2.edges[-1].service
-    assert frozenset(r2.lot_side_public_edge("dest")[:2]) == frozenset((3, 4))
+    assert r2.lot_entry_node("dest") == 3
 
 
 def test_timestamps_use_real_travel_time_not_penalty():
@@ -298,17 +298,16 @@ def test_timestamps_use_real_travel_time_not_penalty():
     assert r.duration_s == pytest.approx(250 / (15 / 3.6), rel=0.02)
 
 
-def test_lot_side_public_edge_is_last_public_edge_before_service_run():
-    from platetrail.sim.routing import RouteEdge
+def test_lot_entry_node_from_route_edges():
+    from platetrail.sim.routing import EdgePoint, RouteEdge
     from platetrail.sim.routing import Route as R
     edges = [RouteEdge((1, 2, 0), 1, 1, 0, None), RouteEdge((2, 3, 0), 1, 1, 1, None),
              RouteEdge((3, 9, 0), 1, 1, 2, None, service=True), RouteEdge((9, 8, 0), 1, 1, 3, None, service=True)]
-    from platetrail.sim.routing import EdgePoint
     route = R(EdgePoint((1, 2, 0), 0, 0), EdgePoint((9, 8, 0), 1, 0), DEPART, edges, [])
-    assert route.lot_side_public_edge("dest") == (2, 3, 0)
-    assert route.lot_side_public_edge("origin") == (1, 2, 0)
+    assert route.lot_entry_node("dest") == 3  # turned off the public road at node 3
+    assert route.lot_entry_node("origin") is None  # starts on a public road
     all_service = R(EdgePoint((3, 9, 0), 0, 0), EdgePoint((9, 8, 0), 1, 0), DEPART, edges[2:], [])
-    assert all_service.lot_side_public_edge("dest") == (9, 8, 0)
+    assert all_service.lot_entry_node("dest") is None
 
 
 def test_lot_camera_fires_on_the_entrance_the_route_uses():
@@ -370,25 +369,28 @@ def test_entrance_for_camera_is_junction_of_nearest_driveway():
 
 
 def test_entrance_for_camera_prefers_driveway_parallel_to_facing():
+    """Fails if the facing preference is removed: the nearest driveway leads to a different junction."""
     import osmnx as ox
     from shapely.geometry import Point
 
     from platetrail.roads.lots import EntranceIndex
 
     G = lot_graph()
-    # A second junction (5) on West Rd with a north-south service spur passing right by the camera.
-    G.add_node(5, x=xy(-100, 0)[0], y=xy(-100, 0)[1])
-    G.add_node(6, x=xy(250, 60)[0], y=xy(250, 60)[1])
-    G.remove_edge(0, 1); G.remove_edge(1, 0)
-    for a, b, length, hw in ((0, 5, 400, "tertiary"), (5, 1, 100, "tertiary"), (5, 6, 360, "service")):
+    # A second public road at y=40 with junction 5, and a north-south service spur 5->11 that passes
+    # 1 m from the camera. The camera is 3 m from the east-west lot road 1-10 (junction 1) and faces east.
+    for n, (e, nn) in {7: (150, 40), 5: (251, 40), 8: (350, 40), 11: (251, -30)}.items():
+        lon, lat = xy(e, nn)
+        G.add_node(n, x=lon, y=lat)
+    for a, b, length, hw in ((7, 5, 100, "tertiary"), (5, 8, 100, "tertiary"), (5, 11, 70, "service")):
         for x, y in ((a, b), (b, a)):
             G.add_edge(x, y, key=0, length=length, travel_time=length / 10, highway=hw)
     Gp = ox.project_graph(G)
     idx = EntranceIndex(Gp)
-    # Camera 1 m from the diagonal spur (junction 5) and 3 m from the lot road 1-10 (junction 1), facing east.
     p1 = Gp.nodes[1]
     cam = Point(p1["x"] + 250, p1["y"] + 3)
-    assert idx.for_camera(cam, [90.0])[0] == 1  # the east-west driveway matches the facing
+    assert idx.for_camera(cam, None)[0] == 5  # without a facing: the nearest driveway (the spur) wins
+    assert idx.for_camera(cam, [90.0])[0] == 1  # facing east: the parallel east-west driveway wins
+    assert idx.for_camera(cam, [0.0])[0] == 5  # facing north: the parallel spur wins
 
 
 def test_entrance_between_two_junctions_follows_facing():

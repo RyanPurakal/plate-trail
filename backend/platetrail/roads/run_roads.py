@@ -60,10 +60,9 @@ def store_classification(engine: Engine, cls: Classification) -> None:
             conn.execute(
                 text(
                     "INSERT INTO camera_lots (camera_id, lot_osm_id, lot_kind, lot_name, lot_geom, watched_way_osm_id,"
-                    " watched_way_geom, facings, alt_facings, access_u, access_v, access_distance_m, access_node,"
-                    " access_node_distance_m) VALUES (:cid, :lot_id, :lot_kind, :lot_name,"
-                    " ST_GeomFromText(:lot_wkt, 4326), :way_id, ST_GeomFromText(:way_wkt, 4326), :facings, :alt,"
-                    " :au, :av, :ad, :an, :and)"
+                    " watched_way_geom, facings, alt_facings, access_node, access_node_distance_m)"
+                    " VALUES (:cid, :lot_id, :lot_kind, :lot_name, ST_GeomFromText(:lot_wkt, 4326), :way_id,"
+                    " ST_GeomFromText(:way_wkt, 4326), :facings, :alt, :an, :and)"
                 ),
                 {
                     "cid": cid,
@@ -75,9 +74,6 @@ def store_classification(engine: Engine, cls: Classification) -> None:
                     "way_wkt": a.watched_way.geom_wgs.wkt if a.watched_way else None,
                     "facings": a.facings,
                     "alt": a.alt_facings,
-                    "au": a.access_edge[0] if a.access_edge else None,
-                    "av": a.access_edge[1] if a.access_edge else None,
-                    "ad": a.access_distance_m,
                     "an": a.access_node,
                     "and": a.access_node_distance_m,
                 },

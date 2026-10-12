@@ -70,8 +70,11 @@ class Reason(str, Enum):
 
 @dataclass(frozen=True)
 class MatchConfig:
+    # ASSUMPTION: maximum difference between travel bearing and captured bearing.
     tolerance_deg: float = 45.0
+    # ASSUMPTION: cameras face the traffic whose rear plates they read (see Facing).
     facing: Facing = Facing.REAR_PLATE
+    # ASSUMPTION: cameras without a direction tag capture both directions.
     undirected: UndirectedMode = UndirectedMode.BEST
     ambiguous_direction: AmbiguousDirection = AmbiguousDirection.PRIMARY
     lot_entrance: LotEntrance = LotEntrance.ACCESS_ROAD
