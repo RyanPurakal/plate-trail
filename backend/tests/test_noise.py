@@ -215,3 +215,39 @@ def test_noiseless_pipeline_equals_matcher_output_end_to_end():
     expected = sorted((p.time, p.camera_id) for p in captured)
     assert [(r.time, r.camera_id) for r in result.reads] == expected
     assert all(r.plate == "A12BCD" for r in result.reads)
+
+
+# ---- extra read error hook -------------------------------------------------------------
+
+class DropLastChar:
+    """Test-only error: drops the final character with probability p."""
+
+    def __init__(self, p, stream=100):
+        self.p, self.stream = p, stream
+
+    def apply(self, plate, rng):
+        return plate[:-1] if rng.random() < self.p else plate
+
+
+def test_extra_error_with_no_effect_leaves_output_identical():
+    base = NoiseConfig(seed=9, p_miss=0.2, p_char_misread=0.1, downtime_rate_per_week=2, jitter_sd_s=5)
+    hooked = NoiseConfig(seed=9, p_miss=0.2, p_char_misread=0.1, downtime_rate_per_week=2, jitter_sd_s=5,
+                         extra_read_errors=(DropLastChar(0.0),))
+    assert key(apply_noise(passes(), START, END, base)) == key(apply_noise(passes(), START, END, hooked))
+
+
+def test_extra_error_changes_only_plates_not_existing_draws():
+    base = NoiseConfig(seed=9, p_miss=0.2, p_char_misread=0.1, downtime_rate_per_week=2, jitter_sd_s=5)
+    hooked = NoiseConfig(seed=9, p_miss=0.2, p_char_misread=0.1, downtime_rate_per_week=2, jitter_sd_s=5,
+                         extra_read_errors=(DropLastChar(1.0),))
+    a, b = apply_noise(passes(), START, END, base), apply_noise(passes(), START, END, hooked)
+    assert [(r.pass_id, r.time, r.jitter_s) for r in a.reads] == [(r.pass_id, r.time, r.jitter_s) for r in b.reads]
+    assert key(a)[1:] == key(b)[1:]  # same drops, same outages
+    assert all(rb.plate == ra.plate[:-1] for ra, rb in zip(a.reads, b.reads))
+    assert all(r.misread for r in b.reads)  # a dropped character counts as a misread
+
+
+@pytest.mark.parametrize("streams", [(1,), (2,), (100, 100)])
+def test_extra_error_streams_validated(streams):
+    with pytest.raises(ValueError):
+        NoiseConfig(extra_read_errors=tuple(DropLastChar(0.5, s) for s in streams))

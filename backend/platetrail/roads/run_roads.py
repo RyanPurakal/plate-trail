@@ -157,10 +157,21 @@ def summarize(
             "  histogram: "
             + ", ".join(f"{lo}-{hi} m: {sum(1 for d in dists if lo <= d < hi)}" for lo, hi in buckets)
         )
-    two_way = sum(1 for r in snapped if len(r.snaps) == 2)
-    lines.append(f"Snaps: {two_way} cameras on two-way edges (2 directed snaps), {len(snapped) - two_way} on one-way edges")
+    two_way = sum(1 for r in snapped if len(r.snaps) == 2 and not r.twin_added)
+    divided = sum(1 for r in snapped if r.twin_added)
+    lines.append(
+        f"Snaps: {two_way} cameras on two-way roads, {divided} on divided roads (both carriageways), "
+        f"{len(snapped) - two_way - divided} on one-way roads"
+    )
     ties = [r.camera.label for r in results if r.tie_broken]
     lines.append(f"Intersection ties broken by direction: {len(ties)} {ties or ''}")
+    twins = [r for r in results if r.twin_added]
+    lines.append(f"Divided roads (both carriageways snapped): {len(twins)}")
+    for r in twins:
+        lines.append(
+            "  TWIN " + r.camera.label + ": "
+            + ", ".join(f"{s.name or 'unnamed'} {s.bearing_deg:.0f} deg at {s.distance_m:.1f} m" for s in r.snaps)
+        )
     for r in results:
         if r.resnapped_from:
             lines.append(

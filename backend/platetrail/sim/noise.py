@@ -10,6 +10,9 @@ captured. For each one, in this order:
 3. Otherwise a read is recorded. Each plate character may be swapped for a
    look-alike (plates.LOOKALIKES) with probability p_char_misread, and the
    timestamp gets Gaussian jitter.
+4. Extra read errors (`NoiseConfig.extra_read_errors`), applied in order to
+   the plate string. This is the hook for error types not modelled yet:
+   dropped or extra characters, wrong state, partial reads.
 
 Every read keeps `pass_id`, the link to the true pass, so later analysis can
 measure how misreads break linking reads to one driver.
@@ -17,13 +20,17 @@ measure how misreads break linking reads to one driver.
 Reproducibility: all randomness derives from `seed`. Outages use one stream
 per camera and noise uses one stream per pass, both keyed by stable ids
 (camera_id, pass_id). Changing one setting, e.g. p_miss, therefore doesn't
-reshuffle the random draws behind the others.
+reshuffle the random draws behind the others. Each extra read error draws
+from its own stream ([seed, error.stream, pass_id]), so adding one leaves
+every existing draw, and thus every existing read, unchanged except for
+what that error itself does.
 
 Every default below is an ASSUMPTION, not a measured value; see the README.
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Protocol
 
 import numpy as np
 
@@ -31,6 +38,20 @@ from platetrail.sim.plates import misread
 
 _STREAM_OUTAGE = 1
 _STREAM_PASS = 2
+# Stream ids >= this are for ReadError implementations; ids below are reserved.
+EXTRA_ERROR_STREAM_MIN = 100
+
+
+class ReadError(Protocol):
+    """A read error applied to the plate string after look-alike swaps.
+
+    `stream` must be unique per error type and >= EXTRA_ERROR_STREAM_MIN.
+    `apply` receives a generator dedicated to (seed, stream, pass_id).
+    """
+
+    stream: int
+
+    def apply(self, plate: str, rng: np.random.Generator) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -50,6 +71,8 @@ class NoiseConfig:
     # ASSUMPTION: standard deviation of timestamp error in seconds (clock
     # drift, processing delay), Gaussian around the true pass time.
     jitter_sd_s: float = 2.0
+    # Hook for error types not modelled yet (see ReadError). Empty by default.
+    extra_read_errors: tuple = ()
 
     def __post_init__(self):
         for name in ("p_miss", "p_char_misread"):
@@ -59,6 +82,9 @@ class NoiseConfig:
         for name in ("downtime_rate_per_week", "downtime_mean_hours", "jitter_sd_s"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} must be >= 0")
+        streams = [e.stream for e in self.extra_read_errors]
+        if any(s < EXTRA_ERROR_STREAM_MIN for s in streams) or len(set(streams)) != len(streams):
+            raise ValueError(f"extra_read_errors need unique streams >= {EXTRA_ERROR_STREAM_MIN}, got {streams}")
 
     @classmethod
     def noiseless(cls, seed: int = 0) -> "NoiseConfig":
@@ -164,6 +190,8 @@ def apply_noise(
         if u_miss < cfg.p_miss:
             dropped.append(DroppedPass(p.pass_id, p.camera_id, p.time, "missed"))
             continue
+        for err in cfg.extra_read_errors:
+            plate = err.apply(plate, np.random.default_rng([cfg.seed, err.stream, p.pass_id]))
         jitter = z * cfg.jitter_sd_s
         reads.append(Read(0, p.pass_id, p.camera_id, p.time + timedelta(seconds=jitter), plate, p.plate, p.time, jitter))
 

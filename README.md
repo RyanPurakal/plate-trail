@@ -86,6 +86,11 @@ snaps.
   alternate reading is kept in `alt_directions_deg` (1 camera, node
   13271071475).
 
+Divided roads: when a camera snaps to one carriageway of a divided road, the
+opposite carriageway (one-way, parallel, opposite travel, within 30 m) is
+snapped too. Without this, a camera beside Albany St's westbound carriageway
+never registered eastbound traffic (5 cameras affected).
+
 Snapping is direction-aware: if the nearest road isn't parallel to the camera
 (more than 30° off) but a parallel road is at most 10 m farther, the parallel
 road wins.
@@ -155,6 +160,34 @@ reported across a range of these settings.
 
 Synthetic plates follow the current NJ passenger shape (`A12BCD`) and are
 generated at random.
+
+Every read may also pass through `extra_read_errors`, a hook for error types
+not modelled yet. Each error type draws from its own random stream, so adding
+one changes only what that error does and leaves every other read and drop
+identical.
+
+## Known limitations
+
+- **Misreads are look-alike swaps only.** Real ALPR errors also include
+  dropped or extra characters, wrong state, and partial reads. The current
+  model therefore likely **understates** how often misreads break linking
+  reads to one driver. The `extra_read_errors` hook in `platetrail.sim.noise`
+  is where these will go.
+- **Noise defaults are assumptions.** See the table above; none comes from a
+  published per-read rate.
+- **Free-flow routing.** No traffic model, so departure time only stamps
+  timestamps.
+- **Trip endpoints snap to the nearest graph node.** Anchors far from the
+  drive network (e.g. inside large lots) start or end at a node that may be
+  hundreds of metres away. Step 6 addresses this.
+- **Facing convention is unverified.** `rear_plate` is a default assumption;
+  report results under both settings.
+
+## Findings
+
+Results recorded as the project is built are in
+[docs/findings.md](docs/findings.md). The first, F1: a commuter's week
+produces about 10 reads, over 90% of them from one camera.
 
 ```bash
 .venv/bin/python scripts/demo_week.py [--seed 0] [--runs 1000]

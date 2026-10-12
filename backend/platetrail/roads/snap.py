@@ -9,7 +9,12 @@ Works on a projected (metric) graph. For each camera:
    is, the parallel road wins. Exact ties (camera projects onto an
    intersection node) go to the most parallel road.
 3. Every directed edge of the chosen road gets a snap: both directions on a
-   two-way road (same geometry, reversed), one on a one-way road.
+   two-way road (same geometry, reversed), one on a one-way road. If the
+   chosen road is one carriageway of a divided road, the opposite
+   carriageway (one-way, parallel, opposite travel, within 30 m of the
+   camera) is snapped too, so a divided road is treated like a two-way road.
+   Without this a camera beside, e.g., Albany St's westbound carriageway
+   never sees eastbound traffic.
 4. Each snap records the travel bearing u->v at the snap point, from the
    edge's own geometry rather than the u->v chord, so curved roads are right.
    Bearings are true-north geodesic azimuths, not UTM grid angles.
@@ -23,11 +28,12 @@ from pyproj import Transformer
 from shapely import STRtree
 from shapely.geometry import LineString, Point
 
-from platetrail.geo import axis_diff, geodesic_bearing
+from platetrail.geo import angle_diff, axis_diff, geodesic_bearing
 
 MAX_SNAP_M = 50.0
 PREFER_PARALLEL_WITHIN_M = 10.0  # extra distance allowed to reach a parallel road
 PARALLEL_DEG = 30.0  # axis difference that counts as "parallel"
+TWIN_CARRIAGEWAY_M = 30.0  # max camera distance to the opposite carriageway of a divided road
 TIE_TOL_M = 0.01  # distances this close count as the same road geometry
 BEARING_STEP_M = 2.0  # half-width of the window used to measure local bearing
 
@@ -62,6 +68,7 @@ class SnapResult:
     nearest_m: float | None  # distance to nearest edge, even if beyond the cutoff
     tie_broken: bool = False
     resnapped_from: str | None = None  # nearest road's name when a farther parallel road won
+    twin_added: bool = False  # opposite carriageway of a divided road also snapped
 
     @property
     def dropped(self) -> bool:
@@ -89,8 +96,13 @@ class EdgeIndex:
         self.geoms: list[LineString] = list(gdf.geometry)
         self.names: list[str | None] = [_name(n) for n in gdf.get("name", [None] * len(gdf))]
         self.tree = STRtree(self.geoms)
+        self._directed = {(u, v) for u, v, _ in self.keys}
         self.to_proj = Transformer.from_crs("EPSG:4326", G_proj.graph["crs"], always_xy=True)
         self.to_wgs = Transformer.from_crs(G_proj.graph["crs"], "EPSG:4326", always_xy=True)
+
+    def is_one_way(self, i: int) -> bool:
+        u, v, _ = self.keys[i]
+        return (v, u) not in self._directed
 
     def project_point(self, lon: float, lat: float) -> Point:
         return Point(*self.to_proj.transform(lon, lat))
@@ -171,8 +183,29 @@ def snap_camera(
             resnapped_from = index.names[roads[chosen][0]] or "unnamed"
             chosen = min(parallel, key=lambda r: (road_dist[r], sorted(r)))
 
-    snaps = sorted((index.make_snap(cam.camera_id, i, pt) for i in roads[chosen]), key=lambda s: s.edge)
-    return SnapResult(camera=cam, snaps=snaps, nearest_m=nearest_m, tie_broken=tie_broken, resnapped_from=resnapped_from)
+    chosen_edges = list(roads[chosen])
+    twin = _twin_carriageway(index, pt, chosen_edges, max_distance_m)
+    if twin is not None:
+        chosen_edges.append(twin)
+    snaps = sorted((index.make_snap(cam.camera_id, i, pt) for i in chosen_edges), key=lambda s: s.edge)
+    return SnapResult(camera=cam, snaps=snaps, nearest_m=nearest_m, tie_broken=tie_broken,
+                      resnapped_from=resnapped_from, twin_added=twin is not None)
+
+
+def _twin_carriageway(index: EdgeIndex, pt: Point, chosen: list[int], max_distance_m: float) -> int | None:
+    """Nearest opposite-direction one-way edge parallel to a one-way chosen edge, if any."""
+    if len(chosen) != 1 or not index.is_one_way(chosen[0]):
+        return None
+    line = index.geoms[chosen[0]]
+    bearing = index.bearing_at(line, line.project(pt))
+    own = _road_id(index.keys[chosen[0]])
+    for i, _ in index.edges_within(pt, min(TWIN_CARRIAGEWAY_M, max_distance_m)):
+        if _road_id(index.keys[i]) == own or not index.is_one_way(i):
+            continue
+        other = index.bearing_at(index.geoms[i], index.geoms[i].project(pt))
+        if angle_diff(bearing, other) >= 180.0 - PARALLEL_DEG:
+            return i
+    return None
 
 
 def road_axis_offset(result: SnapResult) -> float | None:

@@ -30,6 +30,14 @@ def toy_graph():
     add_edge(G, 5, 6, [(500, 0), (600, 0), (600, 100)])             # L-shaped one-way
     add_edge(G, 7, 8, [(800, 0), (900, 0)], two_way=True)           # intersection: east arm
     add_edge(G, 7, 9, [(800, 0), (800, 100)], two_way=True)         # intersection: north arm
+    # Divided road: westbound carriageway at y=1000, eastbound at y=1020, plus a
+    # same-direction one-way at y=1040 that must not count as a twin.
+    for n, (x, y) in {20: (0, 1000), 21: (200, 1000), 22: (0, 1020), 23: (200, 1020),
+                      24: (0, 1040), 25: (200, 1040)}.items():
+        G.add_node(n, x=X0 + x, y=Y0 + y)
+    add_edge(G, 21, 20, [(200, 1000), (0, 1000)])                  # westbound
+    add_edge(G, 22, 23, [(0, 1020), (200, 1020)])                  # eastbound
+    add_edge(G, 25, 24, [(200, 1040), (0, 1040)])                  # westbound again
     return G
 
 
@@ -176,3 +184,26 @@ def test_direction_aware_snap_keeps_nearest_when_parallel_road_too_far(index):
 def test_direction_aware_snap_ignores_undirected(index):
     r = snap_camera(index, cam(808, 5, None))
     assert {s.edge for s in r.snaps} == {(7, 8, 0), (8, 7, 0)}
+
+
+def test_divided_road_snaps_both_carriageways(index):
+    r = snap_camera(index, cam(100, 1008, [260, 80]))  # 8 m from westbound, 12 m from eastbound
+    assert {s.edge for s in r.snaps} == {(21, 20, 0), (22, 23, 0)}
+    assert r.twin_added
+    by_edge = {s.edge: s for s in r.snaps}
+    assert angle_diff(by_edge[(21, 20, 0)].bearing_deg, 270) < 1
+    assert angle_diff(by_edge[(22, 23, 0)].bearing_deg, 90) < 1
+
+
+def test_twin_must_run_opposite_and_be_close(index):
+    # 5 m from the eastbound carriageway (y=1020); westbound one-ways at 15 m (y=1040)
+    # and 25 m (y=1000). The nearer opposite carriageway is the twin.
+    r = snap_camera(index, cam(100, 1025, [80]))
+    assert {s.edge for s in r.snaps} == {(22, 23, 0), (25, 24, 0)}
+    far = snap_camera(index, cam(100, 975, [260]))  # 25 m from westbound, eastbound 45 m away
+    assert {s.edge for s in far.snaps} == {(21, 20, 0)} and not far.twin_added
+
+
+def test_two_way_road_gets_no_twin(index):
+    r = snap_camera(index, cam(100, 10, [90]))
+    assert not r.twin_added and len(r.snaps) == 2
