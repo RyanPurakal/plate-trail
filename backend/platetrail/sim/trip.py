@@ -48,6 +48,7 @@ class SimCamera:
     edges: list[CameraEdge] = field(default_factory=list)
     lot_geom: BaseGeometry | None = None
     lot_id: str | None = None  # OSM id of the lot polygon; cameras sharing it share entrances
+    access_road: frozenset | None = None  # {u, v} of the public road nearest the camera
     lot_name: str | None = None
     lon: float | None = None
     lat: float | None = None
@@ -96,13 +97,14 @@ def load_camera_set(engine: Engine) -> CameraSet:
             cams[r.camera_id].edges.append(CameraEdge((r.u, r.v, r.key), r.fraction_along, r.edge_bearing_deg))
         for r in conn.execute(
             text(
-                "SELECT camera_id, ST_AsBinary(lot_geom) AS g, lot_osm_id, lot_name, facings, alt_facings"
-                " FROM camera_lots"
+                "SELECT camera_id, ST_AsBinary(lot_geom) AS g, lot_osm_id, lot_name, facings, alt_facings,"
+                " access_u, access_v FROM camera_lots"
             )
         ):
             c = cams[r.camera_id]
             c.lot_geom = wkb.loads(bytes(r.g)) if r.g is not None else None
             c.lot_id = r.lot_osm_id
+            c.access_road = frozenset((r.access_u, r.access_v)) if r.access_u is not None else None
             c.lot_name = r.lot_name
             c.facings = list(r.facings) if r.facings else None
             c.alt_facings = list(r.alt_facings) if r.alt_facings else None
@@ -142,25 +144,31 @@ def match_route(
     passes: list[CameraPass] = []
     for re in route.edges:
         for cam, ce in cameras.by_edge.get(re.edge, []):
+            if not re.covers(ce.fraction_along):
+                continue  # camera is on the part of the edge not driven (trip starts/ends mid-edge)
             dirs = choose_directions(cam.directions_deg, cam.alt_directions_deg, cfg)
             decision = edge_decision(dirs, ce.bearing_deg, cfg)
-            t = route.depart + timedelta(seconds=re.enter_offset_s + ce.fraction_along * re.travel_time_s)
+            offset = re.enter_offset_s + (ce.fraction_along - re.frac_from) * re.full_travel_time_s
+            t = route.depart + timedelta(seconds=offset)
             passes.append(
                 CameraPass(cam.camera_id, cam.label, t, "road", ce.bearing_deg, re.edge, re.name,
                            decision.captured, decision.reason)
             )
 
     events = (
-        (LotEvent.DEPARTURE, Point(origin), route.depart, route.coords[0]),
-        (LotEvent.ARRIVAL, Point(dest), route.arrive, route.coords[-1]),
+        (LotEvent.DEPARTURE, Point(origin), route.depart, route.coords[0], route.origin.edge),
+        (LotEvent.ARRIVAL, Point(dest), route.arrive, route.coords[-1], route.dest.edge),
     )
     for group in cameras.lot_groups.values():
-        for event, pt, t, network_end in events:
+        for event, pt, t, network_end, lot_side_edge in events:
             if not group[0].lot_geom.covers(pt):
                 continue
             seen = group
-            if cfg.lot_entrance is LotEntrance.NEAREST and len(group) > 1:
-                # The route joins the drive network at network_end; the vehicle uses that entrance.
+            if cfg.lot_entrance is LotEntrance.ACCESS_ROAD:
+                # The place connects to the network at lot_side_edge; only cameras on that access road see it.
+                road = frozenset(lot_side_edge[:2])
+                seen = [c for c in group if c.access_road == road]
+            elif cfg.lot_entrance is LotEntrance.NEAREST and len(group) > 1:
                 seen = [min(group, key=lambda c: _distance_m(c, network_end))]
             for cam in seen:
                 decision = lot_decision(choose_facings(cam.facings, cam.alt_facings, cfg), event, cfg)

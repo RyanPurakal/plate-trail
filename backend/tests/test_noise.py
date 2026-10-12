@@ -205,14 +205,16 @@ def test_reads_carry_synthetic_state_and_state_errors_count_as_misreads():
 
 
 def test_noiseless_pipeline_equals_matcher_output_end_to_end():
-    from test_trip import DEPART, lot_camera, pair_on_main_st, toy_graph, xy
+    from test_trip import DEPART, lot_camera, pair_on_main_st, toy_graph, xy  # noqa: I001
 
     from platetrail.sim.routing import Router
     from platetrail.sim.trip import CameraSet, simulate_trip
 
     router = Router(toy_graph())
+    from test_trip import IN_LOT
+
     cams = CameraSet(list(pair_on_main_st().by_id.values()) + [lot_camera(["into_lot"])])
-    trips = [((0, 0), (1000, 0)), ((1000, 0), (0, 0)), ((0, 0), (1000, 0))]
+    trips = [((0, 0), IN_LOT), (IN_LOT, (0, 0)), ((0, 0), IN_LOT)]
     captured = []
     for i, (o, d) in enumerate(trips):
         captured += simulate_trip(router, cams, xy(*o), xy(*d), DEPART + timedelta(hours=3 * i)).captured

@@ -60,8 +60,9 @@ def store_classification(engine: Engine, cls: Classification) -> None:
             conn.execute(
                 text(
                     "INSERT INTO camera_lots (camera_id, lot_osm_id, lot_kind, lot_name, lot_geom, watched_way_osm_id,"
-                    " watched_way_geom, facings, alt_facings) VALUES (:cid, :lot_id, :lot_kind, :lot_name,"
-                    " ST_GeomFromText(:lot_wkt, 4326), :way_id, ST_GeomFromText(:way_wkt, 4326), :facings, :alt)"
+                    " watched_way_geom, facings, alt_facings, access_u, access_v, access_distance_m)"
+                    " VALUES (:cid, :lot_id, :lot_kind, :lot_name, ST_GeomFromText(:lot_wkt, 4326), :way_id,"
+                    " ST_GeomFromText(:way_wkt, 4326), :facings, :alt, :au, :av, :ad)"
                 ),
                 {
                     "cid": cid,
@@ -73,6 +74,9 @@ def store_classification(engine: Engine, cls: Classification) -> None:
                     "way_wkt": a.watched_way.geom_wgs.wkt if a.watched_way else None,
                     "facings": a.facings,
                     "alt": a.alt_facings,
+                    "au": a.access_edge[0] if a.access_edge else None,
+                    "av": a.access_edge[1] if a.access_edge else None,
+                    "ad": a.access_distance_m,
                 },
             )
 
@@ -187,7 +191,8 @@ def summarize(
         way = f", watches service road {a.watched_way.osm_id}" if a.watched_way else ""
         facing = "/".join(f"{d:g}->{f}" for d, f in zip(a.camera.directions_deg or [], a.facings))
         alt = f"; alternate reading: {'/'.join(a.alt_facings)}" if a.alt_facings else ""
-        lines.append(f"  LOT {a.camera.label} [{a.reason}]: {lot}{way}; {facing}{alt}")
+        access = f"; access road {a.access_edge[0]}-{a.access_edge[1]} at {a.access_distance_m:.0f} m" if a.access_edge else ""
+        lines.append(f"  LOT {a.camera.label} [{a.reason}]: {lot}{way}; {facing}{alt}{access}")
     for cam in cls.unresolved_dropped:
         lines.append(f"  STILL DROPPED {cam.label}: no lot polygon within range")
     lines.append(f"snap_ambiguous (public road, direction > {PERPENDICULAR_DEG:g} deg off road axis): {len(cls.snap_ambiguous)}")

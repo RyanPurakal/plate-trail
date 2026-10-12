@@ -20,8 +20,10 @@ reading or the alternate one, per AmbiguousDirection.
 Private-lot cameras capture arrivals or departures at their lot. Each of
 their directions points into the lot or toward the road. Under REAR_PLATE an
 "into_lot" direction captures arrivals; ONCOMING flips it. A vehicle uses one
-entrance, so by default only the lot camera nearest the point where the
-route meets the lot counts (LotEntrance.NEAREST). LotEntrance.ALL lets every
+entrance. By default (LotEntrance.ACCESS_ROAD) a lot camera sees an
+arrival/departure only if the trip's lot-side edge (the edge the place snaps
+to) is the camera's access road, i.e. the public road nearest the camera.
+NEAREST picks the lot camera nearest the route's end instead; ALL lets every
 camera at the lot see the event, as an upper bound.
 """
 
@@ -47,6 +49,7 @@ class AmbiguousDirection(str, Enum):
 
 
 class LotEntrance(str, Enum):
+    ACCESS_ROAD = "access_road"  # only lot cameras whose access road is the trip's lot-side edge
     NEAREST = "nearest"  # only the lot camera nearest the route's lot-side end
     ALL = "all"  # every camera at the lot sees the event (upper bound)
 
@@ -69,7 +72,7 @@ class MatchConfig:
     facing: Facing = Facing.REAR_PLATE
     undirected: UndirectedMode = UndirectedMode.BEST
     ambiguous_direction: AmbiguousDirection = AmbiguousDirection.PRIMARY
-    lot_entrance: LotEntrance = LotEntrance.NEAREST
+    lot_entrance: LotEntrance = LotEntrance.ACCESS_ROAD
 
     def __post_init__(self):
         if not 0.0 <= self.tolerance_deg <= 180.0:

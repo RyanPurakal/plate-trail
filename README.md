@@ -107,7 +107,7 @@ settings (`MatchConfig`):
 | `tolerance_deg` | 45 | Maximum difference between the travel bearing and the captured bearing |
 | `undirected` | `best` | Cameras without a direction capture both ways (`best`) or neither (`worst`) |
 | `ambiguous_direction` | `primary` | For cameras with disagreeing tags, use `direction` (`primary`) or the other tag (`alternate`) |
-| `lot_entrance` | `nearest` | A vehicle uses one lot entrance, so only the lot camera nearest where the route meets the lot sees the event. `all` lets every camera at the lot see it (an upper bound). |
+| `lot_entrance` | `access_road` | A vehicle uses one lot entrance. A lot camera sees an arrival or departure only if the trip's lot-side edge (the edge the place attaches to) is the camera's access road, the public road nearest the camera. `nearest` instead picks the lot camera nearest the route's end; `all` lets every camera at the lot see it (an upper bound). |
 
 The rear-plate default is an assumption, not something established from the
 data. OSM documents `direction` as the way a camera faces, but it doesn't
@@ -121,6 +121,44 @@ direction captures departures; `oncoming` flips both.
 ```bash
 .venv/bin/python scripts/sample_trips.py [--facing oncoming] [--tolerance 30] [--lot-entrance all]
 ```
+
+Trip endpoints attach to the **nearest point on an edge**, not the nearest
+intersection. The route starts and ends with partial edges, and a camera
+counts only if it is on the part actually driven.
+
+## Routine generator
+
+`platetrail.routines` plans each synthetic driver's trips. It is behind a
+`RoutineGenerator` interface so an NHTS-based generator (stubbed in
+`routines/nhts.py`) can replace it without changing the simulation.
+
+```bash
+.venv/bin/python -m platetrail.routines.places          # load towns + candidate places from OSM (cached)
+.venv/bin/python scripts/simulate_drivers.py --drivers 300
+```
+
+- **Templates** (`routines/templates.py`): commuter (weekday work trips,
+  sometimes an errand on the way home, Saturday errand chains, Sunday worship
+  or errand), student (Rutgers building, Mon–Thu plus some Fridays, evening
+  food), shift worker (4 fixed night shifts a week at a hospital or
+  industrial site, errands on off days). Every time, probability and spread
+  is an **assumption**.
+- **Homes** are uniform points on residential streets, weighted by street
+  length, not OSM buildings. Building coverage is uneven: 2.37 typed
+  residential buildings per residential street in Edison vs 0.63 in New
+  Brunswick, so building sampling would under-represent New Brunswick.
+- **Places** (1,310) are OSM shops, food, services, leisure, worship,
+  workplaces, university and hospitals inside the two towns. 207 are more
+  than 100 m from the drive network (mostly inside Raritan Center and large
+  retail lots) and attach to the nearest edge point. 6 are more than 500 m
+  away and are excluded.
+- **Errands** pick a category from a fixed mix (grocery 28%, retail 22%,
+  food 25%, services 15%, leisure 10%; **assumption**), then a place in it,
+  weighted by `exp(-distance / 4 km)` from the trip's origin. Drivers reuse a
+  "usual" place per category 60% of the time. **Camera locations are never
+  used.** In a 300-driver run, 5.5% of errand trips end inside a camera-covered
+  lot, vs 7.3% of errand places lying inside one, so there is no bias toward
+  camera lots.
 
 ## Sensor noise model
 
@@ -188,17 +226,21 @@ identical.
   published per-read rate.
 - **Free-flow routing.** No traffic model, so departure time only stamps
   timestamps.
-- **Trip endpoints snap to the nearest graph node.** Anchors far from the
-  drive network (e.g. inside large lots) start or end at a node that may be
-  hundreds of metres away. Step 6 addresses this.
+- **Private service roads aren't in the drive graph.** Places inside Raritan
+  Center and big retail lots attach to the nearest public edge, up to 500 m
+  away, and the drive through the lot isn't modelled.
+- **One entrance per place.** A place always uses the public road nearest to
+  it, so a lot camera whose driveway meets a road no shop is nearest to (two
+  Menlo Park Mall cameras) never fires under `access_road`.
 - **Facing convention is unverified.** `rear_plate` is a default assumption;
   report results under both settings.
 
 ## Findings
 
 Results recorded as the project is built are in
-[docs/findings.md](docs/findings.md). The first, F1: a commuter's week
-produces about 10 reads, over 90% of them from one camera.
+[docs/findings.md](docs/findings.md): F1 (one commuter's week is about 10
+reads, over 90% from one camera) and F2 (across 300 template drivers, median
+6 reads per week and 11% of drivers never read).
 
 ```bash
 .venv/bin/python scripts/demo_week.py [--seed 0] [--runs 1000]

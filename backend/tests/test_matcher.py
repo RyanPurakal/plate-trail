@@ -120,7 +120,7 @@ def test_config_accepts_strings():
     assert cfg.facing is Facing.ONCOMING
     assert cfg.undirected is UndirectedMode.WORST
     assert cfg.ambiguous_direction is AmbiguousDirection.ALTERNATE
-    assert MatchConfig().lot_entrance.value == "nearest"
+    assert MatchConfig().lot_entrance.value == "access_road"
     assert MatchConfig(lot_entrance="all").lot_entrance.value == "all"
     with pytest.raises(ValueError):
         MatchConfig(facing="sideways")

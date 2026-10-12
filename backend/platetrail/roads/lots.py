@@ -69,6 +69,8 @@ class LotAssignment:
     facings: list[str]
     alt_facings: list[str] | None
     reason: str  # "dropped" or "driveway"
+    access_edge: tuple[int, int, int] | None = None  # nearest public drive edge to the camera
+    access_distance_m: float | None = None
 
 
 @dataclass
@@ -169,6 +171,13 @@ def _local_axis(line: LineString, pt: Point, index: EdgeIndex) -> float:
     return index.bearing_at(line, line.project(pt))
 
 
+def access_edge(index: EdgeIndex, cam: CameraInput) -> tuple[tuple[int, int, int], float]:
+    """The public drive edge nearest the camera: where its driveway meets the road network."""
+    pt = index.project_point(cam.lon, cam.lat)
+    i = int(index.tree.query_nearest(pt)[0])
+    return index.keys[i], index.geoms[i].distance(pt)
+
+
 def outward_bearing(index: EdgeIndex, cam: CameraInput) -> float:
     """Bearing from the camera to the nearest point on the public drive network."""
     pt = index.project_point(cam.lon, cam.lat)
@@ -235,6 +244,7 @@ def classify(
             continue
 
         outward = outward_bearing(index, cam)
+        edge, edge_d = access_edge(index, cam)
         out.lots[cam.camera_id] = LotAssignment(
             camera=cam,
             lot=lot,
@@ -242,5 +252,7 @@ def classify(
             facings=facings_for(cam.directions_deg, outward) or [],
             alt_facings=facings_for(alt_directions.get(cam.camera_id), outward),
             reason=reason,
+            access_edge=edge,
+            access_distance_m=edge_d,
         )
     return out
