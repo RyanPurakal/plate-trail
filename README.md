@@ -238,6 +238,30 @@ not modelled yet. Each error type draws from its own random stream, so adding
 one changes only what that error does and leaves every other read and drop
 identical.
 
+## Stored runs (read log)
+
+`platetrail.sim.runner` simulates one synthetic driver for N weeks and stores
+everything in PostGIS in one transaction:
+
+```bash
+.venv/bin/python -m platetrail.sim.runner --template commuter --weeks 4 --seed 1 [--zero-noise]
+```
+
+| Table | Contents |
+|---|---|
+| `runs` | generator, weeks, start date, seed, synthetic plate (`ZZ` state), match and noise config (JSON), anchors, summary counts |
+| `trips` | ground truth: purpose, origin and destination, planned vs actual departure, arrival, length, route geometry |
+| `camera_passes` | every camera the route passed: time, event (road / arrival / departure), travel bearing, matcher decision and reason, noise outcome (`read` / `missed` / `downtime`) |
+| `reads` | the noisy read log: recorded time and plate, `misread` flag, jitter; `pass_id` links each read to its true pass |
+| `camera_outages` | the outage windows drawn for the run |
+
+Times are local New Jersey wall-clock time, stored as `timestamp` without
+time zone. Camera references store the id and the stable OSM id
+(`camera_label`) with no foreign key, so rerunning the camera ETL (which
+renumbers cameras) doesn't delete stored runs. Runs are reproducible: the
+same request on the same data stores the same run. `SimulationRunner` is the
+seam for a future Celery-backed runner; `LocalRunner` runs synchronously.
+
 ## Known limitations
 
 - **Misreads are look-alike swaps only.** Real ALPR errors also include
