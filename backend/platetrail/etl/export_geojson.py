@@ -33,9 +33,11 @@ def cameras_feature_collection(engine: Engine, ray_m: float = 30.0) -> dict:
     with engine.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT id, source, source_id, town, ST_Y(geom) AS lat, ST_X(geom) AS lon, directions_deg,"
-                " has_direction, direction_key, direction_raw, manufacturer, sources"
-                " FROM cameras ORDER BY id"
+                "SELECT c.id, source, source_id, town, ST_Y(geom) AS lat, ST_X(geom) AS lon, directions_deg,"
+                " has_direction, direction_key, direction_raw, manufacturer, sources, camera_kind,"
+                " snap_ambiguous, direction_ambiguous, alt_directions_deg,"
+                " l.lot_osm_id, l.lot_kind, l.lot_name, l.watched_way_osm_id, l.facings, l.alt_facings"
+                " FROM cameras c LEFT JOIN camera_lots l ON l.camera_id = c.id ORDER BY c.id"
             )
         ).mappings()
         features = []
@@ -52,7 +54,19 @@ def cameras_feature_collection(engine: Engine, ray_m: float = 30.0) -> dict:
                 "direction_key": r["direction_key"],
                 "direction_raw": r["direction_raw"],
                 "manufacturer": r["manufacturer"],
-                "marker-color": "#c0392b" if r["has_direction"] else "#7f8c8d",  # geojson.io styling
+                "camera_kind": r["camera_kind"],
+                "snap_ambiguous": r["snap_ambiguous"],
+                "direction_ambiguous": r["direction_ambiguous"],
+                "alt_directions_deg": r["alt_directions_deg"],
+                "lot_osm_id": r["lot_osm_id"],
+                "lot_kind": r["lot_kind"],
+                "lot_name": r["lot_name"],
+                "watched_way_osm_id": r["watched_way_osm_id"],
+                "lot_facings": r["facings"],
+                "lot_alt_facings": r["alt_facings"],
+                # geojson.io styling: red public road, blue private lot, grey undirected
+                "marker-color": "#7f8c8d" if not r["has_direction"]
+                else ("#2471a3" if r["camera_kind"] == "private_lot" else "#c0392b"),
             }
             features.append(
                 {"type": "Feature", "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]}, "properties": props}

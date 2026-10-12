@@ -158,3 +158,21 @@ def test_undirected_camera_never_flagged(index):
 def test_multi_direction_camera_flags_only_off_axis_direction(index):
     flags = alignment_flags(index, snap_camera(index, cam(100, 10, [90, 0])))
     assert [f.direction_deg for f in flags] == [0]
+
+
+def test_direction_aware_snap_prefers_parallel_road_within_10m(index):
+    # 5 m from the E-W east arm, 8 m from the N-S north arm (within +10 m), facing north.
+    r = snap_camera(index, cam(808, 5, [0]))
+    assert {s.edge for s in r.snaps} == {(7, 9, 0), (9, 7, 0)}
+    assert r.resnapped_from == "7-8"
+
+
+def test_direction_aware_snap_keeps_nearest_when_parallel_road_too_far(index):
+    r = snap_camera(index, cam(830, 5, [0]))  # north arm 30 m away
+    assert {s.edge for s in r.snaps} == {(7, 8, 0), (8, 7, 0)}
+    assert r.resnapped_from is None
+
+
+def test_direction_aware_snap_ignores_undirected(index):
+    r = snap_camera(index, cam(808, 5, None))
+    assert {s.edge for s in r.snaps} == {(7, 8, 0), (8, 7, 0)}

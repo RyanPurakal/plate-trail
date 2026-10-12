@@ -21,6 +21,8 @@ class CameraRecord:
     directions_deg: list[float] | None  # None = no usable direction
     direction_raw: str | None  # original tag value, kept for auditing
     direction_key: str | None = None  # tag the value came from, e.g. "direction"
+    # Reading from a disagreeing lower-priority tag; set only for ambiguous cameras.
+    alt_directions_deg: list[float] | None = None
     tags: dict[str, Any] = field(default_factory=dict)
 
     @property

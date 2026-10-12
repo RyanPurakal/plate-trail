@@ -4,11 +4,13 @@ Works on a projected (metric) graph. For each camera:
 
 1. Find the nearest edge geometry within max_distance_m (default 50 m).
    Cameras farther than that are dropped and reported.
-2. Every directed edge at that same distance gets a snap: on a two-way road
-   that is both directions (same geometry, reversed), on a one-way road just
-   one. If several *different* roads tie (the camera projects onto an
-   intersection node), the road most parallel to the camera's direction wins.
-3. Each snap records the travel bearing u->v at the snap point, from the
+2. Direction-aware choice: if the nearest road is not parallel to the
+   camera (axis more than 30 deg off) but another road within an extra 10 m
+   is, the parallel road wins. Exact ties (camera projects onto an
+   intersection node) go to the most parallel road.
+3. Every directed edge of the chosen road gets a snap: both directions on a
+   two-way road (same geometry, reversed), one on a one-way road.
+4. Each snap records the travel bearing u->v at the snap point, from the
    edge's own geometry rather than the u->v chord, so curved roads are right.
    Bearings are true-north geodesic azimuths, not UTM grid angles.
 """
@@ -24,6 +26,8 @@ from shapely.geometry import LineString, Point
 from platetrail.geo import axis_diff, geodesic_bearing
 
 MAX_SNAP_M = 50.0
+PREFER_PARALLEL_WITHIN_M = 10.0  # extra distance allowed to reach a parallel road
+PARALLEL_DEG = 30.0  # axis difference that counts as "parallel"
 TIE_TOL_M = 0.01  # distances this close count as the same road geometry
 BEARING_STEP_M = 2.0  # half-width of the window used to measure local bearing
 
@@ -57,6 +61,7 @@ class SnapResult:
     snaps: list[EdgeSnap]  # empty when dropped
     nearest_m: float | None  # distance to nearest edge, even if beyond the cutoff
     tie_broken: bool = False
+    resnapped_from: str | None = None  # nearest road's name when a farther parallel road won
 
     @property
     def dropped(self) -> bool:
@@ -131,26 +136,50 @@ def _parallelism(index: EdgeIndex, i: int, pt: Point, directions: list[float] | 
     return min(axis_diff(road, d) for d in directions)
 
 
-def snap_camera(index: EdgeIndex, cam: CameraInput, max_distance_m: float = MAX_SNAP_M) -> SnapResult:
+def snap_camera(
+    index: EdgeIndex,
+    cam: CameraInput,
+    max_distance_m: float = MAX_SNAP_M,
+    prefer_parallel_within_m: float = PREFER_PARALLEL_WITHIN_M,
+    parallel_deg: float = PARALLEL_DEG,
+) -> SnapResult:
     pt = index.project_point(cam.lon, cam.lat)
     nearest_i, nearest_d = index.tree.query_nearest(pt, return_distance=True)
     nearest_m = float(nearest_d[0]) if len(nearest_d) else None
     if nearest_m is None or nearest_m > max_distance_m:
         return SnapResult(camera=cam, snaps=[], nearest_m=nearest_m)
 
-    tied = [(i, d) for i, d in index.edges_within(pt, nearest_m + TIE_TOL_M) if d <= nearest_m + TIE_TOL_M]
+    # Group candidate edges into undirected roads, keeping each road's distance.
     roads: dict[frozenset, list[int]] = {}
-    for i, _ in tied:
-        roads.setdefault(_road_id(index.keys[i]), []).append(i)
+    road_dist: dict[frozenset, float] = {}
+    for i, d in index.edges_within(pt, nearest_m + prefer_parallel_within_m):
+        r = _road_id(index.keys[i])
+        roads.setdefault(r, []).append(i)
+        road_dist[r] = min(road_dist.get(r, d), d)
 
-    tie_broken = len(roads) > 1
-    if tie_broken:
-        best_road = min(roads, key=lambda r: (_parallelism(index, roads[r][0], pt, cam.directions_deg), sorted(r)))
-    else:
-        best_road = next(iter(roads))
+    def par(r: frozenset) -> float:
+        return _parallelism(index, roads[r][0], pt, cam.directions_deg)
 
-    snaps = sorted((index.make_snap(cam.camera_id, i, pt) for i in roads[best_road]), key=lambda s: s.edge)
-    return SnapResult(camera=cam, snaps=snaps, nearest_m=nearest_m, tie_broken=tie_broken)
+    tied = [r for r in roads if road_dist[r] <= nearest_m + TIE_TOL_M]
+    tie_broken = len(tied) > 1
+    chosen = min(tied, key=lambda r: (par(r), sorted(r)))
+
+    resnapped_from = None
+    if cam.directions_deg and par(chosen) > parallel_deg:
+        parallel = [r for r in roads if par(r) <= parallel_deg]
+        if parallel:
+            resnapped_from = index.names[roads[chosen][0]] or "unnamed"
+            chosen = min(parallel, key=lambda r: (road_dist[r], sorted(r)))
+
+    snaps = sorted((index.make_snap(cam.camera_id, i, pt) for i in roads[chosen]), key=lambda s: s.edge)
+    return SnapResult(camera=cam, snaps=snaps, nearest_m=nearest_m, tie_broken=tie_broken, resnapped_from=resnapped_from)
+
+
+def road_axis_offset(result: SnapResult) -> float | None:
+    """Smallest axis difference between the camera's directions and its snapped road."""
+    if result.dropped or not result.camera.directions_deg:
+        return None
+    return min(axis_diff(result.snaps[0].bearing_deg, d) for d in result.camera.directions_deg)
 
 
 @dataclass(frozen=True)
