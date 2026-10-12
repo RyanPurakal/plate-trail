@@ -3,7 +3,7 @@
   "elements": [
     {"type": "relation", "id": 1, "tags": {"boundary": "administrative", "admin_level": "8", "name": "Testville"}},
     {"type": "node", "id": 101, "lat": 40.5, "lon": -74.4,
-     "tags": {"man_made": "surveillance", "surveillance:type": "ALPR", "direction": "90"}},
+     "tags": {"man_made": "surveillance", "surveillance:type": "ALPR", "direction": "90", "manufacturer": "Flock Safety"}},
     {"type": "node", "id": 102, "lat": 40.51, "lon": -74.41,
      "tags": {"man_made": "surveillance", "surveillance:type": "ALPR", "camera:direction": "137", "direction": "321"}},
     {"type": "node", "id": 103, "lat": 40.52, "lon": -74.42,

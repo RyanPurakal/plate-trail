@@ -56,18 +56,25 @@ class MergedCamera:
     members: list[CameraRecord]
 
     @property
+    def _direction_member(self) -> CameraRecord:
+        """First member with a usable direction, else the primary."""
+        return next((m for m in [self.primary, *self.members] if m.has_direction), self.primary)
+
+    @property
     def directions_deg(self) -> list[float] | None:
-        for m in [self.primary, *self.members]:
-            if m.has_direction:
-                return m.directions_deg
-        return None
+        return self._direction_member.directions_deg
 
     @property
     def direction_raw(self) -> str | None:
-        for m in [self.primary, *self.members]:
-            if m.has_direction:
-                return m.direction_raw
-        return self.primary.direction_raw
+        return self._direction_member.direction_raw
+
+    @property
+    def direction_key(self) -> str | None:
+        return self._direction_member.direction_key
+
+    @property
+    def manufacturer(self) -> str | None:
+        return next((m.manufacturer for m in [self.primary, *self.members] if m.manufacturer), None)
 
     @property
     def sources(self) -> list[str]:

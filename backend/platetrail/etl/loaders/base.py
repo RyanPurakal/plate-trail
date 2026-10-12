@@ -20,11 +20,16 @@ class CameraRecord:
     town: str
     directions_deg: list[float] | None  # None = no usable direction
     direction_raw: str | None  # original tag value, kept for auditing
+    direction_key: str | None = None  # tag the value came from, e.g. "direction"
     tags: dict[str, Any] = field(default_factory=dict)
 
     @property
     def has_direction(self) -> bool:
         return bool(self.directions_deg)
+
+    @property
+    def manufacturer(self) -> str | None:
+        return self.tags.get("manufacturer")
 
     @property
     def key(self) -> str:

@@ -61,7 +61,7 @@ def parse_response(town: str, response: dict) -> list[CameraRecord]:
             lat, lon = el["center"]["lat"], el["center"]["lon"]
         else:
             continue
-        directions, raw = direction_from_tags(tags)
+        directions, raw, key = direction_from_tags(tags)
         records.append(
             CameraRecord(
                 source="osm",
@@ -71,6 +71,7 @@ def parse_response(town: str, response: dict) -> list[CameraRecord]:
                 town=town,
                 directions_deg=directions,
                 direction_raw=raw,
+                direction_key=key,
                 tags=tags,
             )
         )

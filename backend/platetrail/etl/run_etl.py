@@ -34,9 +34,9 @@ def store(engine: Engine, cameras: list[MergedCamera]) -> None:
             camera_id = conn.execute(
                 text(
                     "INSERT INTO cameras (geom, town, directions_deg, has_direction, direction_raw,"
-                    " source, source_id, sources, tags)"
+                    " direction_key, manufacturer, source, source_id, sources, tags)"
                     " VALUES (ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), :town, :dirs, :has_dir, :raw,"
-                    " :source, :source_id, :sources, CAST(:tags AS jsonb)) RETURNING id"
+                    " :dir_key, :manufacturer, :source, :source_id, :sources, CAST(:tags AS jsonb)) RETURNING id"
                 ),
                 {
                     "lon": p.lon,
@@ -45,6 +45,8 @@ def store(engine: Engine, cameras: list[MergedCamera]) -> None:
                     "dirs": cam.directions_deg,
                     "has_dir": bool(cam.directions_deg),
                     "raw": cam.direction_raw,
+                    "dir_key": cam.direction_key,
+                    "manufacturer": cam.manufacturer,
                     "source": p.source,
                     "source_id": p.source_id,
                     "sources": cam.sources,
@@ -55,9 +57,9 @@ def store(engine: Engine, cameras: list[MergedCamera]) -> None:
                 conn.execute(
                     text(
                         "INSERT INTO camera_source_records (camera_id, source, source_id, geom,"
-                        " directions_deg, direction_raw, tags)"
+                        " directions_deg, direction_raw, direction_key, tags)"
                         " VALUES (:cid, :source, :source_id, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),"
-                        " :dirs, :raw, CAST(:tags AS jsonb))"
+                        " :dirs, :raw, :dir_key, CAST(:tags AS jsonb))"
                     ),
                     {
                         "cid": camera_id,
@@ -67,6 +69,7 @@ def store(engine: Engine, cameras: list[MergedCamera]) -> None:
                         "lat": m.lat,
                         "dirs": m.directions_deg,
                         "raw": m.direction_raw,
+                        "dir_key": m.direction_key,
                         "tags": json.dumps(m.tags),
                     },
                 )
@@ -86,6 +89,14 @@ def summarize(records: list[CameraRecord], cameras: list[MergedCamera], stats: D
     total_dir = sum(1 for c in cameras if c.directions_deg)
     lines.append(f"{'TOTAL':<16}{len(cameras):>8}{total_dir:>10}{len(cameras) - total_dir:>12}")
     lines.append("")
+    keys = Counter(c.direction_key or "(none)" for c in cameras)
+    lines.append("Direction value taken from: " + ", ".join(f"{k}={n}" for k, n in sorted(keys.items())))
+    present = Counter(
+        "+".join(k for k in ("direction", "camera:direction") if k in r.tags) or "neither" for r in records
+    )
+    lines.append("Direction tags present: " + ", ".join(f"{k}={n}" for k, n in sorted(present.items())))
+    no_mfr = sum(1 for c in cameras if not c.manufacturer)
+    lines.append(f"Cameras without manufacturer tag: {no_mfr}")
     unparsed = sorted({r.direction_raw for r in records if r.direction_raw and not r.has_direction})
     lines.append(f"Direction tags present but unparseable: {len(unparsed)} distinct value(s) {unparsed or ''}")
     conflicts = [(r.key, c) for r in records if (c := conflicting_direction_tags(r.tags))]

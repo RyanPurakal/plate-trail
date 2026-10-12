@@ -14,7 +14,12 @@ def test_parse_response_normalizes_records():
     recs = {r.source_id: r for r in parse_response("Testville", FIXTURE)}
     assert set(recs) == {"node/101", "node/102", "node/103", "node/104", "way/105"}
     assert recs["node/101"].directions_deg == [90.0]
-    assert recs["node/102"].directions_deg == [137.0]  # camera:direction wins
+    assert recs["node/102"].directions_deg == [321.0]  # direction wins
+    assert recs["node/102"].direction_key == "direction"
+    assert recs["node/101"].direction_key == "direction"
+    assert recs["node/103"].direction_key is None
+    assert recs["node/101"].manufacturer == "Flock Safety"
+    assert recs["node/103"].manufacturer is None
     assert recs["node/103"].directions_deg is None and not recs["node/103"].has_direction
     assert recs["node/104"].directions_deg == [176.0, 270.0]
     assert recs["way/105"].lat == 40.54  # way uses its center

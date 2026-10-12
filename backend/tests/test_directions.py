@@ -31,14 +31,19 @@ def test_parse_direction_rejects(value):
     assert parse_direction(value) is None
 
 
-def test_camera_direction_takes_priority_over_direction():
-    bearings, raw = direction_from_tags({"camera:direction": "137", "direction": "321"})
-    assert bearings == [137.0]
-    assert raw == "137"
+def test_direction_takes_priority_over_camera_direction():
+    bearings, raw, key = direction_from_tags({"camera:direction": "137", "direction": "321"})
+    assert bearings == [321.0]
+    assert raw == "321"
+    assert key == "direction"
+
+
+def test_camera_direction_used_when_direction_absent():
+    assert direction_from_tags({"camera:direction": "137"}) == ([137.0], "137", "camera:direction")
 
 
 def test_no_direction_tags():
-    assert direction_from_tags({"man_made": "surveillance"}) == (None, None)
+    assert direction_from_tags({"man_made": "surveillance"}) == (None, None, None)
 
 
 def test_conflict_detected_for_opposite_tags():

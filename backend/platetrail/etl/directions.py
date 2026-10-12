@@ -9,8 +9,10 @@ doesn't have, so they are treated as unparseable rather than guessed.
 
 import re
 
-# Tags checked in priority order.
-DIRECTION_TAGS = ("camera:direction", "direction", "surveillance:direction")
+# Tags checked in priority order. `direction` comes first because it is the
+# convention in this data (55 of 56 cameras carry only `direction`; DeFlock
+# writes it). Both keys are documented as the way the camera faces.
+DIRECTION_TAGS = ("direction", "camera:direction", "surveillance:direction")
 
 _COMPASS = {
     name: i * 22.5
@@ -60,12 +62,12 @@ def parse_direction(value: str | None) -> list[float] | None:
     return out
 
 
-def direction_from_tags(tags: dict[str, str]) -> tuple[list[float] | None, str | None]:
-    """(bearings, raw value) from the first direction tag present."""
+def direction_from_tags(tags: dict[str, str]) -> tuple[list[float] | None, str | None, str | None]:
+    """(bearings, raw value, tag key) from the first direction tag present."""
     for key in DIRECTION_TAGS:
         if key in tags:
-            return parse_direction(tags[key]), tags[key]
-    return None, None
+            return parse_direction(tags[key]), tags[key], key
+    return None, None, None
 
 
 def conflicting_direction_tags(tags: dict[str, str], tol_deg: float = 30.0) -> dict[str, str] | None:
