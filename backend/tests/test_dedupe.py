@@ -1,4 +1,5 @@
-from platetrail.etl.dedupe import angle_diff, dedupe, directions_compatible
+from platetrail.etl.dedupe import dedupe, directions_compatible
+from platetrail.geo import angle_diff
 from platetrail.etl.loaders.base import CameraRecord
 
 # ~1 m of latitude in degrees.

@@ -19,6 +19,7 @@ import math
 from dataclasses import dataclass, field
 
 from platetrail.etl.loaders.base import CameraRecord
+from platetrail.geo import angle_diff
 
 EARTH_RADIUS_M = 6_371_008.8
 
@@ -29,11 +30,6 @@ def distance_m(a: CameraRecord, b: CameraRecord) -> float:
     dx = math.radians(b.lon - a.lon) * math.cos(lat0)
     dy = math.radians(b.lat - a.lat)
     return EARTH_RADIUS_M * math.hypot(dx, dy)
-
-
-def angle_diff(a: float, b: float) -> float:
-    d = abs(a - b) % 360.0
-    return min(d, 360.0 - d)
 
 
 def directions_compatible(a: list[float] | None, b: list[float] | None, tol: float) -> bool:

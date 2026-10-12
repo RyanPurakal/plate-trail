@@ -44,3 +44,26 @@ cached in `data/raw/overpass/`, so reruns don't hit Overpass. Direction comes
 from `camera:direction`, falling back to `direction`. When both are present and
 disagree, the summary lists the camera. New sources plug in as additional
 `CameraLoader`s and go through the same deduplication step.
+
+Export the stored cameras for a quick look in [geojson.io](https://geojson.io)
+or QGIS. Each camera is a point, plus a 30 m ray for each direction it faces:
+
+```bash
+.venv/bin/python -m platetrail.etl.export_geojson   # -> data/exports/cameras.geojson
+```
+
+## Road network and snapping
+
+```bash
+.venv/bin/python -m platetrail.roads.run_roads      # add --refresh to re-download
+```
+
+Downloads the OSMnx `drive` graph for Edison + New Brunswick, buffered by
+2 km, and caches it as GraphML under `data/graphs/`. The first download takes
+several minutes. Edges are stored in `road_edges`. Each camera is snapped to
+its nearest edge within 50 m. On a two-way road it gets one `camera_edges` row
+per direction, with that direction's true-north bearing taken at the snap
+point. The summary lists dropped cameras, snap distances, close camera pairs,
+and cameras whose direction is closer to perpendicular than parallel to their
+road. Rerun this after the camera ETL, because reloading cameras clears the
+snaps.
