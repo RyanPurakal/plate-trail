@@ -13,7 +13,7 @@ out/
 next-env.d.ts
 
 # Data caches (Overpass responses, OSMnx graphs) - regenerable, never committed
-data/
+/data/
 cache/
 
 # Env / OS

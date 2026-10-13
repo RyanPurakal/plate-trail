@@ -1,0 +1,32 @@
+[
+  {
+    "town": "Edison",
+    "agency": "Edison NJ PD",
+    "figure": "cameras_operated",
+    "value": 24,
+    "source": "Flock Safety transparency portal (\"Total Cameras: Number of LPR and other cameras\")",
+    "url": "https://transparency.flocksafety.com/edison-nj-pd",
+    "as_of": "2026-10-12",
+    "notes": "Portal 'Last updated: Mon Oct 12 2026'. Counts only; no locations or map. Also reports 518,797 unique plate reads in the last 30 days."
+  },
+  {
+    "town": "Edison",
+    "agency": "Edison Township",
+    "figure": "cameras_approved_additional",
+    "value": 92,
+    "source": "Project proposal (Plate-Trail-Proposal.md): 'Edison, NJ recently approved 92 additional Flock cameras'",
+    "url": null,
+    "as_of": null,
+    "notes": "Locations not public. Modelled as a density scenario (platetrail.sim.scenarios)."
+  },
+  {
+    "town": "New Brunswick",
+    "agency": "New Brunswick PD",
+    "figure": "flock_cameras",
+    "value": 11,
+    "source": "TAPinto New Brunswick: 'Mayor Defends New Brunswick's Use of Flock Cameras'",
+    "url": "https://www.tapinto.net/towns/new-brunswick/sections/government/articles/mayor-defends-new-brunswick-s-use-of-flock-cameras-citing-crime-fighting-benefits",
+    "as_of": null,
+    "notes": "News report, retrieved 2026-10-13; article date not recorded. No Flock transparency portal found for New Brunswick. Other public records attribute New Brunswick ALPRs also to the Middlesex County Prosecutor, Middlesex County Sheriff and Rutgers University PD."
+  }
+]
