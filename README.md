@@ -253,7 +253,7 @@ export DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/pl
 cd ../frontend && npm install && npm run dev
 ```
 
-Tests marked `db` are skipped when `DATABASE_URL` is unset. CI runs everything against a PostGIS service container on every push.
+The backend includes a C++ routing module (pybind11, built by `pip install -e .`), so a C++17 compiler is required. Routing uses it by default; `PLATETRAIL_ROUTER=python` selects the networkx reference. It returns identical routes about 5× faster end to end ([details](docs/technical_reference.md#c-router-pybind11)). Tests marked `db` are skipped when `DATABASE_URL` is unset. CI runs everything against a PostGIS service container on every push.
 
 Reproducing the findings (from `backend/`):
 

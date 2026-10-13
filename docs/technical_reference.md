@@ -118,6 +118,87 @@ Trip endpoints attach to the **nearest point on an edge**, not the nearest
 intersection. The route starts and ends with partial edges, and a camera
 counts only if it is on the part actually driven.
 
+### C++ router (pybind11)
+
+Routing is the hot path. A cProfile run of a 1,000-driver, 1-week population
+job (2026-10-13) put 92.5% of the job in `Router._compute`, 81% of it inside
+networkx's Dijkstra. Camera matching, noise and storage were each under 1%.
+Without the profiler, a second identical run in the same process (every
+route already cached) took 40 s against 486 s cold, so routing is about 91%
+of a cold job. The unicity and policy analyses took 3.9 s in total and were
+not worth porting.
+
+**What was ported.** Only the search: `nx.single_source_dijkstra` inside
+`Router._compute`. `backend/src/fastroute.cpp` (module
+`platetrail._fastroute`) runs Dijkstra over a CSR copy of the graph that the
+`Router` builds once at startup. Snapping, the virtual origin and destination
+edges, path assembly and geometry stay in Python and are shared by both
+backends. The C++ search reproduces networkx 3.x's tie-breaking so it
+returns the **identical** path, not just an equally short one:
+- heap order by (distance, push counter);
+- neighbours in adjacency insertion order;
+- parallel edges collapsed to their minimum cost;
+- replace only on a strict improvement, and keep the last improver as
+  predecessor;
+- stop when the target is popped.
+
+Costs are IEEE doubles summed in the same order, and the module is built
+without `-ffast-math`.
+
+**Switching.** `PLATETRAIL_ROUTER=cpp|python`, or `Router(G, backend=...)`.
+The default is `cpp` when the extension is built and `python` otherwise
+(with a logged warning). The networkx path is the reference implementation.
+
+**Build.** `backend/pyproject.toml` uses scikit-build-core with pybind11
+(`backend/CMakeLists.txt`), so `pip install -e ".[dev]"` compiles the module.
+It needs a C++17 compiler; scikit-build-core fetches CMake and Ninja itself.
+The Docker image installs `g++`. CI builds it on every push.
+
+**Parity tests** (`tests/test_routing_parity.py`, run in CI; in CI they fail
+rather than skip if the extension didn't build):
+- every route on the toy graph between 23 points, compared field by field:
+  edges, fractions, timings, names, polyline, and exact duration;
+- 600 random routes on four 9×9 grids with integer travel times (so
+  equal-cost paths are everywhere), one-way streets, parallel edges and
+  service roads;
+- the bare C++ search against `nx.single_source_dijkstra` on 30 random
+  multigraphs (weights 0–3, self-loops, unreachable targets);
+- input validation.
+
+The full suite also passes with either backend forced.
+
+**Benchmark** (`backend/scripts/benchmark_router.py`, 2026-10-13, Apple
+Silicon, 11 cores; the job is single-threaded):
+- a 1,000-driver, 1-week NHTS population job (simulate every driver and
+  store, which is what the worker does for `POST /jobs/population`);
+- each run is a fresh process with no Redis, so the route cache starts
+  empty;
+- the backends alternate (python, cpp, python, …), 3 runs each, with no
+  other jobs running;
+- startup (graph and cameras, plus the CSR copy for cpp) is timed
+  separately because the worker pays it once.
+
+| Backend | Job time, median (3 runs) | Range | Startup, median |
+|---|---|---|---|
+| Python (networkx) | 466.9 s (7.8 min) | 456.8–491.7 s | 9.4 s |
+| C++ (pybind11) | **89.3 s (1.5 min)** | 86.1–90.3 s | 9.7 s |
+| **Speedup** | **5.23×** | | |
+
+All six runs produced the same digest over every trip's route edges and
+timings and every read (14,930 trips, 6,572 reads), so the speedup changes
+nothing in the results. The read count matches population #1 in the
+findings.
+
+The speedup is bounded by what wasn't ported. The warm-cache run above,
+which does no routing at all, took 40 s, measured in a separate session. So
+most of the C++ job time is the unported work: routine generation, route
+geometry (shapely), matching, noise and storage. This split is an inference
+from the two measurements, not a profile of the C++ run.
+
+```bash
+python scripts/benchmark_router.py --drivers 1000 --weeks 1 --repeats 3   # needs DATABASE_URL and the graph cache
+```
+
 ## Routine generator
 
 `platetrail.routines` plans each synthetic driver's trips behind a
