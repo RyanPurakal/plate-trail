@@ -181,3 +181,7 @@ def test_population_job_and_unicity_endpoint(client):
     assert [r["size"] for r in sized["rows"]] == [2, 5]
     assert client.get(f"/populations/{pid}/unicity", params={"p": "0"}).status_code == 422
     assert client.get("/populations/999999").status_code == 404
+    pol = client.get(f"/populations/{pid}/policies").json()
+    names = [r["policy"] for r in pol["rows"]]
+    assert names[0] == "baseline" and "aggregate_only" in names and "round_hour" in names
+    assert client.get("/populations/999999/policies").status_code == 404

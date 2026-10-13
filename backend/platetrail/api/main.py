@@ -23,6 +23,7 @@ from platetrail.api.queries import (
     get_run,
     list_populations,
     list_runs,
+    population_policies,
     population_unicity_rows,
 )
 from platetrail.api.schemas import PopulationRequestBody, SimulateRequest
@@ -127,6 +128,15 @@ def population_unicity(population_id: int, resolution_min: int = 60, p: str = "1
     if not 1 <= resolution_min <= 24 * 60 or not ps or min(ps) < 1 or max(ps) > 20 or not 1 <= samples <= 50:
         raise HTTPException(status_code=422, detail="resolution_min 1-1440, p 1-20, samples 1-50")
     result = population_unicity_rows(get_engine(), population_id, ps, resolution_min, sizes, samples)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"population {population_id} not found")
+    return result
+
+
+@app.get("/populations/{population_id}/policies")
+def population_policy_comparison(population_id: int) -> dict:
+    """Inference accuracy and unicity under each policy (retention, rounding, aggregation, search windows)."""
+    result = population_policies(get_engine(), population_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f"population {population_id} not found")
     return result

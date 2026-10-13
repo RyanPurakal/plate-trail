@@ -177,3 +177,34 @@ def inference(reads, coords: dict, anchors: dict, identity: str) -> dict:
                       for a in inf.anomalies],
         "conclusions": inf.conclusions,
     }
+
+
+def population_policies(engine: Engine, population_id: int) -> dict | None:
+    """Policy comparison (analysis.policies) on a stored population; cached."""
+    from datetime import datetime, time, timedelta
+
+    from platetrail.analysis.policies import compare
+    from platetrail.cache import MISSING, get_cache
+    from platetrail.population import load_population_reads
+
+    key = f"policies:v1:{population_id}"
+    cached = get_cache().get(key)
+    if cached is not MISSING:
+        return cached
+    pop = get_population(engine, population_id)
+    if pop is None:
+        return None
+    reads, truth, drivers = load_population_reads(engine, population_id)
+    with engine.connect() as conn:
+        coords = {r.source_id: (r.lon, r.lat) for r in conn.execute(text(
+            "SELECT source_id, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM cameras"))}
+    for c in (pop.get("scenario") or {}).get("cameras", []):
+        coords[c["label"]] = (c["lon"], c["lat"])
+    start = datetime.combine(datetime.fromisoformat(pop["start_date"]).date(), time())
+    end = start + timedelta(weeks=pop["weeks"])
+    anchors = {d["driver_idx"]: d["anchors"] for d in drivers}
+    result = {"population_id": population_id, "drivers": pop["drivers"], "weeks": pop["weeks"],
+              "extra_cameras": (pop.get("scenario") or {}).get("extra_cameras", 0),
+              "rows": compare(reads, truth, anchors, coords, start, end, seed=pop["seed"])}
+    get_cache().set(key, result, ttl_s=30 * 86400)
+    return result
