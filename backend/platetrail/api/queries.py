@@ -68,6 +68,7 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
     return {
         "run": run,
         "naive_guess": naive_guess(reads, coords, run["anchors"]),
+        "inference": inference(reads, coords, run["anchors"], f"{run['plate_state']} {run['plate']}"),
         "trips": {"type": "FeatureCollection", "features": trip_features},
         "passes": [{**dict(p), "time": _iso(p["time"])} for p in passes],
         "reads": [{**dict(r), "time": _iso(r["time"]), "true_time": _iso(r["true_time"])} for r in reads],
@@ -144,3 +145,35 @@ def population_unicity_rows(engine: Engine, population_id: int, ps, resolution_m
     }
     get_cache().set(key, result, ttl_s=30 * 86400)
     return result
+
+
+def inference(reads, coords: dict, anchors: dict, identity: str) -> dict:
+    """Inference engine on the reads recorded under the run's plate (an analyst queries by plate, so
+    misread reads are not part of this history), with errors against the true anchors."""
+    from platetrail.inference.engine import EngineRead, infer
+
+    mine = [EngineRead(r["time"] if isinstance(r["time"], datetime) else datetime.fromisoformat(r["time"]),
+                       r["camera_label"], *coords[r["camera_label"]])
+            for r in reads if f"{r['plate_state']} {r['plate']}" == identity and r["camera_label"] in coords]
+    inf = infer(mine)
+    truth = {"home": anchors.get("home"), "work": anchors.get("work") or anchors.get("school")}
+
+    def anchor(a):
+        if a is None:
+            return None
+        t = truth.get(a.kind)
+        return {"lon": a.lon, "lat": a.lat, "radius_m": round(a.radius_m), "confidence": a.confidence,
+                "support_days": a.support_days, "possible_days": a.possible_days, "nearest_camera": a.nearest_camera,
+                "error_m": round(a.error_m(t["lon"], t["lat"]), 1) if t else None}
+
+    return {
+        "method": "inference engine: stays from read gaps clustered with HDBSCAN; regular passes; rarity anomalies",
+        "reads_used": inf.reads,
+        "home": anchor(inf.home),
+        "work": anchor(inf.work),
+        "regular": [{"camera_label": p.camera_label, "minute_of_day": p.minute_of_day, "days": p.days,
+                     "weekdays": list(p.weekdays)} for p in inf.regular],
+        "anomalies": [{"time": a.time.isoformat(), "camera_label": a.camera_label, "score": a.score}
+                      for a in inf.anomalies],
+        "conclusions": inf.conclusions,
+    }

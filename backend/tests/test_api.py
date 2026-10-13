@@ -95,6 +95,10 @@ def test_simulate_then_fetch_run(client, engine):
     assert all(r["plate_state"] == "ZZ" and r["time"] == r["true_time"] for r in detail["reads"])
     assert len(detail["reads"]) == sum(p["captured"] for p in detail["passes"])
 
+    inf = detail["inference"]
+    assert "HDBSCAN" in inf["method"] and inf["reads_used"] == len(detail["reads"])
+    assert inf["home"] is not None and inf["home"]["confidence"] in ("high", "medium", "low")
+    assert isinstance(inf["conclusions"], list) and inf["conclusions"]
     guess = detail["naive_guess"]
     assert "naive baseline" in guess["method"] and "not the inference engine" in guess["method"]
     assert guess["days_used"] == 5 and guess["possible"]

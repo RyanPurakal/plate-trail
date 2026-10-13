@@ -44,13 +44,14 @@ class PopulationDriver:
     anchors: dict
     trips: int
     reads: list  # noise.Read
+    sim: object = None  # DriverSimulation, only with keep_sim=True (for evaluation)
 
 
 def _place_json(p) -> dict:
     return {"key": p.key, "category": p.category, "lon": p.lon, "lat": p.lat, "town": p.town, "name": p.name}
 
 
-def simulate_population(runner, request: PopulationRequest, progress=None):
+def simulate_population(runner, request: PopulationRequest, progress=None, keep_sim: bool = False):
     """Returns (drivers, cameras used, scenario json or None). `runner` is a LocalRunner."""
     from platetrail.sim.driver import simulate_routine
     from platetrail.sim.runner import SimulationRequest
@@ -86,7 +87,7 @@ def simulate_population(runner, request: PopulationRequest, progress=None):
         noisy = apply_noise(tp, start, end, noise_cfg, list(cameras.by_id))
         drivers.append(PopulationDriver(i, routine.template, plate,
                                         {k: _place_json(v) for k, v in routine.anchors.items()},
-                                        len(sim.trips), noisy.reads))
+                                        len(sim.trips), noisy.reads, sim if keep_sim else None))
     report("drivers", request.drivers, request.drivers)
     return drivers, cameras, scenario
 
