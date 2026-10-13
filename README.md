@@ -44,7 +44,7 @@ This is the first vertical slice (about a third of the proposal).
 | Stored runs: ground truth + noisy read log | ✅ Built |
 | API: `/cameras`, `/simulate`, `/runs`, `/runs/{id}` | ✅ Built |
 | Frontend: map, routes, reads, read-log table, "cameras saw vs. what happened", run picker, simulate form | ✅ Built |
-| Naive home/work guess from the read log | 🔲 Stretch |
+| Naive home/work guess from the read log (baseline, not the inference engine) | ✅ Built |
 | Celery queue + Redis cache | 🔲 Planned (`SimulationRunner` seam) |
 | Population simulation, unicity analysis | 🔲 Planned |
 | Inference engine (HDBSCAN anchors, schedule, anomalies) | 🔲 Planned |
@@ -351,6 +351,22 @@ MapLibre GL 6 loads its web worker from a path that Next.js bundling
 breaks, so `npm run build`/`dev` copies the worker into `public/` first
 (`scripts/copy-maplibre-worker.mjs`).
 
+## Naive home/work baseline
+
+`platetrail.inference.naive` guesses a driver's home and work from the read
+log alone. It is a **naive baseline for comparison, not the planned
+inference engine**:
+
+- home = the camera that most often records a day's first or last read;
+- work = the camera that most often records the read before the day's
+  longest gap;
+- no guess unless at least 2 days have 2 or more reads.
+
+`GET /runs/{id}` returns the guess with its distance error against the true
+anchors (`naive_guess`). The UI shows it as a card and as HOME? / WORK?
+markers, plus the true anchors and error lines in "what actually happened".
+Population results are finding F3 (`scripts/naive_guess_population.py`).
+
 ## API
 
 FastAPI on `:8000` (interactive docs at `/docs`):
@@ -360,8 +376,8 @@ FastAPI on `:8000` (interactive docs at `/docs`):
 | `GET /health` | status and PostGIS version |
 | `GET /cameras[?rays=true]` | cameras as GeoJSON: kind (`public_road` / `private_lot` / `service_road`), directions, ambiguity flags, lot info; optional 30 m direction rays |
 | `POST /simulate` | simulates and stores one driver. Body: `template`, `weeks` (1–8), `start` (a Monday), `seed`, `zero_noise`, `match` {`tolerance_deg`, `facing`, `undirected`, `ambiguous_direction`, `lot_entrance`}, `noise` {`p_miss`, `p_char_misread`, `downtime_rate_per_week`, `downtime_mean_hours`, `jitter_sd_s`}. Returns `run_id`, summary, plate. |
-| `GET /runs` | stored runs, newest first |
-| `GET /runs/{id}` | the run (config, anchors, summary), trips as GeoJSON, every camera pass (matcher decision and noise outcome), the read log (`plate_state` + `plate`, recorded and true time), outages |
+| `GET /runs` | stored runs, newest first; `stale` = cameras were reloaded since the run |
+| `GET /runs/{id}` | the run (config, anchors, summary, `stale`), the naive home/work guess with distance errors, trips as GeoJSON, every camera pass (matcher decision and noise outcome), the read log (`plate_state` + `plate`, recorded and true time), outages |
 
 Simulation runs synchronously through `LocalRunner`. The road graph and
 cameras load once on first use (about 5 s), and later requests take well
@@ -389,7 +405,9 @@ endpoint.
 Results recorded as the project is built are in
 [docs/findings.md](docs/findings.md): F1 (one commuter's week is 12
 captures, 10 from one camera) and F2 (across 300 template drivers, median 6
-reads per week and 10% of drivers never read).
+reads per week and 10% of drivers never read) and F3 (a naive home/work
+guess is impossible for half of drivers in a week, and is mostly the top
+camera when it exists).
 
 ```bash
 .venv/bin/python scripts/demo_week.py [--seed 0] [--runs 1000]

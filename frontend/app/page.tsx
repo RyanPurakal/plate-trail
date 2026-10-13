@@ -10,12 +10,49 @@ import {
   getRuns,
   simulate,
   type CameraCollection,
+  type NaiveGuess,
   type RunDetail,
   type RunListItem,
 } from "@/lib/api";
 import { dayKey, km, parts, templateName } from "@/lib/format";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+function NaiveCard({ guess, mode }: { guess: NaiveGuess; mode: Mode }) {
+  const row = (label: string, g: NaiveGuess["home"]) =>
+    g ? (
+      <div className="nb-row">
+        <span className="nb-k">{label}?</span>
+        <span>
+          camera {g.camera_label.replace("node/", "")} <span className="dim">· {g.support_days} day{g.support_days === 1 ? "" : "s"}</span>
+          {g.is_top_camera && <span className="dim"> · = top camera</span>}
+        </span>
+        <span className={`nb-err ${mode}`}>
+          {g.error_m == null ? "no truth" : `off by ${(g.error_m / 1000).toFixed(g.error_m < 10000 ? 2 : 1)} km`}
+        </span>
+      </div>
+    ) : null;
+  return (
+    <section className="naive">
+      <div className="nb-head">
+        <span>Naive home / work guess</span>
+        <span className="nb-badge" title={guess.method}>baseline · not the inference engine</span>
+      </div>
+      {guess.possible ? (
+        <>
+          {row("Home", guess.home)}
+          {row("Work", guess.work)}
+          <div className="nb-note">
+            From {guess.days_used} days of reads: home = camera of the day&apos;s first/last read, work = camera before
+            the day&apos;s longest gap. Errors are against ground truth.
+          </div>
+        </>
+      ) : (
+        <div className="nb-note">No guess possible: fewer than 2 days with 2+ reads ({guess.days_used} usable).</div>
+      )}
+    </section>
+  );
+}
 
 export default function Home() {
   const [cameras, setCameras] = useState<CameraCollection | null>(null);
@@ -181,6 +218,8 @@ export default function Home() {
           )}
         </section>
 
+        {detail && <NaiveCard guess={detail.naive_guess} mode={mode} />}
+
         <section className="controls">
           <div className="days">
             <button className={!day ? "on" : ""} onClick={() => setDay(null)}>all</button>
@@ -218,6 +257,7 @@ export default function Home() {
           layers={layers}
           focusLabel={focus}
           fitKey={detail ? `${detail.run.id}:${day ?? "all"}` : ""}
+          guess={detail?.naive_guess ?? null}
         />
         <div className="legend">
           {mode === "saw" ? (
@@ -237,6 +277,8 @@ export default function Home() {
           <span><i className="lg-arrow lg-lot" />lot</span>
           <span><i className="lg-arrow lg-svc" />service street</span>
           <span><i className="lg-undir" />no direction</span>
+          <span><i className="lg-guess" />naive guess</span>
+          {mode === "happened" && <span><i className="lg-truthpin" />true home / work</span>}
         </div>
         <div className="mode-stamp">{mode === "saw" ? "RECORDED" : "GROUND TRUTH"}</div>
       </main>

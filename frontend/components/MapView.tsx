@@ -4,7 +4,7 @@ import type { Feature, FeatureCollection, Point } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MLMap, MapLayerMouseEvent } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import type { CameraCollection, CameraProps, Pass, Read, TripFeature } from "@/lib/api";
+import type { CameraCollection, CameraProps, NaiveGuess, Pass, Read, TripFeature } from "@/lib/api";
 import { shortTime } from "@/lib/format";
 
 export type Mode = "saw" | "happened";
@@ -19,6 +19,7 @@ type Props = {
   layers: Layers;
   focusLabel: string | null; // camera to highlight (from the table)
   fitKey: string; // changes when a new run/day is loaded -> refit the view
+  guess: NaiveGuess | null; // naive home/work baseline for the whole run
 };
 
 const COLORS = {
@@ -132,7 +133,15 @@ function popupHtml(p: CameraProps & { bearing?: number }, passes: Pass[], reads:
   return lines.join("");
 }
 
-export default function MapView({ cameras, trips, passes, reads, mode, layers, focusLabel, fitKey }: Props) {
+function markerEl(text: string, cls: string, title: string) {
+  const el = document.createElement("div");
+  el.className = `pt-marker ${cls}`;
+  el.textContent = text;
+  el.title = title;
+  return el;
+}
+
+export default function MapView({ cameras, trips, passes, reads, mode, layers, focusLabel, fitKey, guess }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -157,7 +166,7 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
       for (const kind of ["public_road", "private_lot", "service_road"] as const) {
         m.addImage(`arrow-${kind}`, arrowImage(COLORS[kind]), { pixelRatio: 2 });
       }
-      for (const id of ["routes", "trail", "reads", "passes", "cam-dir", "cam-undir", "focus"]) {
+      for (const id of ["routes", "trail", "reads", "passes", "cam-dir", "cam-undir", "focus", "guess-err"]) {
         m.addSource(id, { type: "geojson", data: EMPTY });
       }
       m.addLayer({
@@ -209,6 +218,10 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
           "circle-radius": ["interpolate", ["linear"], ["get", "n"], 1, 5, 20, 12],
           "circle-color": COLORS.read, "circle-stroke-color": "#1a1206", "circle-stroke-width": 1.5,
         },
+      });
+      m.addLayer({
+        id: "guess-err", type: "line", source: "guess-err",
+        paint: { "line-color": "#ffffff", "line-width": 1.2, "line-dasharray": [1, 2], "line-opacity": 0.7 },
       });
       m.addLayer({
         id: "focus", type: "circle", source: "focus",
@@ -264,6 +277,35 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
       map.current!.setLayoutProperty(id, "visibility", layers.cameras ? "visible" : "none");
     }
   }, [ready, cameras, trips, passes, reads, mode, layers]);
+
+  // Naive home/work guess markers; in HAPPENED mode also the true anchors and the error lines.
+  const markers = useRef<maplibregl.Marker[]>([]);
+  useEffect(() => {
+    if (!ready) return;
+    markers.current.forEach((mk) => mk.remove());
+    markers.current = [];
+    const lines: Feature[] = [];
+    const same = guess?.home && guess?.work && guess.home.camera_label === guess.work.camera_label;
+    for (const [kind, g] of [["home", guess?.home], ["work", guess?.work]] as const) {
+      if (!g) continue;
+      const word = kind === "home" ? "HOME" : "WORK";
+      // When both guesses are the same camera, one combined marker (drawn once, with the home pass).
+      if (!(same && kind === "work")) {
+        markers.current.push(new maplibregl.Marker({
+          element: markerEl(same ? "HOME? · WORK?" : `${word}?`, `guess guess-${kind}`,
+            `Naive guess (${same ? "home and work" : kind}): camera ${g.camera_label}`),
+          anchor: "bottom", offset: [0, -10],
+        }).setLngLat([g.lon, g.lat]).addTo(map.current!));
+      }
+      if (mode === "happened" && g.truth) {
+        markers.current.push(new maplibregl.Marker({ element: markerEl(word, `truth truth-${kind}`,
+          `True ${kind}${g.truth.name ? `: ${g.truth.name}` : ""}`), anchor: "top", offset: [0, 8] })
+          .setLngLat([g.truth.lon, g.truth.lat]).addTo(map.current!));
+        lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[g.lon, g.lat], [g.truth.lon, g.truth.lat]] } });
+      }
+    }
+    set("guess-err", { ...EMPTY, features: lines });
+  }, [ready, guess, mode]);
 
   // Highlight a camera picked in the table.
   useEffect(() => {

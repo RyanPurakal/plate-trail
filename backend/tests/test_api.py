@@ -52,7 +52,27 @@ def test_cameras_geojson(client, engine):
     assert sum(f["properties"]["kind"] == "direction_ray" for f in with_rays["features"]) == 1
 
 
-def test_simulate_then_fetch_run(client):
+def _load_toy_cameras(engine):
+    """Camera rows whose source ids match the toy runner's camera labels, so reads can be located."""
+    from platetrail.etl.loaders.base import CameraRecord
+    from platetrail.etl.run_etl import run as run_etl
+    from test_trip import xy
+
+    class Stub:
+        source = "osm"
+
+        def load(self, refresh=False):
+            out = []
+            for label, (e, n) in {"east-facing": (500, 3), "west-facing": (500, -3), "lot5": (600, 5)}.items():
+                lon, lat = xy(e, n)
+                out.append(CameraRecord("osm", label, lat, lon, "Edison", [90.0], "90", "direction"))
+            return out
+
+    run_etl(loaders=[Stub()], engine=engine)
+
+
+def test_simulate_then_fetch_run(client, engine):
+    _load_toy_cameras(engine)
     resp = client.post("/simulate", json={"weeks": 1, "seed": 7, "zero_noise": True})
     assert resp.status_code == 201, resp.text
     body = resp.json()
@@ -70,6 +90,14 @@ def test_simulate_then_fetch_run(client):
     assert all(r["pass_id"] in pass_ids for r in detail["reads"])
     assert all(r["plate_state"] == "ZZ" and r["time"] == r["true_time"] for r in detail["reads"])
     assert len(detail["reads"]) == sum(p["captured"] for p in detail["passes"])
+
+    guess = detail["naive_guess"]
+    assert "naive baseline" in guess["method"] and "not the inference engine" in guess["method"]
+    assert guess["days_used"] == 5 and guess["possible"]
+    for kind in ("home", "work"):
+        assert {"camera_label", "lon", "lat", "error_m", "support_days", "is_top_camera", "truth"} <= set(guess[kind])
+    assert guess["home"]["error_m"] >= 0
+    assert guess["work"]["error_m"] is None and guess["work"]["truth"] is None  # fixed routine has no work anchor
 
     listed = client.get("/runs").json()
     assert listed[0]["id"] == run_id and listed[0]["plate_state"] == "ZZ"

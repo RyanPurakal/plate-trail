@@ -169,3 +169,74 @@ driver's anchors more than on how much they drive.
 **Caveats.** Template parameters and noise defaults are assumptions, and
 coverage depends heavily on the 56 OSM-mapped cameras. Results should be
 redone with NHTS routines and with the density scenarios.
+
+## F3. A naive home/work guess: half of drivers can't be guessed in a week, and the guess is mostly the top camera
+
+> **Naive baseline, not the planned inference engine.** This measures the
+> simplest thing an analyst could do with a read log. The inference engine
+> (HDBSCAN anchors, schedule reconstruction, anomaly detection) is planned
+> and will be compared against this.
+
+**Method** (`backend/platetrail/inference/naive.py`). Using only the noisy read
+log (camera + recorded time), days with at least 2 reads are used:
+
+- **Home** = the camera that most often records a day's first or last read.
+- **Work** = the camera that most often records the read just before the
+  day's longest gap (the arrival before the day's main stay).
+- No guess unless at least 2 days qualify. The guessed location is the
+  camera's location; the error is the distance to the driver's true home and
+  work (or school, for students).
+
+**Setup.** The F2 population: `backend/scripts/naive_guess_population.py
+--drivers 300 --seed 0` (2026-10-12, same drivers, matcher and default noise
+as F2).
+
+**1 week** (as F2):
+
+| Template | Drivers | No guess | Home error median / p75 | Work error median / p75 | Home guess = top camera | Work guess = top camera | Home = work camera |
+|---|---|---|---|---|---|---|---|
+| Commuter | 183 | 49% | 3.7 / 8.4 km | 2.1 / 6.0 km | 80% | 71% | 72% |
+| Student | 67 | 39% | 1.6 / 3.2 km | 0.9 / 1.4 km | 83% | 80% | 73% |
+| Shift worker | 50 | 66% | 4.4 / 10.8 km | 1.8 / 11.0 km | 82% | 76% | 65% |
+| **All** | **300** | **50%** | **2.9 / 7.8 km** | **1.5 / 5.4 km** | **81%** | **74%** | **72%** |
+
+Errors are over drivers with a guess. Within 1 km: home 26%, work 40%.
+
+**4 weeks** (same drivers, longer history):
+
+| Template | Drivers | No guess | Home error median / p75 | Work error median / p75 | Home guess = top camera | Work guess = top camera | Home = work camera |
+|---|---|---|---|---|---|---|---|
+| Commuter | 183 | 17% | 4.5 / 8.5 km | 3.3 / 5.9 km | 80% | 69% | 74% |
+| Student | 67 | 7% | 1.2 / 2.5 km | 1.1 / 1.5 km | 81% | 77% | 76% |
+| Shift worker | 50 | 28% | 4.5 / 10.0 km | 1.6 / 8.2 km | 81% | 72% | 75% |
+| **All** | **300** | **17%** | **3.3 / 8.1 km** | **1.8 / 5.3 km** | **80%** | **72%** | **74%** |
+
+Within 1 km: home 24%, work 33%. **More history makes a guess possible far
+more often (no guess 50% → 17%) but doesn't make it more accurate.** The
+error stays at about 3 km because the limit is where the cameras are, not
+how many reads there are.
+
+**What it says.**
+
+- **A week of reads is often not enough to guess anything.** Half of drivers
+  never have two days with two or more reads. Shift workers fare worst (66%),
+  partly because their night-shift days split at midnight, which this
+  baseline can't handle.
+- **When a guess exists, it is mostly the driver's single most-read camera**
+  (81% for home), and home and work are the same camera for 72% of guessed
+  drivers. With sparse coverage (F1, F2) the read log rarely separates the
+  two ends of a commute. The baseline is really answering "which camera does
+  this car pass most?"
+- **Work looks better than home** because workplaces and campuses cluster
+  in New Brunswick near the cameras that do exist (Albany St, College Ave),
+  while homes are spread across residential Edison. Demo run #8 shows this:
+  both guesses are the Albany St camera, 0.18 km from work but 13.6 km from
+  home.
+- This sets the bar the inference engine has to beat. It also shows that
+  "a camera sees you often" is not the same as "a camera reveals where you
+  live". With the current camera density, an analyst gets a corridor, not an
+  address, unless a camera happens to sit near the home.
+
+**Caveats.** Template routines, noise defaults and camera positions shape
+these numbers. The baseline ignores time of day beyond first/last and gap
+ordering, and it can't place an anchor away from a camera.

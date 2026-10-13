@@ -1,8 +1,11 @@
 """Read stored runs back as JSON-ready dicts (GeoJSON for geometry)."""
 
 import json
+from datetime import datetime
 
 from sqlalchemy import Engine, text
+
+from platetrail.inference.naive import LogRead, naive_home_work
 
 
 # A run is stale when cameras were reloaded after it was simulated (camera ids changed).
@@ -42,6 +45,8 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
             "SELECT r.id, r.read_seq, r.pass_id, r.camera_id, r.camera_label, r.time, r.plate_state, r.plate,"
             " r.misread, r.jitter_s, p.time AS true_time FROM reads r JOIN camera_passes p ON p.id = r.pass_id"
             " WHERE r.run_id = :r ORDER BY r.read_seq"), {"r": run_id}).mappings().all()
+        coords = {r.source_id: (r.lon, r.lat) for r in conn.execute(text(
+            "SELECT source_id, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM cameras"))}
         outages = conn.execute(text(
             "SELECT camera_id, camera_label, start_time, end_time FROM camera_outages WHERE run_id = :r"
             " ORDER BY start_time"), {"r": run_id}).mappings().all()
@@ -59,9 +64,38 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
     ]
     return {
         "run": run,
+        "naive_guess": naive_guess(reads, coords, run["anchors"]),
         "trips": {"type": "FeatureCollection", "features": trip_features},
         "passes": [{**dict(p), "time": _iso(p["time"])} for p in passes],
         "reads": [{**dict(r), "time": _iso(r["time"]), "true_time": _iso(r["true_time"])} for r in reads],
         "outages": [{**dict(o), "start_time": _iso(o["start_time"]), "end_time": _iso(o["end_time"])}
                     for o in outages],
+    }
+
+
+def naive_guess(reads, coords: dict, anchors: dict) -> dict:
+    """Naive home/work baseline (platetrail.inference.naive) with distance error vs. the true anchors."""
+    res = naive_home_work([LogRead(r["time"] if isinstance(r["time"], datetime) else datetime.fromisoformat(r["time"]),
+                                   r["camera_label"]) for r in reads], coords)
+    truth = {"home": anchors.get("home"), "work": anchors.get("work") or anchors.get("school")}
+
+    def one(kind, g):
+        if g is None:
+            return None
+        t = truth[kind]
+        return {
+            "camera_label": g.camera_label, "lon": g.lon, "lat": g.lat, "support_days": g.support_days,
+            "error_m": round(g.error_m(t["lon"], t["lat"]), 1) if t else None,
+            "is_top_camera": g.camera_label == res.top_camera,
+            "truth": {"lon": t["lon"], "lat": t["lat"], "name": t.get("name"), "category": t.get("category")} if t else None,
+        }
+
+    return {
+        "method": "naive baseline: most frequent first/last-read-of-day camera (home) and camera before the "
+                  "day's longest gap (work); not the inference engine",
+        "possible": res.possible,
+        "days_used": res.days_used,
+        "top_camera": res.top_camera,
+        "home": one("home", res.home),
+        "work": one("work", res.work),
     }

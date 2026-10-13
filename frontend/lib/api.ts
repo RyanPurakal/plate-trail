@@ -101,12 +101,32 @@ export type Read = {
   jitter_s: number;
 };
 
+export type GuessPoint = {
+  camera_label: string;
+  lon: number;
+  lat: number;
+  support_days: number;
+  error_m: number | null;
+  is_top_camera: boolean;
+  truth: { lon: number; lat: number; name: string | null; category: string | null } | null;
+};
+
+export type NaiveGuess = {
+  method: string;
+  possible: boolean;
+  days_used: number;
+  top_camera: string | null;
+  home: GuessPoint | null;
+  work: GuessPoint | null;
+};
+
 export type RunDetail = {
   run: RunListItem & {
     match_config: Record<string, string | number>;
     noise_config: Record<string, unknown>;
     anchors: Record<string, Place>;
   };
+  naive_guess: NaiveGuess;
   trips: { type: "FeatureCollection"; features: TripFeature[] };
   passes: Pass[];
   reads: Read[];
