@@ -205,7 +205,9 @@ class Router:
             out.append((rev, 0.0, 1.0 - p.fraction, rev[0]))
         return out
 
-    def route_points(self, o: EdgePoint, d: EdgePoint, depart: datetime) -> Route:
+    def route_points(self, o: EdgePoint, d: EdgePoint, depart: datetime, use_cache: bool = True) -> Route:
+        if not use_cache:  # e.g. "your week": user-entered places must not be persisted anywhere
+            return self._compute(o, d, depart)
         key = f"route:{self.fingerprint}:{o.edge}:{o.fraction:.6f}:{d.edge}:{d.fraction:.6f}"
         cache = get_cache()
         hit = cache.get(key)
@@ -269,6 +271,7 @@ class Router:
             coords = [(g.x, g.y)]
         return Route(o, d, depart, edges, coords)
 
-    def route(self, origin: tuple[float, float], dest: tuple[float, float], depart: datetime) -> Route:
+    def route(self, origin: tuple[float, float], dest: tuple[float, float], depart: datetime,
+              use_cache: bool = True) -> Route:
         """origin/dest are (lon, lat)."""
-        return self.route_points(self.snap_point(*origin), self.snap_point(*dest), depart)
+        return self.route_points(self.snap_point(*origin), self.snap_point(*dest), depart, use_cache)

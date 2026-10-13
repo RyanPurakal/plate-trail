@@ -26,7 +26,7 @@ from platetrail.api.queries import (
     population_policies,
     population_unicity_rows,
 )
-from platetrail.api.schemas import PopulationRequestBody, SimulateRequest
+from platetrail.api.schemas import PopulationRequestBody, SimulateRequest, YourWeekBody
 from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
 from platetrail.etl.export_geojson import cameras_feature_collection
@@ -140,6 +140,17 @@ def population_policy_comparison(population_id: int) -> dict:
     if result is None:
         raise HTTPException(status_code=404, detail=f"population {population_id} not found")
     return result
+
+
+@app.post("/yourweek")
+def your_week(body: YourWeekBody, runner: SimulationRunner = Depends(get_runner)) -> dict:
+    """Simulate the week a visitor describes. Session-only: nothing is stored, cached or logged."""
+    from platetrail.yourweek import simulate_week
+
+    try:
+        return simulate_week(runner, body.to_input(), body.weeks)
+    except (AnchorTooFar, NoRoute) as e:
+        raise HTTPException(status_code=422, detail="that location is too far from the road network") from e
 
 
 @app.get("/runs")

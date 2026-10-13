@@ -185,3 +185,39 @@ def test_population_job_and_unicity_endpoint(client):
     names = [r["policy"] for r in pol["rows"]]
     assert names[0] == "baseline" and "aggregate_only" in names and "round_hour" in names
     assert client.get("/populations/999999/policies").status_code == 404
+
+
+def test_your_week_is_simulated_and_not_stored(client, engine):
+    from sqlalchemy import text
+
+    from platetrail.cache import MemoryCache, reset_cache
+    from test_trip import xy
+
+    cache = MemoryCache()
+    reset_cache(cache)
+    with engine.connect() as conn:
+        runs_before = conn.execute(text("SELECT count(*) FROM runs")).scalar_one()
+    home, work = xy(100, 5), xy(1900, 5)
+    resp = client.post("/yourweek", json={"home": {"lon": home[0], "lat": home[1]},
+                                           "work": {"lon": work[0], "lat": work[1]},
+                                           "errands_per_week": 0, "weekend_outings": 0})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["stored"] is False and body["run"]["generator"] == "your_week"
+    assert len(body["trips"]["features"]) == 10  # 5 workdays x 2
+    assert body["run"]["anchors"]["home"]["key"] == "you/home"
+    assert "inference" in body and "naive_guess" in body
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM runs")).scalar_one() == runs_before
+    assert not any(k.startswith("route:") for k in cache._d)  # route cache bypassed
+    reset_cache(None)
+
+
+@pytest.mark.parametrize("payload", [
+    {"home": {"lon": 0, "lat": 0}},
+    {"home": {"lon": -74.4, "lat": 40.5}, "leave_home": "25:00"},
+    {"home": {"lon": -74.4, "lat": 40.5}, "workdays": [7]},
+    {"home": {"lon": -74.4, "lat": 40.5}, "weeks": 9},
+])
+def test_your_week_validation(client, payload):
+    assert client.post("/yourweek", json=payload).status_code == 422

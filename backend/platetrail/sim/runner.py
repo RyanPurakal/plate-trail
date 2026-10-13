@@ -113,11 +113,12 @@ class LocalRunner(SimulationRunner):
         return cls(Router(load_or_build_graph()), load_camera_set(engine), PlacePool.from_db(engine), engine,
                    towns=towns)
 
-    def simulate(self, request: SimulationRequest, progress=None) -> SimulationOutput:
+    def simulate(self, request: SimulationRequest, progress=None, generator: RoutineGenerator | None = None,
+                 use_cache: bool = True) -> SimulationOutput:
         report = progress or (lambda stage, done, total: None)
         if request.weeks < 1:
             raise ValueError("weeks must be >= 1")
-        gen = self.generator or self.make_generator(request)
+        gen = generator or self.generator or self.make_generator(request)
         routine = gen.generate(0, request.start, request.weeks, np.random.default_rng([request.seed, 1]))
         plate = synthetic_plate(np.random.default_rng([request.seed, 2]))
         cameras, scenario = self.cameras, None
@@ -133,7 +134,7 @@ class LocalRunner(SimulationRunner):
                         "cameras": [r.as_json() for r in recs]}
         report("routing", 0, len(routine.trips))
         sim = simulate_routine(self.router, cameras, routine, request.match,
-                               on_trip=lambda done, total: report("routing", done, total))
+                               on_trip=lambda done, total: report("routing", done, total), use_cache=use_cache)
         report("noise", 0, 1)
 
         ordered = sorted(

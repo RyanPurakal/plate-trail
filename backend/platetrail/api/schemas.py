@@ -85,3 +85,35 @@ class PopulationRequestBody(BaseModel):
         return PopulationRequest(self.drivers, self.weeks, self.start, self.seed, self.generator,
                                  MatchConfig(**self.match.model_dump()), NoiseConfig(**self.noise.model_dump()),
                                  self.extra_cameras)
+
+
+class LonLat(BaseModel):
+    lon: float = Field(ge=-75.0, le=-73.5)
+    lat: float = Field(ge=40.0, le=41.0)
+
+
+class YourWeekBody(BaseModel):
+    """Session-only inputs; never stored."""
+    home: LonLat
+    work: LonLat | None = None
+    workdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    leave_home: str = Field("07:45", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    leave_work: str = Field("17:15", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    errands_per_week: int = Field(3, ge=0, le=5)
+    weekend_outings: int = Field(2, ge=0, le=6)
+    weeks: int = Field(1, ge=1, le=4)
+
+    @field_validator("workdays")
+    @classmethod
+    def _days(cls, v):
+        if any(d not in range(7) for d in v):
+            raise ValueError("workdays are 0 (Monday) to 6 (Sunday)")
+        return sorted(set(v))
+
+    def to_input(self):
+        from platetrail.yourweek import WeekInput
+
+        mins = lambda s: int(s[:2]) * 60 + int(s[3:])  # noqa: E731
+        return WeekInput((self.home.lon, self.home.lat), (self.work.lon, self.work.lat) if self.work else None,
+                         tuple(self.workdays), mins(self.leave_home), mins(self.leave_work), self.errands_per_week,
+                         self.weekend_outings)

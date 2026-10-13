@@ -43,7 +43,7 @@ class DriverSimulation:
 
 
 def simulate_routine(router: Router, cameras: CameraSet, routine: Routine, cfg: MatchConfig | None = None,
-                     on_trip=None) -> DriverSimulation:
+                     on_trip=None, use_cache: bool = True) -> DriverSimulation:
     """on_trip(done, total) is called before each trip, for progress reporting."""
     cfg = cfg or MatchConfig()
     sim = DriverSimulation(routine)
@@ -54,7 +54,7 @@ def simulate_routine(router: Router, cameras: CameraSet, routine: Routine, cfg: 
         depart = planned.depart if ready is None else max(planned.depart, ready)
         try:
             result = simulate_trip(router, cameras, (planned.origin.lon, planned.origin.lat),
-                                   (planned.dest.lon, planned.dest.lat), depart, cfg)
+                                   (planned.dest.lon, planned.dest.lat), depart, cfg, use_cache)
         except AnchorTooFar as e:
             sim.skipped.append((planned, str(e)))
             continue
