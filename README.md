@@ -170,12 +170,12 @@ The importer is built and verified on synthetic Timeline exports. Sixty drivers 
 
 Each cell is the share of eligible drivers who are unique, then the share of all drivers.
 
-| Sightings known (*p*) | 1 week, OSM | 4 weeks, OSM | 1 week, +92 cameras |
-|---|---|---|---|
-| 1 | 12% / 11% | 12% / 12% | 9% / 9% |
-| 2 | 78% / 66% | 84% / 84% | 81% / 81% |
-| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% |
-| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% |
+| Sightings known (*p*) | 1 week, OSM | 4 weeks, OSM | 1 week, +92 cameras | 4 weeks, +92 cameras |
+|---|---|---|---|---|
+| 1 | 12% / 11% | 12% / 12% | 9% / 9% | 9% / 9% |
+| 2 | 78% / 66% | 84% / 84% | 81% / 81% | 89% / 89% |
+| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% | 99.9% / 99.9% |
+| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% | 100% / 100% |
 
 Unicity falls as the crowd grows: at *p* = 2 it is 97% in a crowd of 100 and 78% in a crowd of 1,000. Real Edison volume is far larger, so these are upper bounds.
 
@@ -191,7 +191,7 @@ Unicity falls as the crowd grows: at *p* = 2 it is 97% in a crowd of 100 and 78%
 | Search window ±12 h | 1% | 7% | 24% | 6% |
 | Aggregate counts only | 0% | 0% | 0% | 0% |
 
-Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
+On the denser network (4 weeks, +92 cameras) 7-day retention still leaves 98% unique at *p* = 4 and 39% of homes within 1 km ([F7](docs/findings.md)). Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
 
 ### Robustness
 

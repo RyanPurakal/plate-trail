@@ -283,15 +283,16 @@ second is what the UI charts.
 | #1: 1 week, OSM cameras | 5 | 7.4% |
 | #2: 4 weeks, OSM cameras | 22 | 0% |
 | #3: 1 week, OSM + 92 scenario cameras | 34.5 | 0.1% |
+| #4: 4 weeks, OSM + 92 scenario cameras | 141 | 0% |
 
 **Crowd of 1,000, hourly points.** Each cell is unique among eligible / share of all drivers.
 
-| *p* | #1 (1 wk, OSM) | #2 (4 wk, OSM) | #3 (1 wk, +92) |
-|---|---|---|---|
-| 1 | 12% / 11% | 12% / 12% | 9% / 9% |
-| 2 | 78% / 66% | 84% / 84% | 81% / 81% |
-| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% |
-| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% |
+| *p* | #1 (1 wk, OSM) | #2 (4 wk, OSM) | #3 (1 wk, +92) | #4 (4 wk, +92) |
+|---|---|---|---|---|
+| 1 | 12% / 11% | 12% / 12% | 9% / 9% | 9% / 9% |
+| 2 | 78% / 66% | 84% / 84% | 81% / 81% | 89% / 89% |
+| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% | 99.9% / 99.9% |
+| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% | 100% / 100% |
 
 **Crowd size** (#1, *p* = 2, unique among eligible): 97% in a crowd of 100,
 78% in 1,000. **Time resolution** (#1, *p* = 2, share of all drivers): 66% at
@@ -395,6 +396,23 @@ hourly points.
 | Search window ±36 h | 14,842 | 72% | 26% | 50% | 76% | 86% |
 | Search window ±12 h | 5,118 | 12% | 4% | 21% | 55% | 50% |
 | Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+
+**Population #4 (4 weeks, OSM + 92 cameras)**, the densest and longest case:
+
+| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
+|---|---|---|---|---|---|---|
+| No limits (4 weeks) | 150,828 | 100% | 47% | 94% | 89% | 100% |
+| Keep 14 days | 75,259 | 100% | 44% | 86% | 85% | 100% |
+| Keep 7 days | 37,884 | 98% | 39% | 75% | 81% | 98% |
+| Keep 1 day | 4,612 | 0% | 0% | 0% | 32% | 39% |
+| Round to the hour (15-min unicity: 98% → 88%) | 150,828 | 100% | 47% | 96% | 88% | 100% |
+| Search window ±36 h | 15,907 | 75% | 28% | 49% | 85% | 86% |
+| Search window ±12 h | 5,438 | 11% | 4% | 22% | 62% | 49% |
+| Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+
+On the dense network, 7-day retention still leaves 98% of drivers unique at
+p = 4 and 75% with a work estimate. Retention limits only bite when they are
+very short.
 
 Population #1 (1 week, OSM) follows the same pattern: no limits 76% home
 estimated and 66% unique at p = 2; ±12 h window 3% and 22%; 1-day retention
