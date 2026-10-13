@@ -17,8 +17,13 @@ travel times.
 
 Departure time only stamps timestamps; there is no traffic model, so travel
 times are free-flow (OSMnx speed_kph from maxspeed tags or highway defaults).
+Because routes don't depend on departure time, they are cached by
+(origin point, destination point) in platetrail.cache: in-process, or shared
+via Redis across API and worker processes. The key includes a fingerprint
+of the graph's edges and routing costs.
 """
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -27,6 +32,7 @@ import osmnx as ox
 from shapely.geometry import LineString, Point
 from shapely.ops import substring
 
+from platetrail.cache import MISSING, get_cache
 from platetrail.roads.snap import EdgeIndex, is_service
 
 EdgeKey = tuple[int, int, int]
@@ -127,6 +133,11 @@ class Router:
             d["_svc"] = is_service(d.get("highway"))
             d["_cost"] = float(d["travel_time"]) * (SERVICE_ROUTING_PENALTY if d["_svc"] else 1.0)
         self.index = EdgeIndex(ox.project_graph(self.G))
+        h = hashlib.sha1()
+        for u, v, k, d in sorted(self.G.edges(keys=True, data=True), key=lambda e: (e[0], e[1], e[2])):
+            h.update(f"{u},{v},{k},{d['_cost']:.4f};".encode())
+        self.fingerprint = h.hexdigest()[:16]
+        self.cache_hits = 0
 
     # ---- snapping ------------------------------------------------------------------
 
@@ -195,6 +206,18 @@ class Router:
         return out
 
     def route_points(self, o: EdgePoint, d: EdgePoint, depart: datetime) -> Route:
+        key = f"route:{self.fingerprint}:{o.edge}:{o.fraction:.6f}:{d.edge}:{d.fraction:.6f}"
+        cache = get_cache()
+        hit = cache.get(key)
+        if hit is not MISSING:
+            self.cache_hits += 1
+            edges, coords = hit
+            return Route(o, d, depart, edges, coords)
+        route = self._compute(o, d, depart)
+        cache.set(key, (route.edges, route.coords), ttl_s=7 * 86400)
+        return route
+
+    def _compute(self, o: EdgePoint, d: EdgePoint, depart: datetime) -> Route:
         exits, entries = self._exits(o), self._entries(d)
         G = self.G
         try:

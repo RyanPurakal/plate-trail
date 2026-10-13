@@ -8,8 +8,9 @@ import {
   getCameras,
   getRun,
   getRuns,
-  simulate,
+  simulateJob,
   type CameraCollection,
+  type Job,
   type NaiveGuess,
   type RunDetail,
   type RunListItem,
@@ -17,6 +18,18 @@ import {
 import { dayKey, km, parts, templateName } from "@/lib/format";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+function jobLabel(job: Job | null): string {
+  if (!job) return "queued…";
+  if (job.state === "PROGRESS" && job.progress) {
+    const { stage, done, total } = job.progress;
+    return total > 1 ? `${stage} ${done}/${total}` : `${stage}…`;
+  }
+  const labels: Record<Job["state"], string> = {
+    PENDING: "queued…", STARTED: "loading…", PROGRESS: "running…", SUCCESS: "done", FAILURE: "failed",
+  };
+  return labels[job.state];
+}
 
 function NaiveCard({ guess, mode }: { guess: NaiveGuess; mode: Mode }) {
   const row = (label: string, g: NaiveGuess["home"]) =>
@@ -65,6 +78,7 @@ export default function Home() {
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<Job | null>(null);
   const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
 
   useEffect(() => {
@@ -133,14 +147,15 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
-      const { run_id } = await simulate({ generator: form.generator, template: form.template || undefined,
-                                          weeks: form.weeks, seed: form.seed, extra_cameras: form.extra });
+      const run_id = await simulateJob({ generator: form.generator, template: form.template || undefined,
+                                         weeks: form.weeks, seed: form.seed, extra_cameras: form.extra }, setJob);
       setRuns(await getRuns());
       setRunId(run_id);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(false);
+      setJob(null);
     }
   }
 
@@ -190,7 +205,7 @@ export default function Home() {
                      title="Density scenario: synthetic cameras added in Edison (e.g. 92 approved)"
                      onChange={(e) => setForm({ ...form, extra: Number(e.target.value) })} />
               <span className="unit">+cams</span>
-              <button disabled={busy}>{busy ? "running…" : "run"}</button>
+              <button disabled={busy}>{busy ? jobLabel(job) : "run"}</button>
             </form>
           </details>
         </section>

@@ -48,7 +48,7 @@ This is the first vertical slice (about a third of the proposal).
 | API: `/cameras`, `/simulate`, `/runs`, `/runs/{id}` | ✅ Built |
 | Frontend: map, routes, reads, read-log table, "cameras saw vs. what happened", run picker, simulate form | ✅ Built |
 | Naive home/work guess from the read log (baseline, not the inference engine) | ✅ Built |
-| Celery queue + Redis cache | 🔲 Planned (`SimulationRunner` seam) |
+| Celery queue (progress reporting) + Redis route and run cache | ✅ Built |
 | Population simulation, unicity analysis | 🔲 Planned |
 | Inference engine (HDBSCAN anchors, schedule, anomalies) | 🔲 Planned |
 | Policy comparison (retention, rounding, aggregation, search windows) | 🔲 Planned |
@@ -61,14 +61,14 @@ Requires Docker. PostGIS is published on host port **5434** (override with
 Raw source data and the road graph are cached under `data/` (gitignored).
 
 ```bash
-# 1. Start everything: db :5434, api :8000, web :3000
+# 1. Start everything: db :5434, redis, api :8000, worker, web :3000
 docker compose up -d --build
 
 # 2. Build the data (first run downloads from OpenStreetMap; reruns use data/ caches)
 docker compose exec api python -m platetrail.etl.run_etl         # ALPR cameras (Overpass)
 docker compose exec api python -m platetrail.roads.run_roads     # road graph (several minutes the first time), snapping
 docker compose exec api python -m platetrail.routines.places     # towns + candidate anchor places
-docker compose restart api                                       # the API caches cameras and the graph
+docker compose restart api worker                                # both cache cameras and the graph
 
 # 3. Simulate a driver and look at it
 curl -X POST localhost:8000/simulate -H 'content-type: application/json' \
@@ -77,7 +77,7 @@ open http://localhost:3000
 ```
 
 Rerun steps in that order: reloading cameras clears their snaps, so
-`run_roads` must follow `run_etl`. Then restart the API.
+`run_roads` must follow `run_etl`. Then restart the API and worker.
 
 ### Development
 
@@ -412,13 +412,25 @@ FastAPI on `:8000` (interactive docs at `/docs`):
 | `GET /health` | status and PostGIS version |
 | `GET /cameras[?rays=true]` | cameras as GeoJSON: kind (`public_road` / `private_lot` / `service_road`), directions, ambiguity flags, lot info; optional 30 m direction rays |
 | `POST /simulate` | simulates and stores one driver. Body: `template`, `weeks` (1–8), `start` (a Monday), `seed`, `zero_noise`, `match` {`tolerance_deg`, `facing`, `undirected`, `ambiguous_direction`, `lot_entrance`}, `noise` {`p_miss`, `p_char_misread`, `downtime_rate_per_week`, `downtime_mean_hours`, `jitter_sd_s`}. Returns `run_id`, summary, plate. |
+| `POST /jobs/simulate` | the same request as `/simulate`, queued on the Celery worker; returns `job_id` (or the cached run if an identical request already ran on the same camera data) |
+| `GET /jobs/{id}` | `state` (`PENDING` / `STARTED` / `PROGRESS` / `SUCCESS` / `FAILURE`), `progress` {stage, done, total}, `run_id` |
 | `GET /runs` | stored runs, newest first; `stale` = cameras were reloaded since the run |
 | `GET /runs/{id}` | the run (config, anchors, summary, `stale`), the naive home/work guess with distance errors, trips as GeoJSON, every camera pass (matcher decision and noise outcome), the read log (`plate_state` + `plate`, recorded and true time), outages |
 
-Simulation runs synchronously through `LocalRunner`. The road graph and
-cameras load once on first use (about 5 s), and later requests take well
-under a second. A queue-backed runner can replace it behind the same
-endpoint.
+`/simulate` runs synchronously in the API process. `/jobs/simulate` runs on
+the Celery worker (Redis broker), which the UI uses, with progress by stage
+and trip. Each process loads the road graph and cameras once, on first use
+(about 5–10 s).
+
+**Caching (Redis):**
+- **routes** are cached by (origin point, destination point) with a graph
+  fingerprint. Routes don't depend on departure time, so repeated commutes
+  and population runs reuse them.
+- **runs** are cached by (request, camera load time). Simulations are
+  deterministic, so an identical request returns the stored run.
+
+Without `REDIS_URL` (tests, CI), jobs run in-process and the cache lives in
+memory.
 
 ## Known limitations
 

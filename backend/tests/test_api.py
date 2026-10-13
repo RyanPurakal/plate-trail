@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from platetrail.api.main import app, get_runner
+from platetrail.sim.service import set_runner
 
 pytestmark = pytest.mark.db
 
@@ -18,9 +19,11 @@ def client(engine):
     cams = CameraSet(list(pair_on_main_st().by_id.values()) + [lot_camera(["into_lot"])])
     toy = LocalRunner(Router(toy_graph()), cams, PlacePool([PLAZA], []), engine, generator=FixedGenerator())
     app.dependency_overrides[get_runner] = lambda: toy
+    set_runner(toy)  # jobs use the shared runner directly
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+    set_runner(None)
 
 
 def test_health_reports_postgis(client):
@@ -137,3 +140,25 @@ def test_runs_marked_stale_after_camera_reload(client, engine):
         conn.execute(text("UPDATE cameras SET loaded_at = now() + interval '1 second'"))
     assert client.get(f"/runs/{run_id}").json()["run"]["stale"] is True
     assert next(r for r in client.get("/runs").json() if r["id"] == run_id)["stale"] is True
+
+
+def test_simulation_job_runs_and_identical_request_is_cached(client):
+    body = {"seed": 77, "weeks": 1}
+    first = client.post("/jobs/simulate", json=body)
+    assert first.status_code == 202
+    job = first.json()
+    assert job["state"] == "SUCCESS" and job["run_id"] > 0 and job["cached"] is False
+    status = client.get(f"/jobs/{job['job_id']}").json()
+    assert status["run_id"] == job["run_id"]
+    again = client.post("/jobs/simulate", json=body).json()
+    assert again["cached"] is True and again["run_id"] == job["run_id"]
+    different = client.post("/jobs/simulate", json={"seed": 78, "weeks": 1}).json()
+    assert different["run_id"] != job["run_id"]
+
+
+def test_unknown_job_is_404(client):
+    assert client.get("/jobs/local-does-not-exist").status_code == 404
+
+
+def test_job_validation_matches_simulate(client):
+    assert client.post("/jobs/simulate", json={"weeks": 0}).status_code == 422

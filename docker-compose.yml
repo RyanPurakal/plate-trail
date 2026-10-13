@@ -15,20 +15,39 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   api:
     build: ./backend
-    environment:
+    environment: &backend-env
       DATABASE_URL: postgresql+psycopg://platetrail:platetrail@db:5432/platetrail
       PLATETRAIL_DATA_DIR: /data
       CORS_ORIGINS: http://localhost:3000
+      REDIS_URL: redis://redis:6379/0
     volumes:
-      # Overpass and OSMnx caches persist on the host so reruns don't refetch.
+      # Overpass, OSMnx and NHTS caches persist on the host so reruns don't refetch.
       - ./data:/data
     ports:
       - "8000:8000"
-    depends_on:
+    depends_on: &backend-deps
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: ["celery", "-A", "platetrail.worker", "worker", "--loglevel=info", "--concurrency=2"]
+    environment: *backend-env
+    volumes:
+      - ./data:/data
+    depends_on: *backend-deps
 
   web:
     build:

@@ -161,6 +161,34 @@ export type SimulateBody = {
   extra_cameras?: number;
 };
 
+export type Job = {
+  job_id: string;
+  state: "PENDING" | "STARTED" | "PROGRESS" | "SUCCESS" | "FAILURE";
+  run_id?: number;
+  cached?: boolean;
+  error?: string;
+  progress?: { stage: string; done: number; total: number };
+};
+
+/** Queue a simulation and poll until it finishes; onUpdate receives each status. */
+export async function simulateJob(body: SimulateBody, onUpdate: (j: Job) => void): Promise<number> {
+  const resp = await fetch(`${API_URL}/jobs/simulate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error(`simulate: ${resp.status} ${await resp.text()}`);
+  let job: Job = await resp.json();
+  onUpdate(job);
+  while (job.state !== "SUCCESS" && job.state !== "FAILURE") {
+    await new Promise((r) => setTimeout(r, 800));
+    job = await get<Job>(`/jobs/${job.job_id}`);
+    onUpdate(job);
+  }
+  if (job.state === "FAILURE" || job.run_id == null) throw new Error(job.error ?? "simulation failed");
+  return job.run_id;
+}
+
 export async function simulate(body: SimulateBody): Promise<{ run_id: number }> {
   const resp = await fetch(`${API_URL}/simulate`, {
     method: "POST",

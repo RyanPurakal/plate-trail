@@ -59,20 +59,8 @@ class SimulationRequest:
 
 class SimulationRunner(ABC):
     @abstractmethod
-    def make_generator(self, request: SimulationRequest) -> RoutineGenerator:
-        if request.generator == "nhts":
-            from platetrail.routines.nhts import NHTSRoutineGenerator
-            from platetrail.routines.nhts_data import load_diaries
-
-            if self._nhts is None:
-                self._nhts = load_diaries()
-            return NHTSRoutineGenerator(self.pool, self._nhts, request.template)
-        if request.generator != "template":
-            raise ValueError(f"unknown generator {request.generator!r}")
-        return TemplateRoutineGenerator(self.pool, request.template)
-
-    def run(self, request: SimulationRequest) -> int:
-        """Simulate and store; return the run id."""
+    def run(self, request: SimulationRequest, progress=None) -> int:
+        """Simulate and store; return the run id. progress(stage, done, total) is optional."""
 
 
 @dataclass
@@ -125,7 +113,8 @@ class LocalRunner(SimulationRunner):
         return cls(Router(load_or_build_graph()), load_camera_set(engine), PlacePool.from_db(engine), engine,
                    towns=towns)
 
-    def simulate(self, request: SimulationRequest) -> SimulationOutput:
+    def simulate(self, request: SimulationRequest, progress=None) -> SimulationOutput:
+        report = progress or (lambda stage, done, total: None)
         if request.weeks < 1:
             raise ValueError("weeks must be >= 1")
         gen = self.generator or self.make_generator(request)
@@ -142,7 +131,10 @@ class LocalRunner(SimulationRunner):
             scenario = {"extra_cameras": request.extra_cameras, "town": request.scenario_town,
                         "placement": "assumption: arterials, length-weighted, >= 300 m apart",
                         "cameras": [r.as_json() for r in recs]}
-        sim = simulate_routine(self.router, cameras, routine, request.match)
+        report("routing", 0, len(routine.trips))
+        sim = simulate_routine(self.router, cameras, routine, request.match,
+                               on_trip=lambda done, total: report("routing", done, total))
+        report("noise", 0, 1)
 
         ordered = sorted(
             ((ti, p) for ti, t in enumerate(sim.trips) for p in t.result.passes),
@@ -171,8 +163,10 @@ class LocalRunner(SimulationRunner):
             raise ValueError(f"unknown generator {request.generator!r}")
         return TemplateRoutineGenerator(self.pool, request.template)
 
-    def run(self, request: SimulationRequest) -> int:
-        out = self.simulate(request)
+    def run(self, request: SimulationRequest, progress=None) -> int:
+        out = self.simulate(request, progress)
+        if progress:
+            progress("storing", 0, 1)
         return store(self.engine, out, out.cameras or self.cameras)
 
 

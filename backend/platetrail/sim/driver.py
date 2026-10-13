@@ -42,11 +42,15 @@ class DriverSimulation:
         return [p for t in self.trips for p in t.result.captured]
 
 
-def simulate_routine(router: Router, cameras: CameraSet, routine: Routine, cfg: MatchConfig | None = None) -> DriverSimulation:
+def simulate_routine(router: Router, cameras: CameraSet, routine: Routine, cfg: MatchConfig | None = None,
+                     on_trip=None) -> DriverSimulation:
+    """on_trip(done, total) is called before each trip, for progress reporting."""
     cfg = cfg or MatchConfig()
     sim = DriverSimulation(routine)
     ready = None
-    for planned in routine.trips:
+    for n, planned in enumerate(routine.trips, start=1):
+        if on_trip is not None:
+            on_trip(n - 1, len(routine.trips))
         depart = planned.depart if ready is None else max(planned.depart, ready)
         try:
             result = simulate_trip(router, cameras, (planned.origin.lon, planned.origin.lat),

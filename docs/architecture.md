@@ -1,10 +1,8 @@
 # Architecture
 
 The full planned system from the proposal. **Solid** boxes and arrows are
-built in this slice; **dashed** ones are planned. Today `POST /simulate`
-runs the simulation in-process (`LocalRunner`) and writes straight to
-PostGIS. The Celery queue, workers and Redis cache will slot in behind the
-`SimulationRunner` interface without changing the API.
+built; **dashed** ones are planned. `POST /jobs/simulate` runs on the Celery worker through Redis, with progress
+reporting and route/run caching.
 
 ```mermaid
 flowchart LR
@@ -12,9 +10,9 @@ flowchart LR
     subgraph sources["Data sources"]
         OSM["OpenStreetMap<br/>Overpass API<br/>(ALPR cameras, places, lots)"]
         OSMNX["OpenStreetMap road network<br/>(via OSMnx)"]
-        DEFLOCK["DeFlock export"]:::planned
-        AGENCY["Agency transparency portals"]:::planned
-        NHTS["NHTS trip diaries"]:::planned
+        DEFLOCK["DeFlock<br/>(= OSM data)"]
+        AGENCY["Agency transparency portals<br/>(counts only)"]
+        NHTS["NHTS 2022 trip diaries"]
     end
 
     %% ---------- ETL ----------
@@ -22,7 +20,7 @@ flowchart LR
         CAMETL["Camera ETL<br/>loaders + dedupe<br/>(cached raw responses)"]
         ROADS["Road graph + snapping<br/>lot / service-road cameras"]
         PLACES["Places + towns<br/>anchor candidates"]
-        NHTSETL["NHTS processing"]:::planned
+        NHTSETL["NHTS diaries<br/>(routines.nhts_data)"]
     end
 
     DB[("PostGIS<br/>cameras · road_edges · camera_edges<br/>camera_lots · places · runs · trips<br/>camera_passes · reads · camera_outages")]
@@ -31,9 +29,9 @@ flowchart LR
     FE["Frontend<br/>Next.js + MapLibre"]
     API["FastAPI<br/>/cameras · /simulate · /runs"]
     LOCAL["LocalRunner (in-process)<br/>routines → routing → matching<br/>→ sensor noise → store"]
-    REDIS[("Redis<br/>graph / coverage / run cache")]:::planned
-    QUEUE["Celery queue<br/>(progress reporting)"]:::planned
-    SIMW["Simulation worker<br/>routines, routing, camera matching,<br/>sensor noise, read logs"]:::planned
+    REDIS[("Redis<br/>broker · route cache · run cache")]
+    QUEUE["Celery queue<br/>(progress reporting)"]
+    SIMW["Simulation worker<br/>routines, routing, camera matching,<br/>sensor noise, read logs"]
     INFW["Inference + unicity worker<br/>HDBSCAN anchors, schedule, anomalies,<br/>population unicity, policy comparison"]:::planned
     RESULTS[("Results store<br/>inference, unicity, policy results")]:::planned
 
@@ -41,25 +39,25 @@ flowchart LR
     OSM --> PLACES
     OSM --> ROADS
     OSMNX --> ROADS
-    DEFLOCK -.-> CAMETL
-    AGENCY -.-> CAMETL
-    NHTS -.-> NHTSETL
+    DEFLOCK --> CAMETL
+    AGENCY --> CAMETL
+    NHTS --> NHTSETL
     CAMETL --> DB
     ROADS --> DB
     PLACES --> DB
-    NHTSETL -.-> DB
+    NHTSETL --> SIMW
 
     FE --> API
     API --> LOCAL
     LOCAL --> DB
     API --> DB
 
-    API -.-> REDIS
-    REDIS -.-> QUEUE
-    API -.-> QUEUE
-    QUEUE -.-> SIMW
+    API --> REDIS
+    REDIS --> QUEUE
+    API --> QUEUE
+    QUEUE --> SIMW
     SIMW -.-> INFW
-    SIMW -.-> DB
+    SIMW --> DB
     INFW -.-> RESULTS
     RESULTS -.-> API
 
@@ -77,7 +75,8 @@ flowchart LR
 | API | `backend/platetrail/api/` | Built |
 | Schema (ordered SQL migrations) | `backend/platetrail/sql/` | Built |
 | Frontend | `frontend/` | Built |
-| Celery queue, Redis cache, workers, results store | — | Planned |
+| Celery app, tasks, jobs + run cache | `backend/platetrail/worker.py`, `jobs.py`, `cache.py` | Built |
+| Inference / unicity worker, results store | — | Planned |
 
 ## Data flow for one simulation
 

@@ -406,3 +406,25 @@ def test_entrance_between_two_junctions_follows_facing():
     assert idx.for_camera(cam, [90.0], ["into_lot"])[0] == 1  # faces east into the lot: came from the west
     assert idx.for_camera(cam, [270.0], ["into_lot"])[0] == 3
     assert idx.for_camera(cam, [90.0], ["toward_road"])[0] == 3  # faces east toward its exit
+
+
+def test_route_cache_returns_identical_route_with_new_departure():
+    from platetrail.cache import MemoryCache, reset_cache
+
+    reset_cache(MemoryCache())
+    router = Router(toy_graph())
+    a = router.route(xy(0, 0), xy(2000, 0), DEPART)
+    b = router.route(xy(0, 0), xy(2000, 0), DEPART + timedelta(hours=9))
+    assert router.cache_hits == 1
+    assert [e.edge for e in a.edges] == [e.edge for e in b.edges] and a.coords == b.coords
+    assert b.depart == DEPART + timedelta(hours=9) and b.arrive - b.depart == a.arrive - a.depart
+    reset_cache(None)
+
+
+def test_route_cache_key_depends_on_graph_costs(monkeypatch):
+    import platetrail.sim.routing as routing
+
+    r1 = Router(lot_graph())
+    monkeypatch.setattr(routing, "SERVICE_ROUTING_PENALTY", 1.0)
+    r2 = Router(lot_graph())
+    assert r1.fingerprint != r2.fingerprint  # a cached route from one can't leak into the other
