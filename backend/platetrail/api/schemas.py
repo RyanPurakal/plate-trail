@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from platetrail.sim.matcher import MatchConfig
 from platetrail.sim.noise import NoiseConfig
@@ -29,13 +29,23 @@ class NoiseSettings(BaseModel):
 
 
 class SimulateRequest(BaseModel):
-    template: Literal["commuter", "student", "shift_worker"] | None = None
+    generator: Literal["nhts", "template"] = "nhts"
+    # template: commuter / student / shift_worker; nhts persona: worker / student / non_worker
+    template: Literal["commuter", "student", "shift_worker", "worker", "non_worker"] | None = None
     weeks: int = Field(1, ge=1, le=MAX_WEEKS)
     start: date = date(2026, 10, 12)
     seed: int = Field(0, ge=0)
     zero_noise: bool = False
+    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario (synthetic cameras in Edison)
     match: MatchSettings = MatchSettings()
     noise: NoiseSettings = NoiseSettings()
+
+    @model_validator(mode="after")
+    def _template_matches_generator(self):
+        allowed = {"nhts": {"worker", "student", "non_worker"}, "template": {"commuter", "student", "shift_worker"}}
+        if self.template is not None and self.template not in allowed[self.generator]:
+            raise ValueError(f"template {self.template!r} is not valid for generator {self.generator!r}")
+        return self
 
     @field_validator("start")
     @classmethod
@@ -48,4 +58,62 @@ class SimulateRequest(BaseModel):
         noise = (NoiseConfig.noiseless(self.seed) if self.zero_noise
                  else NoiseConfig(seed=self.seed, **self.noise.model_dump()))
         return SimulationRequest(self.template, self.weeks, self.start, self.seed,
-                                 MatchConfig(**self.match.model_dump()), noise)
+                                 MatchConfig(**self.match.model_dump()), noise, self.extra_cameras,
+                                 generator=self.generator)
+
+
+class PopulationRequestBody(BaseModel):
+    drivers: int = Field(1000, ge=2, le=2000)
+    weeks: int = Field(1, ge=1, le=MAX_WEEKS)
+    start: date = date(2026, 10, 12)
+    seed: int = Field(0, ge=0)
+    generator: Literal["nhts", "template"] = "nhts"
+    extra_cameras: int = Field(0, ge=0, le=200)
+    match: MatchSettings = MatchSettings()
+    noise: NoiseSettings = NoiseSettings()
+
+    @field_validator("start")
+    @classmethod
+    def _monday(cls, v: date) -> date:
+        if v.weekday() != 0:
+            raise ValueError("start must be a Monday")
+        return v
+
+    def to_request(self):
+        from platetrail.population import PopulationRequest
+
+        return PopulationRequest(self.drivers, self.weeks, self.start, self.seed, self.generator,
+                                 MatchConfig(**self.match.model_dump()), NoiseConfig(**self.noise.model_dump()),
+                                 self.extra_cameras)
+
+
+class LonLat(BaseModel):
+    lon: float = Field(ge=-75.0, le=-73.5)
+    lat: float = Field(ge=40.0, le=41.0)
+
+
+class YourWeekBody(BaseModel):
+    """Session-only inputs; never stored."""
+    home: LonLat
+    work: LonLat | None = None
+    workdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    leave_home: str = Field("07:45", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    leave_work: str = Field("17:15", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    errands_per_week: int = Field(3, ge=0, le=5)
+    weekend_outings: int = Field(2, ge=0, le=6)
+    weeks: int = Field(1, ge=1, le=4)
+
+    @field_validator("workdays")
+    @classmethod
+    def _days(cls, v):
+        if any(d not in range(7) for d in v):
+            raise ValueError("workdays are 0 (Monday) to 6 (Sunday)")
+        return sorted(set(v))
+
+    def to_input(self):
+        from platetrail.yourweek import WeekInput
+
+        mins = lambda s: int(s[:2]) * 60 + int(s[3:])  # noqa: E731
+        return WeekInput((self.home.lon, self.home.lat), (self.work.lon, self.work.lat) if self.work else None,
+                         tuple(self.workdays), mins(self.leave_home), mins(self.leave_work), self.errands_per_week,
+                         self.weekend_outings)

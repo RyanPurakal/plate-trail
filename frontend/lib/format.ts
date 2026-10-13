@@ -25,5 +25,6 @@ export function shortTime(iso: string) {
 export const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 
 export function templateName(generator: string) {
+  if (generator.startsWith("nhts_")) return `NHTS ${generator.slice(5).replace("_", "-")}`;
   return generator.replace(/^template:/, "").replace("_", " ");
 }

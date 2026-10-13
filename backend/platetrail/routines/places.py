@@ -305,6 +305,40 @@ class PlacePool:
         return pool[int(rng.choice(len(pool), p=w / w.sum()))]
 
 
+# ASSUMPTION: road distance is about this multiple of straight-line distance.
+CIRCUITY = 1.3
+
+
+def _distance_weights(distances_m: np.ndarray, target_m: float) -> np.ndarray:
+    """Prefer candidates whose road distance (straight line x CIRCUITY) is close to target_m."""
+    spread = max(800.0, 0.35 * target_m)
+    w = np.exp(-np.abs(distances_m * CIRCUITY - target_m) / spread)
+    return w / w.sum() if w.sum() > 0 else np.full(len(w), 1 / len(w))
+
+
+def sample_by_distance(pool: "PlacePool", categories: tuple[str, ...], rng: np.random.Generator,
+                       origin: Place, target_m: float) -> Place:
+    """A place in the categories whose distance from origin best matches a trip length (NHTS TRPMILES)."""
+    cands = [p for c in categories for p in pool.by_category.get(c, [])]
+    if not cands:
+        raise ValueError(f"no places for {categories}")
+    d = np.array([distance_m(origin, p) for p in cands])
+    return cands[int(rng.choice(len(cands), p=_distance_weights(d, target_m)))]
+
+
+def sample_home_by_distance(pool: "PlacePool", rng: np.random.Generator, origin: Place, target_m: float) -> Place:
+    """Another residence (for drop-offs and visits), at a distance matching the trip length."""
+    mids = np.array([[g.interpolate(0.5, normalized=True).x, g.interpolate(0.5, normalized=True).y]
+                     for _, g, _, _ in pool.residential])
+    d = np.array([WGS84.inv(origin.lon, origin.lat, x, y)[2] for x, y in mids])
+    lengths = np.array([s[2] for s in pool.residential])
+    w = _distance_weights(d, target_m) * lengths
+    key, geom, _, town = pool.residential[int(rng.choice(len(w), p=w / w.sum()))]
+    frac = float(rng.random())
+    pt = geom.interpolate(frac, normalized=True)
+    return Place(f"home/{key}/{frac:.4f}", "other_home", pt.x, pt.y, town)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--refresh", action="store_true")

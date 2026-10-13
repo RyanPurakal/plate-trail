@@ -3,13 +3,17 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import LogTable from "@/components/LogTable";
+import PopulationView from "@/components/PopulationView";
+import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
   getCameras,
   getRun,
   getRuns,
-  simulate,
+  simulateJob,
   type CameraCollection,
+  type Job,
+  type Inference,
   type NaiveGuess,
   type RunDetail,
   type RunListItem,
@@ -17,6 +21,67 @@ import {
 import { dayKey, km, parts, templateName } from "@/lib/format";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+const REVEAL_STEPS = ["Reads", "Places", "Schedule", "Anomalies"];
+
+function RevealCard({ inference, reveal, setReveal, mode }: {
+  inference: Inference; reveal: number; setReveal: (n: number) => void; mode: Mode;
+}) {
+  const err = (a: Inference["home"]) => (a && a.error_m != null && mode === "happened"
+    ? ` · off by ${(a.error_m / 1000).toFixed(a.error_m < 10000 ? 2 : 1)} km` : "");
+  return (
+    <section className="naive reveal">
+      <div className="nb-head">
+        <span>What an analyst can infer</span>
+        <span className="nb-badge engine-badge" title={inference.method}>inference engine</span>
+      </div>
+      <div className="steps" role="tablist" aria-label="reveal step">
+        {REVEAL_STEPS.map((label, i) => (
+          <button key={label} role="tab" aria-selected={reveal === i} className={reveal >= i ? "on" : ""} onClick={() => setReveal(i)}>
+            <span>{i + 1}</span>{label}
+          </button>
+        ))}
+      </div>
+      {reveal === 0 && <div className="nb-note">Step through what the read log alone supports. Each step adds a layer to the map.</div>}
+      {reveal >= 1 && (
+        <>
+          {inference.home ? (
+            <div className="nb-row"><span className="nb-k eng">Home</span>
+              <span>within ~{(inference.home.radius_m / 1000).toFixed(1)} km · {inference.home.confidence} ({inference.home.support_days}/{inference.home.possible_days} nights){err(inference.home)}</span><span /></div>
+          ) : <div className="nb-note">Not enough overnight gaps to place a home.</div>}
+          {inference.work ? (
+            <div className="nb-row"><span className="nb-k eng">Work</span>
+              <span>within ~{(inference.work.radius_m / 1000).toFixed(1)} km · {inference.work.confidence} ({inference.work.support_days}/{inference.work.possible_days} weekdays){err(inference.work)}</span><span /></div>
+          ) : <div className="nb-note">No long weekday stay bracketed by reads, so no work estimate.</div>}
+        </>
+      )}
+      {reveal >= 2 && (
+        <div className="nb-note">{inference.regular.length} regular pass{inference.regular.length === 1 ? "" : "es"} (same camera, same time of day, 3+ days) ringed on the map.</div>
+      )}
+      {reveal >= 3 && (
+        <div className="nb-note">{inference.anomalies.length} out-of-routine read{inference.anomalies.length === 1 ? "" : "s"} marked in red.</div>
+      )}
+      {reveal >= 1 && (
+        <ul className="conclusions">
+          {inference.conclusions.slice(0, reveal >= 3 ? 8 : reveal >= 2 ? 7 : 2).map((c) => <li key={c}>{c}</li>)}
+        </ul>
+      )}
+      <div className="nb-note">Confidence reflects how consistent the evidence is, not how close the estimate is: cameras are rarely next to a home.</div>
+    </section>
+  );
+}
+
+function jobLabel(job: Job | null): string {
+  if (!job) return "queued…";
+  if (job.state === "PROGRESS" && job.progress) {
+    const { stage, done, total } = job.progress;
+    return total > 1 ? `${stage} ${done}/${total}` : `${stage}…`;
+  }
+  const labels: Record<Job["state"], string> = {
+    PENDING: "queued…", STARTED: "loading…", PROGRESS: "running…", SUCCESS: "done", FAILURE: "failed",
+  };
+  return labels[job.state];
+}
 
 function NaiveCard({ guess, mode }: { guess: NaiveGuess; mode: Mode }) {
   const row = (label: string, g: NaiveGuess["home"]) =>
@@ -65,7 +130,12 @@ export default function Home() {
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ template: "commuter", weeks: 1, seed: 1 });
+  const [job, setJob] = useState<Job | null>(null);
+  const [tab, setTab] = useState<"driver" | "population" | "yourweek">("driver");
+  const [reveal, setReveal] = useState(0);
+  const [pickMode, setPickMode] = useState<"home" | "work" | null>(null);
+  const [pins, setPins] = useState<{ home: [number, number] | null; work: [number, number] | null }>({ home: null, work: null });
+  const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
 
   useEffect(() => {
     Promise.all([getCameras(), getRuns()])
@@ -83,8 +153,37 @@ export default function Home() {
     setDetail(null);
     setDay(null);
     setFocus(null);
+    setReveal(0);
     getRun(runId).then(setDetail).catch((e: Error) => setError(e.message));
   }, [runId]);
+
+  function switchTab(t: "driver" | "population" | "yourweek") {
+    setTab(t);
+    setPickMode(null);
+    if (t === "driver" && detail?.stored === false && runId != null) {
+      setDetail(null);
+      getRun(runId).then(setDetail).catch((e: Error) => setError(e.message));
+    }
+    if (t === "yourweek" && detail?.stored !== false) setDetail(null);
+  }
+
+  const showDriver = tab === "driver" || (tab === "yourweek" && detail?.stored === false);
+
+  // Real cameras plus any synthetic scenario cameras this run used.
+  const runCameras = useMemo<CameraCollection | null>(() => {
+    const scn = detail?.run.scenario;
+    if (!cameras || !scn?.cameras.length) return cameras;
+    const extra = scn.cameras.map((c, i) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [c.lon, c.lat] as [number, number] },
+      properties: {
+        kind: "camera" as const, camera_id: -(i + 1), osm_id: c.label, town: scn.town, has_direction: true,
+        directions_deg: c.directions_deg, direction_ambiguous: false, alt_directions_deg: null, snap_ambiguous: false,
+        manufacturer: null, camera_kind: "scenario" as const, lot_name: null,
+      },
+    }));
+    return { ...cameras, features: [...cameras.features, ...extra] };
+  }, [cameras, detail]);
 
   const days = useMemo(() => {
     const ds = new Set<string>();
@@ -117,13 +216,15 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
-      const { run_id } = await simulate({ template: form.template, weeks: form.weeks, seed: form.seed });
+      const run_id = await simulateJob({ generator: form.generator, template: form.template || undefined,
+                                         weeks: form.weeks, seed: form.seed, extra_cameras: form.extra }, setJob);
       setRuns(await getRuns());
       setRunId(run_id);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(false);
+      setJob(null);
     }
   }
 
@@ -139,12 +240,27 @@ export default function Home() {
           </p>
         </header>
 
+        <nav className="tabs" role="tablist" aria-label="section">
+          {([["driver", "One driver"], ["population", "Population & policy"], ["yourweek", "Your week"]] as const).map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => switchTab(k)}>{label}</button>
+          ))}
+        </nav>
+
+        {tab === "population" && <PopulationView />}
+        {tab === "yourweek" && (
+          <YourWeek pins={pins} pickMode={pickMode} setPickMode={setPickMode}
+                    onResult={(d) => { setDetail(d); setDay(null); setReveal(1); setMode("saw");
+                      setTimeout(() => document.querySelector(".yw-banner")?.scrollIntoView({ behavior: "smooth" }), 60); }} />
+        )}
+
+        {tab === "driver" && (
         <section className="picker">
           <label htmlFor="run">Stored run</label>
           <select id="run" value={runId ?? ""} onChange={(e) => setRunId(Number(e.target.value))}>
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 #{r.id} · {templateName(r.generator)} · {r.weeks} wk · seed {r.seed} · {r.summary.reads} reads
+                {r.extra_cameras ? ` · +${r.extra_cameras} hypothetical cams` : ""}
                 {r.stale ? " · stale" : ""}
               </option>
             ))}
@@ -152,10 +268,15 @@ export default function Home() {
           <details className="simulate">
             <summary>Simulate a new driver</summary>
             <form onSubmit={onSimulate}>
-              <select value={form.template} onChange={(e) => setForm({ ...form, template: e.target.value })}>
-                <option value="commuter">commuter</option>
-                <option value="student">student</option>
-                <option value="shift_worker">shift worker</option>
+              <select value={form.generator} aria-label="routine source"
+                      onChange={(e) => setForm({ ...form, generator: e.target.value as "nhts" | "template", template: "" })}>
+                <option value="nhts">NHTS</option>
+                <option value="template">template</option>
+              </select>
+              <select value={form.template} aria-label="persona" onChange={(e) => setForm({ ...form, template: e.target.value })}>
+                <option value="">any</option>
+                {(form.generator === "nhts" ? ["worker", "student", "non_worker"] : ["commuter", "student", "shift_worker"]).map(
+                  (t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
               </select>
               <input type="number" min={1} max={8} value={form.weeks} aria-label="weeks"
                      onChange={(e) => setForm({ ...form, weeks: Number(e.target.value) })} />
@@ -163,12 +284,19 @@ export default function Home() {
               <input type="number" min={0} value={form.seed} aria-label="seed"
                      onChange={(e) => setForm({ ...form, seed: Number(e.target.value) })} />
               <span className="unit">seed</span>
-              <button disabled={busy}>{busy ? "running…" : "run"}</button>
+              <input type="number" min={0} max={200} value={form.extra} aria-label="extra cameras"
+                     title="Hypothetical cameras added in Edison (e.g. 92, the approved count). Locations are not public, so placement is simulated: arterials chosen in proportion to length, at least 300 m apart, one direction each."
+                     onChange={(e) => setForm({ ...form, extra: Number(e.target.value) })} />
+              <span className="unit">+hypothetical cams</span>
+              <button disabled={busy}>{busy ? jobLabel(job) : "run"}</button>
             </form>
           </details>
         </section>
+        )}
 
         {error && <div className="error">{error}</div>}
+        {showDriver && (<>
+        {tab === "yourweek" && <div className="error stale yw-banner">Your week, simulated just now and not stored.</div>}
         {run?.stale && (
           <div className="error stale">
             Stale run: cameras were reloaded after it was simulated, so camera references may not match.
@@ -219,6 +347,7 @@ export default function Home() {
         </section>
 
         {detail && <NaiveCard guess={detail.naive_guess} mode={mode} />}
+        {detail?.inference && <RevealCard inference={detail.inference} reveal={reveal} setReveal={setReveal} mode={mode} />}
 
         <section className="controls">
           <div className="days">
@@ -245,19 +374,25 @@ export default function Home() {
         </section>
 
         <LogTable mode={mode} reads={view.reads} passes={view.passes} focusLabel={focus} onFocus={setFocus} />
+        </>)}
       </aside>
 
       <main className="stage">
         <MapView
-          cameras={cameras}
-          trips={view.trips}
-          passes={view.passes}
-          reads={view.reads}
+          cameras={tab === "population" ? cameras : runCameras}
+          trips={showDriver ? view.trips : []}
+          passes={showDriver ? view.passes : []}
+          reads={showDriver ? view.reads : []}
           mode={mode}
           layers={layers}
           focusLabel={focus}
           fitKey={detail ? `${detail.run.id}:${day ?? "all"}` : ""}
-          guess={detail?.naive_guess ?? null}
+          guess={showDriver ? detail?.naive_guess ?? null : null}
+          inference={showDriver ? detail?.inference ?? null : null}
+          reveal={reveal}
+          pickMode={tab === "yourweek" ? pickMode : null}
+          onPick={(kind, pt) => { setPins({ ...pins, [kind]: pt }); setPickMode(null); }}
+          pins={tab === "yourweek" ? pins : undefined}
         />
         <div className="legend">
           {mode === "saw" ? (
@@ -278,6 +413,7 @@ export default function Home() {
           <span><i className="lg-arrow lg-svc" />service street</span>
           <span><i className="lg-undir" />no direction</span>
           <span><i className="lg-guess" />naive guess</span>
+          {detail?.run.scenario && <span><i className="lg-arrow lg-scn" />hypothetical camera, simulated placement (+{detail.run.scenario.extra_cameras})</span>}
           {mode === "happened" && <span><i className="lg-truthpin" />true home / work</span>}
         </div>
         <div className="mode-stamp">{mode === "saw" ? "RECORDED" : "GROUND TRUTH"}</div>

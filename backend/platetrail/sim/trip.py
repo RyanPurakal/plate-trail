@@ -205,8 +205,9 @@ def simulate_trip(
     dest: tuple[float, float],
     depart: datetime,
     cfg: MatchConfig | None = None,
+    use_cache: bool = True,
 ) -> TripResult:
     """origin/dest are (lon, lat)."""
     cfg = cfg or MatchConfig()
-    route = router.route(origin, dest, depart)
+    route = router.route(origin, dest, depart, use_cache)
     return TripResult(route, match_route(route, cameras, origin, dest, cfg))

@@ -111,3 +111,23 @@ def test_runs_survive_camera_reload(runner, engine):
 def test_weeks_validated(runner):
     with pytest.raises(ValueError):
         runner.run(SimulationRequest(weeks=0))
+
+
+def test_density_scenario_stored_with_run(engine):
+    from test_trip import toy_graph
+
+    G = toy_graph()
+    for _, _, d in G.edges(data=True):
+        d["highway"] = "tertiary"
+    cams = CameraSet(list(pair_on_main_st().by_id.values()))
+    runner = LocalRunner(Router(G), cams, PlacePool([PLAZA], []), engine, generator=FixedGenerator())
+    base = runner.run(SimulationRequest(weeks=1, start=MONDAY, seed=4, noise=NoiseConfig.noiseless(4)))
+    dense = runner.run(SimulationRequest(weeks=1, start=MONDAY, seed=4, noise=NoiseConfig.noiseless(4),
+                                         extra_cameras=3))
+    (scn,) = rows(engine, dense, "SELECT scenario FROM runs WHERE id = :r")
+    assert scn.scenario["extra_cameras"] == 3 and len(scn.scenario["cameras"]) == 3
+    assert rows(engine, base, "SELECT scenario FROM runs WHERE id = :r")[0].scenario is None
+    labels = {r.camera_label for r in rows(engine, dense, "SELECT camera_label FROM camera_passes WHERE run_id = :r")}
+    real = {r.camera_label for r in rows(engine, base, "SELECT camera_label FROM camera_passes WHERE run_id = :r")}
+    assert real <= labels  # real cameras still passed
+    assert all(l in real or l.startswith("scenario/4/") for l in labels)

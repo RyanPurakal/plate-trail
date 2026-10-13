@@ -1,6 +1,6 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export type CameraKind = "public_road" | "private_lot" | "service_road";
+export type CameraKind = "public_road" | "private_lot" | "service_road" | "scenario";
 
 export type CameraProps = {
   kind: "camera";
@@ -48,6 +48,7 @@ export type RunListItem = {
   plate_state: string;
   summary: RunSummary;
   stale: boolean; // cameras were reloaded after this run was simulated
+  extra_cameras: number; // density scenario: synthetic cameras added
 };
 
 export type Place = { key: string; category: string; lon: number; lat: number; town: string | null; name: string | null };
@@ -120,13 +121,44 @@ export type NaiveGuess = {
   work: GuessPoint | null;
 };
 
+export type Scenario = {
+  extra_cameras: number;
+  town: string;
+  placement: string;
+  cameras: { label: string; lon: number; lat: number; directions_deg: number[] }[];
+};
+
+export type EngineAnchor = {
+  lon: number;
+  lat: number;
+  radius_m: number;
+  confidence: "high" | "medium" | "low";
+  support_days: number;
+  possible_days: number;
+  nearest_camera: string;
+  error_m: number | null;
+};
+
+export type Inference = {
+  method: string;
+  reads_used: number;
+  home: EngineAnchor | null;
+  work: EngineAnchor | null;
+  regular: { camera_label: string; minute_of_day: number; days: number; weekdays: number[] }[];
+  anomalies: { time: string; camera_label: string; score: number }[];
+  conclusions: string[];
+};
+
 export type RunDetail = {
   run: RunListItem & {
     match_config: Record<string, string | number>;
     noise_config: Record<string, unknown>;
     anchors: Record<string, Place>;
+    scenario: Scenario | null;
   };
   naive_guess: NaiveGuess;
+  inference: Inference;
+  stored?: boolean; // false for "your week" results
   trips: { type: "FeatureCollection"; features: TripFeature[] };
   passes: Pass[];
   reads: Read[];
@@ -143,7 +175,42 @@ export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);
 
-export type SimulateBody = { template?: string; weeks: number; seed: number; zero_noise?: boolean };
+export type SimulateBody = {
+  generator?: "nhts" | "template";
+  template?: string;
+  weeks: number;
+  seed: number;
+  zero_noise?: boolean;
+  extra_cameras?: number;
+};
+
+export type Job = {
+  job_id: string;
+  state: "PENDING" | "STARTED" | "PROGRESS" | "SUCCESS" | "FAILURE";
+  run_id?: number;
+  cached?: boolean;
+  error?: string;
+  progress?: { stage: string; done: number; total: number };
+};
+
+/** Queue a simulation and poll until it finishes; onUpdate receives each status. */
+export async function simulateJob(body: SimulateBody, onUpdate: (j: Job) => void): Promise<number> {
+  const resp = await fetch(`${API_URL}/jobs/simulate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error(`simulate: ${resp.status} ${await resp.text()}`);
+  let job: Job = await resp.json();
+  onUpdate(job);
+  while (job.state !== "SUCCESS" && job.state !== "FAILURE") {
+    await new Promise((r) => setTimeout(r, 800));
+    job = await get<Job>(`/jobs/${job.job_id}`);
+    onUpdate(job);
+  }
+  if (job.state === "FAILURE" || job.run_id == null) throw new Error(job.error ?? "simulation failed");
+  return job.run_id;
+}
 
 export async function simulate(body: SimulateBody): Promise<{ run_id: number }> {
   const resp = await fetch(`${API_URL}/simulate`, {

@@ -20,7 +20,7 @@ from shapely.geometry import Point
 from platetrail.db import get_engine
 from platetrail.roads.graph import load_or_build_graph
 from platetrail.routines.places import PlacePool
-from platetrail.routines.templates import ERRAND_MIX, TEMPLATE_WEIGHTS, TemplateRoutineGenerator
+from platetrail.routines.templates import ERRAND_MIX, TemplateRoutineGenerator
 from platetrail.sim.driver import simulate_routine
 from platetrail.sim.matcher import MatchConfig
 from platetrail.sim.noise import NoiseConfig, apply_noise, true_passes
@@ -36,13 +36,20 @@ def main() -> None:
     ap.add_argument("--drivers", type=int, default=200)
     ap.add_argument("--weeks", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--generator", choices=["template", "nhts"], default="template")
     args = ap.parse_args()
 
     engine = get_engine()
     router, cameras, pool = Router(load_or_build_graph()), load_camera_set(engine), PlacePool.from_db(engine)
     cfg = MatchConfig()
     lot_polys = {c.lot_id: c.lot_geom for c in cameras.lots}
-    gen = TemplateRoutineGenerator(pool)
+    if args.generator == "nhts":
+        from platetrail.routines.nhts import NHTSRoutineGenerator
+        from platetrail.routines.nhts_data import load_diaries
+
+        gen = NHTSRoutineGenerator(pool, load_diaries())
+    else:
+        gen = TemplateRoutineGenerator(pool)
     period = (START, START + timedelta(weeks=args.weeks, days=1))  # +1 day for night shifts ending Monday
 
     stats = defaultdict(list)
@@ -77,7 +84,7 @@ def main() -> None:
         examples.setdefault(routine.template, (routine, sim, noisy, row))
         for t in sim.trips:
             attach += [t.result.route.origin.distance_m, t.result.route.dest.distance_m]
-            if t.planned.purpose in ERRAND_MIX:
+            if t.planned.dest.category in ERRAND_MIX:  # errand destinations, for either generator
                 errands += 1
                 pt = Point(t.planned.dest.lon, t.planned.dest.lat)
                 errand_in_lot += any(g.covers(pt) for g in lot_polys.values())
@@ -87,7 +94,7 @@ def main() -> None:
     keys = ["trips", "km", "passes", "captured", "reads", "misreads", "lost_downtime", "lost_missed",
             "distinct_cameras", "top_camera_share", "lot_events"]
     print(f"{'template':<14}{'n':>5}" + "".join(f"{k[:12]:>14}" for k in keys) + f"{'zero reads':>12}")
-    for name in TEMPLATE_WEIGHTS:
+    for name in sorted(stats):
         rows = stats.get(name, [])
         if not rows:
             continue
@@ -107,7 +114,7 @@ def main() -> None:
     print("Share of a driver's reads from their single most-read camera (drivers with >= 1 read), median: "
           + ", ".join(
               f"{name} {statistics.median(r['top_camera_share'] for r in stats[name] if r['top_camera_share'] is not None):.0%}"
-              for name in TEMPLATE_WEIGHTS if any(r["top_camera_share"] is not None for r in stats.get(name, [])))
+              for name in sorted(stats) if any(r["top_camera_share"] is not None for r in stats.get(name, [])))
           + f"; all {statistics.median(r['top_camera_share'] for r in all_rows if r['top_camera_share'] is not None):.0%}")
 
     a = np.array(attach)

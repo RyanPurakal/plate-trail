@@ -17,16 +17,33 @@ travel times.
 
 Departure time only stamps timestamps; there is no traffic model, so travel
 times are free-flow (OSMnx speed_kph from maxspeed tags or highway defaults).
+Because routes don't depend on departure time, they are cached by
+(origin point, destination point) in platetrail.cache: in-process, or shared
+via Redis across API and worker processes. The key includes a fingerprint
+of the graph's edges and routing costs.
+
+Two interchangeable search backends find the path (PLATETRAIL_ROUTER, or
+Router(G, backend=...)):
+* "cpp" (default when built): platetrail._fastroute, a C++ Dijkstra over a CSR
+  copy of the graph that reproduces networkx's tie-breaking, so it returns the
+  identical path and cost (tests/test_routing_parity.py);
+* "python": networkx.single_source_dijkstra, the reference implementation.
+Everything around the search (snapping, path assembly, geometry) is shared.
 """
 
+import hashlib
+import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import networkx as nx
+import numpy as np
 import osmnx as ox
 from shapely.geometry import LineString, Point
 from shapely.ops import substring
 
+from platetrail.cache import MISSING, get_cache
 from platetrail.roads.snap import EdgeIndex, is_service
 
 EdgeKey = tuple[int, int, int]
@@ -34,6 +51,23 @@ MAX_ATTACH_M = 500.0
 # ASSUMPTION: route-choice cost multiplier for service roads (not applied to timestamps).
 SERVICE_ROUTING_PENALTY = 4.0
 _O, _D = "__origin__", "__dest__"
+BACKENDS = ("cpp", "python")
+log = logging.getLogger(__name__)
+
+try:
+    from platetrail import _fastroute
+except ImportError:  # extension not built (e.g. a plain source checkout)
+    _fastroute = None
+
+
+def default_backend() -> str:
+    """PLATETRAIL_ROUTER if set, else "cpp" when the extension is available, else "python"."""
+    want = os.environ.get("PLATETRAIL_ROUTER", "").strip().lower()
+    if want:
+        if want not in BACKENDS:
+            raise ValueError(f"PLATETRAIL_ROUTER must be one of {BACKENDS}, got {want!r}")
+        return want
+    return "cpp" if _fastroute is not None else "python"
 
 
 @dataclass(frozen=True)
@@ -119,14 +153,42 @@ def _edge_name(data: dict) -> str | None:
 
 
 class Router:
-    def __init__(self, G: nx.MultiDiGraph):
-        """G: unprojected (EPSG:4326) graph with travel_time and length on edges."""
+    def __init__(self, G: nx.MultiDiGraph, backend: str | None = None):
+        """G: unprojected (EPSG:4326) graph with travel_time and length on edges.
+        backend: "cpp" or "python" (default: default_backend())."""
         core = max(nx.strongly_connected_components(G), key=len)
         self.G = G.subgraph(core).copy()
         for _, _, d in self.G.edges(data=True):
             d["_svc"] = is_service(d.get("highway"))
             d["_cost"] = float(d["travel_time"]) * (SERVICE_ROUTING_PENALTY if d["_svc"] else 1.0)
         self.index = EdgeIndex(ox.project_graph(self.G))
+        h = hashlib.sha1()
+        for u, v, k, d in sorted(self.G.edges(keys=True, data=True), key=lambda e: (e[0], e[1], e[2])):
+            h.update(f"{u},{v},{k},{d['_cost']:.4f};".encode())
+        self.fingerprint = h.hexdigest()[:16]
+        self.cache_hits = 0
+        self.backend = backend or default_backend()
+        if self.backend not in BACKENDS:
+            raise ValueError(f"backend must be one of {BACKENDS}, got {self.backend!r}")
+        if self.backend == "cpp" and _fastroute is None:
+            log.warning("platetrail._fastroute is not built; routing falls back to the Python backend")
+            self.backend = "python"
+        self._csr = self._build_csr() if self.backend == "cpp" else None
+
+    def _build_csr(self):
+        """CSR copy of the graph for the C++ search: nodes in graph order, each node's neighbours in adjacency
+        (insertion) order, parallel edges collapsed to their minimum _cost, exactly as networkx sees them."""
+        nodes = list(self.G.nodes)
+        index = {n: i for i, n in enumerate(nodes)}
+        indptr, indices, weights = [0], [], []
+        for n in nodes:
+            for nbr, keyed in self.G._adj[n].items():
+                indices.append(index[nbr])
+                weights.append(min(d["_cost"] for d in keyed.values()))
+            indptr.append(len(indices))
+        graph = _fastroute.Graph(np.asarray(indptr, dtype=np.int64), np.asarray(indices, dtype=np.int32),
+                                 np.asarray(weights, dtype=np.float64))
+        return graph, nodes, index
 
     # ---- snapping ------------------------------------------------------------------
 
@@ -194,7 +256,39 @@ class Router:
             out.append((rev, 0.0, 1.0 - p.fraction, rev[0]))
         return out
 
-    def route_points(self, o: EdgePoint, d: EdgePoint, depart: datetime) -> Route:
+    def route_points(self, o: EdgePoint, d: EdgePoint, depart: datetime, use_cache: bool = True) -> Route:
+        if not use_cache:  # e.g. "your week": user-entered places must not be persisted anywhere
+            return self._compute(o, d, depart)
+        key = f"route:{self.fingerprint}:{o.edge}:{o.fraction:.6f}:{d.edge}:{d.fraction:.6f}"
+        cache = get_cache()
+        hit = cache.get(key)
+        if hit is not MISSING:
+            self.cache_hits += 1
+            edges, coords = hit
+            return Route(o, d, depart, edges, coords)
+        route = self._compute(o, d, depart)
+        cache.set(key, (route.edges, route.coords), ttl_s=7 * 86400)
+        return route
+
+    def _search_cpp(self, exits, entries) -> tuple[float, list]:
+        """C++ backend: the same virtual-origin/destination search as _compute's networkx call."""
+        graph, nodes, index = self._csr
+
+        def collapse(items):  # parallel virtual edges -> one edge at minimum cost, first-insertion order
+            out: dict[int, float] = {}
+            for e, f0, f1, node in items:
+                c = self._data(e)["_cost"] * (f1 - f0)
+                i = index[node]
+                out[i] = min(out[i], c) if i in out else c
+            return list(out.items())
+
+        found = graph.shortest_path(collapse(exits), collapse(entries))
+        if found is None:
+            raise nx.NetworkXNoPath
+        cost, path = found
+        return cost, [_O, *(nodes[i] for i in path), _D]
+
+    def _compute(self, o: EdgePoint, d: EdgePoint, depart: datetime) -> Route:
         exits, entries = self._exits(o), self._entries(d)
         G = self.G
         try:
@@ -203,7 +297,10 @@ class Router:
             for e, f0, f1, node in entries:
                 G.add_edge(node, _D, key=hash((e, "n")), _cost=self._data(e)["_cost"] * (f1 - f0), _via=(e, f0, f1))
             try:
-                cost, path = nx.single_source_dijkstra(G, _O, _D, weight="_cost")
+                if self.backend == "cpp":
+                    cost, path = self._search_cpp(exits, entries)
+                else:
+                    cost, path = nx.single_source_dijkstra(G, _O, _D, weight="_cost")
             except nx.NetworkXNoPath as err:
                 raise NoRoute(f"no route from {o} to {d}") from err
             first = min(G[_O][path[1]].values(), key=lambda a: a["_cost"])["_via"]
@@ -246,6 +343,7 @@ class Router:
             coords = [(g.x, g.y)]
         return Route(o, d, depart, edges, coords)
 
-    def route(self, origin: tuple[float, float], dest: tuple[float, float], depart: datetime) -> Route:
+    def route(self, origin: tuple[float, float], dest: tuple[float, float], depart: datetime,
+              use_cache: bool = True) -> Route:
         """origin/dest are (lon, lat)."""
-        return self.route_points(self.snap_point(*origin), self.snap_point(*dest), depart)
+        return self.route_points(self.snap_point(*origin), self.snap_point(*dest), depart, use_cache)
