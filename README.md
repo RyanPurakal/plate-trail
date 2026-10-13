@@ -8,9 +8,12 @@ the real road network, direction-aware camera matching, and a sensor noise
 model. See [the proposal](KTP-Capstone-Proposal-Plate-Trail.md),
 [architecture](docs/architecture.md) and [findings](docs/findings.md).
 
+Demo run #8 (4-week commuter, plate `ZZ F33PQR`). These screenshots are also
+the presentation fallback if the live demo fails:
+
 | What the cameras saw | What actually happened |
 |---|---|
-| ![Read log as recorded: reads and the implied sequence](docs/figures/frontend_saw.jpg) | ![Ground truth: true routes and every camera pass](docs/figures/frontend_happened.jpg) |
+| ![Read log as recorded: 55 reads, the implied sequence, and the naive HOME?/WORK? guess](docs/figures/demo_run8_saw.jpg) | ![Ground truth: true routes, every camera pass, true home and work, and the guess's error](docs/figures/demo_run8_happened.jpg) |
 
 ## Ethics statement
 
