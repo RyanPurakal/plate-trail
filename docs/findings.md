@@ -446,6 +446,28 @@ On the hypothetical 92-camera network, 7-day retention still leaves 98% of drive
 p = 4 and 75% with a work estimate. Retention limits only bite when they are
 very short.
 
+**Retention over a 12-week history** (seed 0, one run per network, 1,000
+drivers; 2026-10-13). A retention row is computed only when the limit is
+shorter than the history (`compare` in `analysis/policies.py`). A 1-week
+population therefore has only the 1-day row, and the 7-day rows above are
+already measured over 4 weeks. Over 12 weeks every limit up to 28 days can be
+measured:
+
+| Retention | Reads queryable (today / hypothetical +92) | Work estimated (today / +92) | Unique, p = 2 (today / +92) | Unique, p = 4 (today / +92) | Home ≤ 1 km, of estimated (today / +92) | Home ≤ 1 km, of all drivers (today / +92) |
+|---|---|---|---|---|---|---|
+| No limit (12 weeks) | 80,321 / 456,627 | 68% / 99% | 84% / 89% | 100% / 100% | 18% / 48% | 18% / 48% |
+| Keep 28 days | 27,061 / 153,193 | 43% / 94% | 82% / 88% | 98% / 100% | 17% / 47% | 17% / 47% |
+| Keep 14 days | 13,639 / 76,904 | 33% / 85% | 78% / 87% | 89% / 100% | 18% / 45% | 17% / 45% |
+| Keep 7 days | 6,889 / 38,701 | 22% / 74% | 66% / 80% | 67% / 98% | 19% / 45% | 15% / 45% |
+| Keep 1 day | 829 / 4,619 | 0% / 0% | 13% / 36% | 4% / 41% | — / — | 0% / 0% |
+
+The 7-day row over 12 weeks matches the 7-day row over 4 weeks (p = 4
+unicity 67% vs. 66% on today's network), as it should: the limit keeps the
+same last 7 days either way. What a longer history adds is in the no-limit
+row: work estimates rise from 45% (4 weeks) to 68% (12 weeks) on today's
+network. So retention limits matter more the longer the alternative history
+is.
+
 Population #1 (1 week, OSM) follows the same pattern: no limits
 76% (76%–78%) home estimated and 66% (66%–68%) unique at p = 2;
 ±12 h window 3% (3%–5%) and 22% (20%–24%); 1-day retention
@@ -476,10 +498,10 @@ Population #1 (1 week, OSM) follows the same pattern: no limits
   within 1 km, whether counted over drivers with an estimate or over all
   drivers (both 43% vs. 17%).
 
-**Caveats.** Retention beyond the simulated period (up to 4 weeks here) equals
-"no limits", so the proposal's 3-year retention is not simulated directly.
-Longer histories can only add evidence, so the 4-week row is a lower bound
-for long retention. The search-window incident time is random per driver,
+**Caveats.** Retention beyond the simulated period (up to 12 weeks here)
+equals "no limits", so the proposal's 3-year retention is not simulated
+directly. Longer histories can only add evidence, so the 12-week no-limit row
+is a lower bound for long retention. The search-window incident time is random per driver,
 which favours no particular part of the week.
 
 ## F8. Robustness: the conclusions survive every matching and noise assumption

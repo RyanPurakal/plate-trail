@@ -12,7 +12,7 @@ Things noted while finishing the project, for a decision or follow-up. None of t
 
 3. **Confidence measures consistency, not proximity.** A "high" home estimate is 3.6 km off at the median on the OSM network. The UI and F6 say so. *Option:* fold camera-to-cluster distance into confidence, or show the radius more prominently. *Recommendation:* leave the label honest and explained, as it is now.
 
-4. **Multi-year retention is not simulated.** The proposal compares 7 days with 3 years. Simulations run up to 4 weeks, and retention beyond the period equals "no limits". Longer histories can only add evidence, so the 4-week numbers are a lower bound for long retention. *Option:* a 52-week run for about 100 drivers (hours of compute) to show the trend. *Recommendation:* state it as a lower bound (done in F7).
+4. **Multi-year retention is not simulated.** The proposal compares 7 days with 3 years. Simulations run up to 12 weeks (F7), and retention beyond the period equals "no limits". Longer histories can only add evidence, so the 12-week numbers are a lower bound for long retention. *Option:* a 52-week run for about 100 drivers (hours of compute) to show the trend. *Recommendation:* state it as a lower bound (done in F7).
 
 5. **Unicity crowd size.** Simulated crowds are 1,000 cars. Edison PD's portal reports 518,797 "unique plate reads" in 30 days, and it isn't clear whether that means distinct plates or reads. *Option:* a 10,000-driver population to extend the crowd-size curve (roughly 10× the population #2 runtime). *Recommendation:* report the shares as upper bounds (done in F5).
 

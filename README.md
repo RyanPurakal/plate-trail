@@ -204,7 +204,7 @@ Values are seed 0, with the 3-seed range in parentheses. "Homes within 1 km" is 
 | Search window ±12 h | 3% | 38% (17–38%) | 1% (0–1%) | 7% (5–7%) | 24% (22–24%) | 6% (4–6%) |
 | Aggregate counts only | 0% | — | 0% | 0% | 0% | 0% |
 
-On the hypothetical 92-camera network (4 weeks), 7-day retention still leaves 98% unique at *p* = 4 (3 seeds: 98–99%). It also places 39% of all drivers' homes within 1 km (37–46%), which is 40% of the 98% it can place (38–47%) ([F7](docs/findings.md)). Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
+On the hypothetical 92-camera network (4 weeks), 7-day retention still leaves 98% unique at *p* = 4 (3 seeds: 98–99%). It also places 39% of all drivers' homes within 1 km (37–46%), which is 40% of the 98% it can place (38–47%) ([F7](docs/findings.md)). Over a 12-week history (seed 0), keeping 28 days still leaves 98% unique at *p* = 4 (100% with no limit), and keeping 7 days leaves 67%; work estimates fall from 68% (no limit) to 43% (28 days) and 22% (7 days) ([F7](docs/findings.md)). A retention row is only computed when the limit is shorter than the history, so the 7-day rows are never measured on 1-week data. Retention longer than the simulated history equals "no limits", so multi-year retention is not measured directly; the 12-week row is a lower bound for it.
 
 ### Robustness
 
