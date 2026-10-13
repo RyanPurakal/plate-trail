@@ -42,10 +42,10 @@ Agreement at the level of counts is therefore reasonable for New Brunswick
 and over-counted for Edison PD specifically. Results are reported on the
 OSM network as mapped.
 
-## Density scenario: Edison's 92 approved cameras
+## Hypothetical density scenario: Edison's 92 approved cameras
 
 The locations of the 92 newly approved Edison cameras are not public, so
-`platetrail.sim.scenarios` adds *N* synthetic cameras at simulation time
+every "+92" result uses a **hypothetical, simulated placement**: `platetrail.sim.scenarios` adds *N* synthetic cameras at simulation time
 (`extra_cameras` in `POST /simulate`, `--extra-cameras` on the runner CLI).
 
 **Placement (assumption):**
@@ -57,11 +57,11 @@ The locations of the 92 newly approved Edison cameras are not public, so
 - seeded per run.
 
 Synthetic cameras are stored with the run (`runs.scenario`), never in the
-camera table. They show in the UI as lavender "scenario" arrows.
+camera table. They show in the UI as lavender arrows labelled "hypothetical camera (simulated placement)".
 
 **Effect on the demo driver** (4-week commuter, seed 18):
 
 | Cameras | Camera passes | Captures | Reads | Distinct cameras read |
 |---|---|---|---|---|
 | OSM only (56) | 88 | 60 | 55 | 6 |
-| OSM + 92 scenario | 492 | 332 | 308 | 20 |
+| OSM + 92 hypothetical | 492 | 332 | 308 | 20 |

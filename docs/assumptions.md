@@ -13,7 +13,7 @@ Every modelling choice that is not measured is listed here, with where it lives 
 | Maximum difference between travel bearing and camera direction | 45° | `sim/matcher.py` | F8: 30° / 60° |
 | A lot camera sees only arrivals through the entrance it faces (`lot_entrance=access_road`) | access road | `sim/matcher.py`, `roads/lots.py` | F2 lot-event counts; F8: `lot events: all cameras` |
 | A camera snaps to a road within 50 m, preferring a parallel road within 10 m more; a divided road's opposite carriageway is snapped within 30 m | 50 / 10 / 30 m | `roads/snap.py` | F1 model history |
-| Edison's 92 approved cameras sit on arterials, length-weighted, at least 300 m apart (locations are not public) | scenario | `sim/scenarios.py` | F5–F8 compare OSM vs. +92 |
+| Edison's 92 approved cameras (hypothetical placement; real locations are not public) sit on arterials, length-weighted, at least 300 m apart, one direction each, drawn per seed | scenario | `sim/scenarios.py` | F5–F8 compare OSM vs. +92 |
 | Mobile ALPR (patrol cars) is not modelled | — | — | Limitation |
 
 ## Roads and routing

@@ -260,7 +260,7 @@ export default function Home() {
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 #{r.id} · {templateName(r.generator)} · {r.weeks} wk · seed {r.seed} · {r.summary.reads} reads
-                {r.extra_cameras ? ` · +${r.extra_cameras} cams` : ""}
+                {r.extra_cameras ? ` · +${r.extra_cameras} hypothetical cams` : ""}
                 {r.stale ? " · stale" : ""}
               </option>
             ))}
@@ -285,9 +285,9 @@ export default function Home() {
                      onChange={(e) => setForm({ ...form, seed: Number(e.target.value) })} />
               <span className="unit">seed</span>
               <input type="number" min={0} max={200} value={form.extra} aria-label="extra cameras"
-                     title="Density scenario: synthetic cameras added in Edison (e.g. 92 approved)"
+                     title="Hypothetical cameras added in Edison (e.g. 92, the approved count). Locations are not public, so placement is simulated: arterials chosen in proportion to length, at least 300 m apart, one direction each."
                      onChange={(e) => setForm({ ...form, extra: Number(e.target.value) })} />
-              <span className="unit">+cams</span>
+              <span className="unit">+hypothetical cams</span>
               <button disabled={busy}>{busy ? jobLabel(job) : "run"}</button>
             </form>
           </details>
@@ -413,7 +413,7 @@ export default function Home() {
           <span><i className="lg-arrow lg-svc" />service street</span>
           <span><i className="lg-undir" />no direction</span>
           <span><i className="lg-guess" />naive guess</span>
-          {detail?.run.scenario && <span><i className="lg-arrow lg-scn" />scenario camera (+{detail.run.scenario.extra_cameras})</span>}
+          {detail?.run.scenario && <span><i className="lg-arrow lg-scn" />hypothetical camera, simulated placement (+{detail.run.scenario.extra_cameras})</span>}
           {mode === "happened" && <span><i className="lg-truthpin" />true home / work</span>}
         </div>
         <div className="mode-stamp">{mode === "saw" ? "RECORDED" : "GROUND TRUTH"}</div>

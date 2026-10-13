@@ -6,7 +6,7 @@ Module-by-module detail moved from the original README: camera ETL, road network
 
 See [camera_sources.md](camera_sources.md) for sources, the
 OSM-vs-agency count cross-check (`python -m platetrail.etl.cross_check`), and
-the density scenario (`extra_cameras`).
+the hypothetical density scenario (`extra_cameras`: synthetic cameras with a simulated placement).
 
 ```bash
 cd backend

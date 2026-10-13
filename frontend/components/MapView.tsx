@@ -136,7 +136,7 @@ function popupHtml(p: CameraProps & { bearing?: number }, passes: Pass[], reads:
   const mine = passes.filter((x) => x.camera_label === label);
   const rd = reads.filter((x) => x.camera_label === label);
   const kind = { public_road: "public road", private_lot: "private lot", service_road: "service street",
-    scenario: "scenario camera (synthetic placement)" }[p.camera_kind];
+    scenario: "hypothetical camera (simulated placement on an Edison arterial)" }[p.camera_kind];
   const facing = p.has_direction ? `faces ${(p.directions_deg ?? [p.bearing]).join(" / ")}°` : "no direction tag";
   const flags = [p.snap_ambiguous && "snap ambiguous", p.direction_ambiguous && "direction ambiguous"].filter(Boolean);
   const lines = [

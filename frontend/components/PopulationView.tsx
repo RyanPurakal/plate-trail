@@ -97,7 +97,7 @@ export default function PopulationView() {
         <select id="pop" value={pid ?? ""} onChange={(e) => setPid(Number(e.target.value))}>
           {pops.map((p) => (
             <option key={p.id} value={p.id}>
-              #{p.id} · {p.drivers} drivers · {p.weeks} wk · {p.generator}{p.extra_cameras ? ` · +${p.extra_cameras} cams` : ""}
+              #{p.id} · {p.drivers} drivers · {p.weeks} wk · {p.generator}{p.extra_cameras ? ` · +${p.extra_cameras} hypothetical cams` : ""}
               {p.stale ? " · stale" : ""}
             </option>
           ))}
@@ -111,6 +111,11 @@ export default function PopulationView() {
             <b>{pop.drivers}</b> synthetic drivers over <b>{pop.weeks}</b> week{pop.weeks > 1 ? "s" : ""}: median{" "}
             <b>{pop.summary.reads_per_driver_median}</b> reads per driver; <b>{pop.summary.drivers_never_read}</b> never read.
           </p>
+          {pop.extra_cameras > 0 && (
+            <div className="nb-note">
+              Includes {pop.extra_cameras} hypothetical cameras. Edison's 92 approved cameras have no public locations, so this placement is simulated: arterial roads (trunk to tertiary) chosen in proportion to length, at least 300 m from any other camera, each reading one direction, drawn per seed.
+            </div>
+          )}
         </section>
       )}
 
@@ -134,7 +139,7 @@ export default function PopulationView() {
         {policies ? (
           table ? (
             <table className="policy-table">
-              <thead><tr><th>Policy</th><th>Reads</th><th>Home ≤1 km</th><th>Work est.</th><th>Unique p2</th><th>p4</th></tr></thead>
+              <thead><tr><th>Policy</th><th>Reads</th><th>Home ≤1 km (of all drivers)</th><th>Work est.</th><th>Unique p2</th><th>p4</th></tr></thead>
               <tbody>
                 {policies.map((r) => (
                   <tr key={r.policy}>
@@ -150,7 +155,7 @@ export default function PopulationView() {
             <>
               <BarChart title="Drivers singled out by 2 hourly sightings" selected={selected} onSelect={setSelected}
                         rows={shown.map((r) => ({ key: r.policy, label: POLICY_LABELS[r.policy] ?? r.policy, value: r.unicity_p2 }))} />
-              <BarChart title="Drivers whose home the engine places within 1 km" selected={selected} onSelect={setSelected}
+              <BarChart title="Drivers whose home the engine places within 1 km (share of all drivers)" selected={selected} onSelect={setSelected}
                         rows={shown.map((r) => ({ key: r.policy, label: POLICY_LABELS[r.policy] ?? r.policy, value: r.engine_home.within_1km_of_all }))} />
             </>
           )

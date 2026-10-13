@@ -31,13 +31,15 @@ Neither side usually backs its claim with real camera positions and measured num
 
 All results come from synthetic drivers on the real camera network. Details and caveats are in [docs/findings.md](docs/findings.md).
 
+**About the 92-camera network.** Edison approved 92 more Flock cameras, but their locations are not public. Every "+92" result in this project uses a **hypothetical, simulated placement**: 92 synthetic cameras on Edison arterials (trunk, primary, secondary and tertiary roads), chosen with probability proportional to road length, at least 300 m from every real and other synthetic camera, each reading one travel direction, and drawn anew for each seed (`sim/scenarios.py`). Real locations would change these results.
+
 - **Coverage is sparse today.** A typical driver is read 5 times a week (interquartile range 3–9). About 59% of a driver's reads come from a single camera, and 7% of drivers are never read in a week.
 - **Even so, a few sightings identify a car.** In a crowd of 1,000, two (camera, hour) sightings single out 78% of the drivers who have two (3 seeds: 78–79%), and four single out 99.8% of those with four. With four weeks of history, 99% of all drivers are unique at four sightings (3 seeds: 98–99%).
-- **Where you live is camera-limited; your schedule is not.** On today's network the inference engine places home no better than a naive guess. On the 271 drivers both methods can place, the median error is 4.02 km for the engine and 4.48 km for the baseline, but the median per-driver difference is 0 km: the engine is closer for 91 drivers, farther for 88, and at the same spot for 92. Its strength is the schedule: 92% of the routines that pass a camera (3 seeds: 92–95%) are recovered as regular, timed patterns. With Edison's 92 approved cameras (simulated placement), 50% of homes are placed within 1 km. That is both the share of drivers with an estimate and the share of all drivers, because all 300 get one (3 seeds: 49–50%).
+- **Where you live is camera-limited; your schedule is not.** On today's network the inference engine places home no better than a naive guess. On the 271 drivers both methods can place, the median error is 4.02 km for the engine and 4.48 km for the baseline, but the median per-driver difference is 0 km: the engine is closer for 91 drivers, farther for 88, and at the same spot for 92. Its strength is the schedule: 92% of the routines that pass a camera (3 seeds: 92–95%) are recovered as regular, timed patterns. With a hypothetical placement of Edison's 92 approved cameras, 50% of homes are placed within 1 km. That is both the share of drivers with an estimate and the share of all drivers, because all 300 get one (3 seeds: 49–50%).
 - **Policies differ a lot.**
   - Short search windows (±12 h around an incident) and aggregate-only release remove most of what can be inferred.
   - Rounding timestamps to the hour changes almost nothing.
-  - One week of the denser network reveals more than four weeks of today's.
+  - One week of the hypothetical 92-camera network reveals more than four weeks of today's.
 
 ## What it does
 
@@ -60,7 +62,7 @@ All results come from synthetic drivers on the real camera network. Details and 
 
 | Component | Status |
 |---|---|
-| Camera ETL (OSM / DeFlock), dedupe, agency count cross-check, density scenario | ✅ |
+| Camera ETL (OSM / DeFlock), dedupe, agency count cross-check, hypothetical density scenario | ✅ |
 | Road network, direction-aware snapping, lot / service-road cameras | ✅ |
 | NHTS-based routine generator (template generator kept as a fallback) | ✅ |
 | Routing, direction-aware matching, sensor noise model | ✅ |
@@ -153,7 +155,7 @@ Rerun the data steps in that order: reloading cameras clears their snaps, so `ru
 
 Values are seed 0. Parentheses give the range over seeds 0, 1 and 2.
 
-| Metric | Naive baseline | Inference engine | Baseline, +92 cameras | Engine, +92 cameras |
+| Metric | Naive baseline | Inference engine | Baseline, +92 hypothetical cameras | Engine, +92 hypothetical cameras |
 |---|---|---|---|---|
 | **Home error, median, on drivers both methods place** (n = 271; +92: 300) | 4.48 km (4.36–4.63) | **4.02 km** (3.75–4.02) | 1.02 km (1.02–1.11) | **1.00 km** (0.99–1.01) |
 | Per driver: engine closer / farther / same spot | | 91 / 88 / 92 | | 142 / 134 / 24 |
@@ -179,7 +181,7 @@ The importer is built and verified on synthetic Timeline exports. Sixty drivers 
 
 Each cell is the share of eligible drivers who are unique, then the share of all drivers. "Eligible" means at least *p* distinct (camera, hour) points; for *p* = 4 in one week on today's network that is 655 of 1,000 drivers. Values are seed 0, with the 3-seed range in parentheses.
 
-| Sightings known (*p*) | 1 week, OSM | 4 weeks, OSM | 1 week, +92 cameras | 4 weeks, +92 cameras |
+| Sightings known (*p*) | 1 week, OSM | 4 weeks, OSM | 1 week, +92 hypothetical | 4 weeks, +92 hypothetical |
 |---|---|---|---|---|
 | 1 | 12% / 11% (12–15 / 11–14) | 12% / 12% (12–14 / 12–14) | 9% / 9% (9–11 / 9–11) | 9% / 9% (9–11 / 9–11) |
 | 2 | 78% / 66% (78–79 / 66–68) | 84% / 84% (83–84 / 82–84) | 81% / 81% (81–85 / 81–84) | 89% / 89% (89–90 / 89–90) |
@@ -202,7 +204,7 @@ Values are seed 0, with the 3-seed range in parentheses. "Homes within 1 km" is 
 | Search window ±12 h | 3% | 38% (17–38%) | 1% (0–1%) | 7% (5–7%) | 24% (22–24%) | 6% (4–6%) |
 | Aggregate counts only | 0% | — | 0% | 0% | 0% | 0% |
 
-On the denser network (4 weeks, +92 cameras), 7-day retention still leaves 98% unique at *p* = 4 (3 seeds: 98–99%). It also places 39% of all drivers' homes within 1 km (37–46%), which is 40% of the 98% it can place (38–47%) ([F7](docs/findings.md)). Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
+On the hypothetical 92-camera network (4 weeks), 7-day retention still leaves 98% unique at *p* = 4 (3 seeds: 98–99%). It also places 39% of all drivers' homes within 1 km (37–46%), which is 40% of the 98% it can place (38–47%) ([F7](docs/findings.md)). Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
 
 ### Robustness
 
@@ -214,7 +216,7 @@ One week, seed 0. In one week the engine places 215 of the 300 homes under the d
 |---|---|---|---|---|
 | Defaults | 3.99 km | 17.7% (n = 215) | 13% | 74% |
 | Range across all 10 assumption changes | 3.70–4.22 km | 16.7–21.6% | 12–14% | 60–76% |
-| +92 scenario cameras | 1.14 km | 44.7% (n = 293) | 44% | 91% |
+| +92 hypothetical cameras | 1.14 km | 44.7% (n = 293) | 44% | 91% |
 
 Camera density changes the results far more than any single modelling assumption. The largest assumption effect is a strict 30° matching tolerance (unicity 74% → 60%).
 
@@ -230,7 +232,7 @@ Every modelling assumption is labelled in the code and listed in [docs/assumptio
 - Routing is free-flow fastest path, with no congestion or personal habit.
 - Misreads are look-alike swaps only, which probably understates their effect.
 - Mobile ALPR (patrol cars) is not modelled.
-- The 92 new cameras' locations are not public, so their placement is simulated.
+- The 92 new cameras' locations are not public, so every "+92" result uses a hypothetical, simulated placement (see the note under Headline results).
 - The results describe this camera network, not ALPR everywhere.
 
 Open items and suggested follow-ups are in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md).
@@ -270,7 +272,7 @@ python scripts/validate_synthetic_timeline.py --drivers 60 --weeks 4            
 | [docs/assumptions.md](docs/assumptions.md) | every modelling assumption, where it lives, how it was tested |
 | [docs/architecture.md](docs/architecture.md) | system diagram, module map, data flow |
 | [docs/technical_reference.md](docs/technical_reference.md) | ETL, snapping, matching, generators, noise, API, frontend |
-| [docs/camera_sources.md](docs/camera_sources.md) | sources, count cross-check, density scenario |
+| [docs/camera_sources.md](docs/camera_sources.md) | sources, count cross-check, hypothetical density scenario |
 | [docs/real_data_validation.md](docs/real_data_validation.md) | exporting and validating your own Timeline |
 | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) | open decisions and follow-ups |
 | [Plate-Trail-Proposal.md](Plate-Trail-Proposal.md) | the original proposal |
