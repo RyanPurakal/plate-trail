@@ -8,6 +8,10 @@ the real road network, direction-aware camera matching, and a sensor noise
 model. See [the proposal](KTP-Capstone-Proposal-Plate-Trail.md),
 [architecture](docs/architecture.md) and [findings](docs/findings.md).
 
+| What the cameras saw | What actually happened |
+|---|---|
+| ![Read log as recorded: reads and the implied sequence](docs/figures/frontend_saw.jpg) | ![Ground truth: true routes and every camera pass](docs/figures/frontend_happened.jpg) |
+
 ## Ethics statement
 
 From the proposal:
@@ -39,7 +43,7 @@ This is the first vertical slice (about a third of the proposal).
 | Routine generator from NHTS trip diaries | 🔲 Planned (interface + stub) |
 | Stored runs: ground truth + noisy read log | ✅ Built |
 | API: `/cameras`, `/simulate`, `/runs`, `/runs/{id}` | ✅ Built |
-| Frontend: map, routes, reads, read-log table, "cameras saw vs. what happened" | 🚧 In progress |
+| Frontend: map, routes, reads, read-log table, "cameras saw vs. what happened", run picker, simulate form | ✅ Built |
 | Naive home/work guess from the read log | 🔲 Stretch |
 | Celery queue + Redis cache | 🔲 Planned (`SimulationRunner` seam) |
 | Population simulation, unicity analysis | 🔲 Planned |
@@ -324,6 +328,28 @@ time zone. Camera references store the id and the stable OSM id
 renumbers cameras) doesn't delete stored runs. Runs are reproducible: the
 same request on the same data stores the same run. `SimulationRunner` is the
 seam for a future Celery-backed runner; `LocalRunner` runs synchronously.
+
+## Frontend
+
+Next.js + MapLibre on `:3000` (OpenFreeMap dark basemap, OpenStreetMap
+data, no API key). Pick a stored run, then switch between:
+
+- **What the cameras saw:** only the read log as recorded. Each read is a
+  mark at its camera (size = count), joined in time order by a dashed
+  "implied sequence": everything an analyst would have. The table lists
+  each read with recorded time, camera and plate (`ZZ` state shown).
+- **What actually happened:** the true routes and every camera passed, as
+  rings: read, captured but lost (missed or camera down), or skipped for
+  wrong direction. The table lists every pass with its outcome, including
+  misreads.
+
+Day chips filter both views; clicking a table row flies to that camera.
+Cameras are arrows pointing the way they face: bone = public road, blue =
+private lot, orange = service street; hollow circle = no direction.
+
+MapLibre GL 6 loads its web worker from a path that Next.js bundling
+breaks, so `npm run build`/`dev` copies the worker into `public/` first
+(`scripts/copy-maplibre-worker.mjs`).
 
 ## API
 

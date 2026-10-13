@@ -20,3 +20,6 @@ cache/
 .env
 .DS_Store
 *.tsbuildinfo
+
+# Copied from node_modules at build time
+frontend/public/maplibre-gl-worker.mjs

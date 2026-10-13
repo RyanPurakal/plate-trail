@@ -76,7 +76,7 @@ flowchart LR
 | Routing, matcher, noise, driver simulation, runner | `backend/platetrail/sim/` | Built |
 | API | `backend/platetrail/api/` | Built |
 | Schema (ordered SQL migrations) | `backend/platetrail/sql/` | Built |
-| Frontend | `frontend/` | In progress |
+| Frontend | `frontend/` | Built |
 | Celery queue, Redis cache, workers, results store | — | Planned |
 
 ## Data flow for one simulation
