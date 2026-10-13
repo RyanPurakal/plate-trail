@@ -172,10 +172,10 @@ redone with NHTS routines and with the density scenarios.
 
 ## F3. A naive home/work guess: half of drivers can't be guessed in a week, and the guess is mostly the top camera
 
-> **Naive baseline, not the planned inference engine.** This measures the
+> **Naive baseline, not the inference engine.** This measures the
 > simplest thing an analyst could do with a read log. The inference engine
-> (HDBSCAN anchors, schedule reconstruction, anomaly detection) is planned
-> and will be compared against this.
+> (HDBSCAN anchors, schedule reconstruction, anomaly detection) is compared
+> against it in F6.
 
 **Method** (`backend/platetrail/inference/naive.py`). Using only the noisy read
 log (camera + recorded time), days with at least 2 reads are used:
@@ -266,3 +266,209 @@ means slightly fewer reads, spread over more cameras. The headline findings
 don't depend on the routine source: about one driver in ten is never read in
 a week, half can't be placed even naively, and naive guesses are a few
 kilometres off, mostly at the driver's top camera.
+
+## F5. Unicity: two hourly sightings single out most drivers, and density barely changes that
+
+**Setup.** Stored populations of 1,000 NHTS drivers each, seed 0, default
+matcher and noise (`python -m platetrail.population`, 2026-10-13). A point is
+(camera, hour). Identity is the recorded plate. A driver is *unique* if *p*
+random points from their own trace match no other recorded plate
+(`analysis/unicity.py`, after de Montjoye et al. 2013). "Eligible" drivers
+have at least *p* distinct points. Unicity is reported two ways: among
+eligible drivers, and as a share of **all** drivers (unique × eligible). The
+second is what the UI charts.
+
+| Population | Reads per driver (median) | Never read |
+|---|---|---|
+| #1: 1 week, OSM cameras | 5 | 7.4% |
+| #2: 4 weeks, OSM cameras | 22 | 0% |
+| #3: 1 week, OSM + 92 scenario cameras | 34.5 | 0.1% |
+
+**Crowd of 1,000, hourly points.** Each cell is unique among eligible / share of all drivers.
+
+| *p* | #1 (1 wk, OSM) | #2 (4 wk, OSM) | #3 (1 wk, +92) |
+|---|---|---|---|
+| 1 | 12% / 11% | 12% / 12% | 9% / 9% |
+| 2 | 78% / 66% | 84% / 84% | 81% / 81% |
+| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% |
+| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% |
+
+**Crowd size** (#1, *p* = 2, unique among eligible): 97% in a crowd of 100,
+78% in 1,000. **Time resolution** (#1, *p* = 2, share of all drivers): 66% at
+hourly points, 81% at 15-minute points.
+
+**What it says.**
+
+- **Two sightings are almost enough; four always are.** If plates were hashed
+  or pseudonymized, knowing that a car passed two cameras in two particular
+  hours singles out about 80% of drivers in a crowd of 1,000. Four sightings
+  single out essentially everyone who has four.
+- **With sparse cameras the limit is having enough reads, not being
+  distinguishable.** In one week on the OSM network only 65% of drivers
+  even have 4 points, which is why the all-drivers share drops at high *p* in
+  population #1. Four weeks of retention (#2) or the 92 extra cameras (#3)
+  remove that limit: almost every driver has 8+ points and is unique.
+- **Unicity falls as the crowd grows** (97% → 78% from 100 to 1,000 cars),
+  and Edison PD's portal reports 518,797 "unique plate reads" in 30 days.
+  Simulated shares are therefore **upper bounds** for the real crowd. The
+  *p* = 4 result is so close to 100% that it is unlikely to drop much.
+
+**Caveats.** Random points from the trace are a generous model of what an
+adversary knows. Real side information (a known commute time) is less
+random and may be more or less identifying. Misreads split a car into
+fragments, which this measure counts as non-matching.
+
+## F6. The inference engine places home a little better than the naive baseline, needs the 92 cameras to be accurate, and its confidence is about consistency
+
+**Setup.** `backend/scripts/evaluate_inference.py --drivers 300 --weeks 4`
+(NHTS, seed 0, default noise; 2026-10-13), with and without the 92 scenario
+cameras. Each driver's reads under their true plate go to both methods. Errors
+are against the true home and work (or school) anchors.
+
+| | OSM cameras | OSM + 92 scenario |
+|---|---|---|
+| Reads per driver (median, 4 weeks) | 21 | 138 |
+| **Home**: engine, no estimate / median / p75 error | 0% / 4.21 / 7.57 km | 0% / 1.00 / 1.88 km |
+| Home: naive, no estimate / median / p75 | 10% / 4.48 / 8.62 km | 0% / 1.02 / 2.13 km |
+| Home within 1 km: engine / naive | 17% / 18% | 50% / 49% |
+| **Work** (drivers with a work/school anchor): engine, no estimate / median | 56% / 5.54 km | 5% / 1.21 km |
+| Work: naive, no estimate / median | 9% / 3.50 km | 0% / 1.11 km |
+| Schedule recovered (observable routine trips matched by a regular pass) | 302 / 327 (92%) | 640 / 654 (98%) |
+| Anomalies: precision / recall | 57% / 29% | 50% / 36% |
+| Engine home error by confidence: high / medium / low | 3.60 (n=239) / 5.35 (46) / 5.09 km (14) | 0.95 (283) / 1.38 km (17) / — |
+
+**What it says.**
+
+- **The engine always produces a home estimate, and on the OSM network it is
+  about 4 km off.** That is no closer than the naive guess. Both are bounded
+  by where the cameras are: the nearest camera to a typical home is
+  kilometres away, and stay evidence can only point at cameras.
+- **With the 92 extra cameras, half of drivers' homes are placed within
+  1 km** by either method, and work within about 1.2 km. Density, not
+  cleverness, decides what a read log reveals.
+- **Schedules are what the cameras reveal best.** 92% of routine trips that
+  pass a camera are recovered as a regular pass (same camera, similar time,
+  3+ days) on the OSM network, and 98% with the extra cameras. "This car
+  passes Albany St at about 8:10 on weekdays" is the strongest conclusion the
+  data supports.
+- **Work detection is the engine's weak point on sparse cameras.** It needs a
+  weekday gap of 3–12 h bracketed by reads, and with few cameras 56% of
+  workers never have one. The naive "camera before the longest gap" rule
+  answers more often, and is closer when it does (3.5 km vs. 5.5 km).
+- **Confidence measures consistency, not closeness.** On the OSM network a
+  "high" confidence home is still 3.6 km off at the median. The same camera
+  can appear night after night while sitting far from the home. The UI says
+  so next to every estimate.
+- **Anomaly detection is a rough signal.** About half the flagged reads
+  belong to genuine one-off trips, and about a third of observable one-off
+  trips are flagged.
+
+## F7. Policy comparison: short search windows and aggregation work; rounding to the hour barely helps
+
+**Setup.** `GET /populations/{id}/policies` (`backend/scripts/policy_report.py`,
+2026-10-13) on populations #1–#3 from F5. Each policy transforms the read log
+an analyst could query, then the same measurements run on what remains.
+"Home ≤ 1 km" is the share of **all** drivers whose engine home estimate is
+within 1 km. Unicity is the share of all drivers singled out by 2 or 4
+hourly points.
+
+**Population #2 (4 weeks, OSM cameras).**
+
+| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
+|---|---|---|---|---|---|---|
+| No limits (4 weeks kept) | 26,402 | 99% | 17% | 45% | 84% | 99% |
+| Keep 14 days | 13,196 | 94% | 16% | 33% | 78% | 89% |
+| Keep 7 days | 6,640 | 78% | 15% | 26% | 67% | 66% |
+| Keep 1 day | 785 | 0% | 0% | 0% | 15% | 4% |
+| Round timestamps to the hour (unicity at 15-min points: 97% → 84%) | 26,402 | 99% | 16% | 47% | 84% | 99% |
+| Search window ±36 h around an incident | 2,788 | 43% | 9% | 16% | 56% | 30% |
+| Search window ±12 h | 940 | 3% | 1% | 7% | 24% | 6% |
+| Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+
+**Population #3 (1 week, OSM + 92 cameras).**
+
+| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
+|---|---|---|---|---|---|---|
+| No limits (1 week) | 37,778 | 99% | 43% | 75% | 81% | 98% |
+| Keep 1 day | 4,470 | 0% | 0% | 0% | 32% | 40% |
+| Round to the hour (15-min unicity: 93% → 81%) | 37,778 | 99% | 42% | 77% | 81% | 98% |
+| Search window ±36 h | 14,842 | 72% | 26% | 50% | 76% | 86% |
+| Search window ±12 h | 5,118 | 12% | 4% | 21% | 55% | 50% |
+| Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+
+Population #1 (1 week, OSM) follows the same pattern: no limits 76% home
+estimated and 66% unique at p = 2; ±12 h window 3% and 22%; 1-day retention
+0% and 14% (`data/exports/policy_pop1.txt`).
+
+**What it says.**
+
+- **Retention matters in proportion to how much history it removes.** Going
+  from 4 weeks to 7 days cuts work estimates from 45% to 26% and *p* = 4
+  unicity from 99% to 66%. Home placement stays poor throughout, because on
+  this network it was camera-limited to begin with. A 1-day limit removes
+  almost everything.
+- **Rounding timestamps to the hour changes almost nothing** for inference,
+  and only reduces unicity measured at a finer resolution than the rounding
+  (97% → 84% at 15-minute points). It cannot reduce hourly unicity at all.
+  As a privacy measure it is mostly cosmetic.
+- **Limited search windows are the strongest lever short of aggregation.** A
+  ±12 h window around an incident leaves a few hours of reads per car: home
+  is estimable for 3% of drivers and two-point unicity falls to 24% (OSM).
+  With the denser network the same window still leaves 55% unique, so
+  windows must shrink as camera networks grow.
+- **Aggregate-only release removes per-vehicle inference entirely**, at the
+  cost of every per-vehicle investigative use.
+- **Density outweighs most policies.** One week of the denser network (#3)
+  reveals more than four weeks of the current one (#2): 43% vs. 17% of homes
+  within 1 km.
+
+**Caveats.** Retention beyond the simulated period (up to 4 weeks here) equals
+"no limits", so the proposal's 3-year retention is not simulated directly.
+Longer histories can only add evidence, so the 4-week row is a lower bound
+for long retention. The search-window incident time is random per driver,
+which favours no particular part of the week.
+
+## F8. Robustness: the conclusions survive every matching and noise assumption
+
+**Setup.** `backend/scripts/sensitivity.py --drivers 300 --weeks 1` (NHTS,
+seed 0; 2026-10-13). The same 300 routines are rerun with one assumption
+changed at a time from the defaults ([assumptions.md](assumptions.md)).
+"Home ≤ 1 km" and "unique, p = 2" are shares of all drivers. Unicity is
+measured in this crowd of 300.
+
+| Assumption changed | Reads per driver (median) | Never read | Engine home error (median) | Home ≤ 1 km | Unique, p = 2 |
+|---|---|---|---|---|---|
+| Defaults | 5 | 10% | 3.99 km | 13% | 74% |
+| Tolerance 30° (from 45°) | 3 | 15% | 3.71 km | 13% | 60% |
+| Tolerance 60° | 5 | 10% | 3.99 km | 13% | 74% |
+| Capture oncoming (from rear plate) | 4 | 14% | 3.70 km | 14% | 69% |
+| Undirected cameras capture nothing | 5 | 10% | 3.99 km | 13% | 74% |
+| Ambiguous direction: alternate tag | 5 | 10% | 3.89 km | 13% | 74% |
+| Lot events: every camera at the lot | 5 | 8% | 3.84 km | 13% | 76% |
+| No noise | 5 | 9% | 3.94 km | 13% | 73% |
+| Miss rate 15% (from 5%) | 4 | 10% | 4.22 km | 12% | 74% |
+| Misreads ×3 | 5 | 10% | 3.99 km | 13% | 74% |
+| Downtime ×4 | 5 | 10% | 3.94 km | 12% | 73% |
+| **+92 scenario cameras** | **33** | **0%** | **1.14 km** | **44%** | **91%** |
+
+**What it says.**
+
+- **No single modelling assumption changes the picture.** Across all of them,
+  home error stays at 3.7–4.2 km and about 13% of homes fall within 1 km.
+  The largest effect is a strict 30° tolerance, which loses captures on
+  curved roads (median reads 5 → 3) and lowers two-point unicity from 74% to
+  60%.
+- **Some assumptions don't bind on this network.** All 56 OSM cameras have a
+  direction tag, so the undirected-camera assumption has no effect. Only one
+  lot camera has conflicting tags. Widening the tolerance to 60° adds
+  nothing, because cameras snap to roads that already align with their
+  facing.
+- **Noise is second-order.** Turning noise off or tripling misreads moves
+  nothing measurable at this sample size. Misreads leave the read count
+  unchanged, and the engine ignores reads under other plates.
+- **Camera density dominates.** The 92 scenario cameras multiply reads by
+  six, place 44% of homes within 1 km, and raise two-point unicity to 91%.
+
+**Caveats.** One week and 300 drivers, so differences of a percentage point or
+two are within sampling noise. Free-flow routing and the NHTS-derived
+behaviour are not varied here (see [assumptions.md](assumptions.md)).

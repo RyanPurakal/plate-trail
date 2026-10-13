@@ -1,8 +1,8 @@
 # Architecture
 
-The full planned system from the proposal. **Solid** boxes and arrows are
-built; **dashed** ones are planned. `POST /jobs/simulate` runs on the Celery worker through Redis, with progress
-reporting and route/run caching.
+The full system from the proposal; every component is built. `POST /jobs/simulate` and `POST /jobs/population`
+run on the Celery worker through Redis, with progress reporting and route/run caching. Unicity and policy analyses run
+on request and are cached in Redis; populations are stored in PostGIS.
 
 ```mermaid
 flowchart LR
@@ -23,17 +23,18 @@ flowchart LR
         NHTSETL["NHTS diaries<br/>(routines.nhts_data)"]
     end
 
-    DB[("PostGIS<br/>cameras · road_edges · camera_edges<br/>camera_lots · places · runs · trips<br/>camera_passes · reads · camera_outages")]
+    DB[("PostGIS<br/>cameras · road_edges · camera_edges<br/>camera_lots · places · runs · trips<br/>camera_passes · reads · camera_outages<br/>populations · population_drivers · population_reads")]
 
     %% ---------- app ----------
     FE["Frontend<br/>Next.js + MapLibre"]
-    API["FastAPI<br/>/cameras · /simulate · /runs"]
+    API["FastAPI<br/>/cameras · /simulate · /runs · /jobs<br/>/populations · /yourweek"]
     LOCAL["LocalRunner (in-process)<br/>routines → routing → matching<br/>→ sensor noise → store"]
-    REDIS[("Redis<br/>broker · route cache · run cache")]
+    REDIS[("Redis<br/>broker · route cache · run cache<br/>unicity + policy results")]
     QUEUE["Celery queue<br/>(progress reporting)"]
     SIMW["Simulation worker<br/>routines, routing, camera matching,<br/>sensor noise, read logs"]
-    INFW["Inference + unicity worker<br/>HDBSCAN anchors, schedule, anomalies,<br/>population unicity, policy comparison"]:::planned
-    RESULTS[("Results store<br/>inference, unicity, policy results")]:::planned
+    INFW["Inference + unicity worker<br/>HDBSCAN anchors, schedule, anomalies,<br/>population unicity, policy comparison"]
+    RESULTS[("Results store<br/>population tables (PostGIS)<br/>cached analyses (Redis)")]
+    TIMELINE["Timeline importer (CLI, local only)<br/>realdata: Google Timeline → trips → scores"]
 
     OSM --> CAMETL
     OSM --> PLACES
@@ -56,12 +57,11 @@ flowchart LR
     REDIS --> QUEUE
     API --> QUEUE
     QUEUE --> SIMW
-    SIMW -.-> INFW
+    SIMW --> INFW
     SIMW --> DB
-    INFW -.-> RESULTS
-    RESULTS -.-> API
-
-    classDef planned stroke-dasharray: 6 4,fill:#f6f6f6,color:#555;
+    INFW --> RESULTS
+    RESULTS --> API
+    TIMELINE --> SIMW
 ```
 
 ## What runs where
@@ -77,7 +77,10 @@ flowchart LR
 | Frontend | `frontend/` | Built |
 | Celery app, tasks, jobs + run cache | `backend/platetrail/worker.py`, `jobs.py`, `cache.py` | Built |
 | Population runs + unicity | `backend/platetrail/population.py`, `analysis/unicity.py` | Built |
-| Inference engine, policy comparison | — | Planned |
+| Inference engine (stays, HDBSCAN anchors, regular passes, anomalies) | `backend/platetrail/inference/engine.py` | Built |
+| Policy comparison | `backend/platetrail/analysis/policies.py` | Built |
+| "Your week" (session-only, nothing stored) | `backend/platetrail/yourweek.py` | Built |
+| Real-data validation (Google Timeline importer, local only) | `backend/platetrail/realdata/` | Built; not yet run on a real file |
 
 ## Data flow for one simulation
 

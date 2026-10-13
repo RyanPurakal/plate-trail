@@ -121,8 +121,8 @@ export default function PopulationView() {
         ) : <div className="nb-note">Computing unicity…</div>}
         <div className="nb-note">
           Unicity (after de Montjoye et al. 2013): if plates were hashed, would p known sightings pick out one car?
-          It falls as the crowd grows. Edison&apos;s cameras read about 519,000 distinct plates a month, far more
-          than any simulated crowd, so these shares are upper bounds.
+          It falls as the crowd grows. Edison PD&apos;s portal reports 518,797 &ldquo;unique plate reads&rdquo; in 30
+          days, far more than any simulated crowd, so these shares are upper bounds.
         </div>
       </section>
 
