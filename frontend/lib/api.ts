@@ -128,6 +128,27 @@ export type Scenario = {
   cameras: { label: string; lon: number; lat: number; directions_deg: number[] }[];
 };
 
+export type EngineAnchor = {
+  lon: number;
+  lat: number;
+  radius_m: number;
+  confidence: "high" | "medium" | "low";
+  support_days: number;
+  possible_days: number;
+  nearest_camera: string;
+  error_m: number | null;
+};
+
+export type Inference = {
+  method: string;
+  reads_used: number;
+  home: EngineAnchor | null;
+  work: EngineAnchor | null;
+  regular: { camera_label: string; minute_of_day: number; days: number; weekdays: number[] }[];
+  anomalies: { time: string; camera_label: string; score: number }[];
+  conclusions: string[];
+};
+
 export type RunDetail = {
   run: RunListItem & {
     match_config: Record<string, string | number>;
@@ -136,6 +157,8 @@ export type RunDetail = {
     scenario: Scenario | null;
   };
   naive_guess: NaiveGuess;
+  inference: Inference;
+  stored?: boolean; // false for "your week" results
   trips: { type: "FeatureCollection"; features: TripFeature[] };
   passes: Pass[];
   reads: Read[];
