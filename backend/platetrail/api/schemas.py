@@ -60,3 +60,28 @@ class SimulateRequest(BaseModel):
         return SimulationRequest(self.template, self.weeks, self.start, self.seed,
                                  MatchConfig(**self.match.model_dump()), noise, self.extra_cameras,
                                  generator=self.generator)
+
+
+class PopulationRequestBody(BaseModel):
+    drivers: int = Field(1000, ge=2, le=2000)
+    weeks: int = Field(1, ge=1, le=MAX_WEEKS)
+    start: date = date(2026, 10, 12)
+    seed: int = Field(0, ge=0)
+    generator: Literal["nhts", "template"] = "nhts"
+    extra_cameras: int = Field(0, ge=0, le=200)
+    match: MatchSettings = MatchSettings()
+    noise: NoiseSettings = NoiseSettings()
+
+    @field_validator("start")
+    @classmethod
+    def _monday(cls, v: date) -> date:
+        if v.weekday() != 0:
+            raise ValueError("start must be a Monday")
+        return v
+
+    def to_request(self):
+        from platetrail.population import PopulationRequest
+
+        return PopulationRequest(self.drivers, self.weeks, self.start, self.seed, self.generator,
+                                 MatchConfig(**self.match.model_dump()), NoiseConfig(**self.noise.model_dump()),
+                                 self.extra_cameras)

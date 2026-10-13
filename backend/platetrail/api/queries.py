@@ -102,3 +102,45 @@ def naive_guess(reads, coords: dict, anchors: dict) -> dict:
         "home": one("home", res.home),
         "work": one("work", res.work),
     }
+
+
+def list_populations(engine: Engine) -> list[dict]:
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT id, created_at, drivers, weeks, start_date, seed, generator, summary,"
+            " coalesce((scenario->>'extra_cameras')::int, 0) AS extra_cameras,"
+            " (camera_snapshot IS NULL OR camera_snapshot IS DISTINCT FROM (SELECT max(loaded_at) FROM cameras)) AS stale"
+            " FROM populations ORDER BY id DESC")).mappings().all()
+    return [{**dict(r), "created_at": _iso(r["created_at"]), "start_date": _iso(r["start_date"])} for r in rows]
+
+
+def get_population(engine: Engine, population_id: int) -> dict | None:
+    with engine.connect() as conn:
+        row = conn.execute(text(
+            "SELECT id, created_at, drivers, weeks, start_date, seed, generator, match_config, noise_config, scenario,"
+            " summary FROM populations WHERE id = :p"), {"p": population_id}).mappings().first()
+    if row is None:
+        return None
+    return {**dict(row), "created_at": _iso(row["created_at"]), "start_date": _iso(row["start_date"])}
+
+
+def population_unicity_rows(engine: Engine, population_id: int, ps, resolution_min: int, sizes, samples: int):
+    from platetrail.analysis.unicity import unicity_table
+    from platetrail.cache import MISSING, get_cache
+    from platetrail.population import load_population_reads
+
+    key = f"unicity:{population_id}:{resolution_min}:{ps}:{sizes}:{samples}"
+    cached = get_cache().get(key)
+    if cached is not MISSING:
+        return cached
+    if get_population(engine, population_id) is None:
+        return None
+    reads, truth, _ = load_population_reads(engine, population_id)
+    result = {
+        "population_id": population_id,
+        "method": "share of drivers whose recorded trace is the only one containing p random (camera, time-bin) points "
+                  "of it (de Montjoye et al. 2013); identity = recorded plate, so misreads split traces",
+        "rows": unicity_table(reads, truth, ps, resolution_min, sizes, samples),
+    }
+    get_cache().set(key, result, ttl_s=30 * 86400)
+    return result

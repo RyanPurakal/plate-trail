@@ -36,3 +36,18 @@ def simulate_task(self, payload: dict) -> dict:
     run_id = get_local_runner().run(request, progress=progress)
     remember_run(run_cache_key(payload), run_id)
     return {"run_id": run_id}
+
+
+@celery_app.task(bind=True, name="platetrail.population")
+def population_task(self, payload: dict) -> dict:
+    """payload: an api.schemas.PopulationRequestBody as JSON. Returns {"population_id": ...}."""
+    from platetrail.api.schemas import PopulationRequestBody
+    from platetrail.population import run_population
+    from platetrail.sim.service import get_local_runner
+
+    def progress(stage: str, done: int, total: int) -> None:
+        if not celery_app.conf.task_always_eager and (done % 10 == 0 or done == total):
+            self.update_state(state="PROGRESS", meta={"stage": stage, "done": done, "total": total})
+
+    pid = run_population(get_local_runner(), PopulationRequestBody(**payload).to_request(), progress)
+    return {"population_id": pid}

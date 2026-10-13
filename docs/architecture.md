@@ -70,13 +70,14 @@ flowchart LR
 |---|---|---|
 | Camera ETL (Overpass loader, dedupe, direction parsing) | `backend/platetrail/etl/` | Built |
 | Road graph, camera snapping, lot / service-road classification | `backend/platetrail/roads/` | Built |
-| Places, home sampling, routine templates (NHTS stub) | `backend/platetrail/routines/` | Built (NHTS planned) |
+| Places, home sampling, NHTS and template routine generators | `backend/platetrail/routines/` | Built |
 | Routing, matcher, noise, driver simulation, runner | `backend/platetrail/sim/` | Built |
 | API | `backend/platetrail/api/` | Built |
 | Schema (ordered SQL migrations) | `backend/platetrail/sql/` | Built |
 | Frontend | `frontend/` | Built |
 | Celery app, tasks, jobs + run cache | `backend/platetrail/worker.py`, `jobs.py`, `cache.py` | Built |
-| Inference / unicity worker, results store | — | Planned |
+| Population runs + unicity | `backend/platetrail/population.py`, `analysis/unicity.py` | Built |
+| Inference engine, policy comparison | — | Planned |
 
 ## Data flow for one simulation
 

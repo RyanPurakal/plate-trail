@@ -18,6 +18,7 @@ def client(engine):
 
     cams = CameraSet(list(pair_on_main_st().by_id.values()) + [lot_camera(["into_lot"])])
     toy = LocalRunner(Router(toy_graph()), cams, PlacePool([PLAZA], []), engine, generator=FixedGenerator())
+    toy.make_generator = lambda request: FixedGenerator()  # populations ask the runner for a generator
     app.dependency_overrides[get_runner] = lambda: toy
     set_runner(toy)  # jobs use the shared runner directly
     with TestClient(app) as c:
@@ -162,3 +163,17 @@ def test_unknown_job_is_404(client):
 
 def test_job_validation_matches_simulate(client):
     assert client.post("/jobs/simulate", json={"weeks": 0}).status_code == 422
+
+
+def test_population_job_and_unicity_endpoint(client):
+    job = client.post("/jobs/population", json={"drivers": 5, "weeks": 1, "seed": 1}).json()
+    assert job["state"] == "SUCCESS", job
+    pid = job["population_id"]
+    assert any(p["id"] == pid for p in client.get("/populations").json())
+    assert client.get(f"/populations/{pid}").json()["drivers"] == 5
+    u = client.get(f"/populations/{pid}/unicity", params={"p": "1,2", "resolution_min": 60}).json()
+    assert [r["p"] for r in u["rows"]] == [1, 2] and all(0 <= r["unique_share"] <= 1 for r in u["rows"])
+    sized = client.get(f"/populations/{pid}/unicity", params={"p": "1", "size": "2,5"}).json()
+    assert [r["size"] for r in sized["rows"]] == [2, 5]
+    assert client.get(f"/populations/{pid}/unicity", params={"p": "0"}).status_code == 422
+    assert client.get("/populations/999999").status_code == 404

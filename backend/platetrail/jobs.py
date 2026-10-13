@@ -38,24 +38,35 @@ def _cached_run(key: str) -> int | None:
     return run_id if exists else None
 
 
-def submit_simulation(payload: dict) -> dict:
-    from platetrail.worker import celery_app, simulate_task
+def _submit(task, payload: dict, cached_result: dict | None = None) -> dict:
+    from platetrail.worker import celery_app
 
-    cached = _cached_run(run_cache_key(payload))
-    if cached is not None:
+    if cached_result is not None:
         job_id = f"cached-{uuid.uuid4()}"
-        _EAGER_JOBS[job_id] = {"job_id": job_id, "state": "SUCCESS", "run_id": cached, "cached": True}
+        _EAGER_JOBS[job_id] = {"job_id": job_id, "state": "SUCCESS", **cached_result, "cached": True}
         return _EAGER_JOBS[job_id]
     if celery_app.conf.task_always_eager:
         job_id = f"local-{uuid.uuid4()}"
         try:
-            result = simulate_task.apply(args=[payload]).get()
-            _EAGER_JOBS[job_id] = {"job_id": job_id, "state": "SUCCESS", "run_id": result["run_id"], "cached": False}
+            result = task.apply(args=[payload]).get()
+            _EAGER_JOBS[job_id] = {"job_id": job_id, "state": "SUCCESS", **result, "cached": False}
         except Exception as e:  # noqa: BLE001 - reported to the client
             _EAGER_JOBS[job_id] = {"job_id": job_id, "state": "FAILURE", "error": str(e)}
         return _EAGER_JOBS[job_id]
-    async_result = simulate_task.delay(payload)
-    return {"job_id": async_result.id, "state": "PENDING"}
+    return {"job_id": task.delay(payload).id, "state": "PENDING"}
+
+
+def submit_simulation(payload: dict) -> dict:
+    from platetrail.worker import simulate_task
+
+    cached = _cached_run(run_cache_key(payload))
+    return _submit(simulate_task, payload, {"run_id": cached} if cached is not None else None)
+
+
+def submit_population(payload: dict) -> dict:
+    from platetrail.worker import population_task
+
+    return _submit(population_task, payload)
 
 
 def job_status(job_id: str) -> dict | None:
@@ -70,7 +81,7 @@ def job_status(job_id: str) -> dict | None:
     if r.state == "PROGRESS" and isinstance(r.info, dict):
         out["progress"] = r.info
     elif r.state == "SUCCESS":
-        out["run_id"] = r.result["run_id"]
+        out.update(r.result)
     elif r.state == "FAILURE":
         out["error"] = str(r.result)
     return out
