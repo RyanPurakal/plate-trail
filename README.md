@@ -260,8 +260,8 @@ python scripts/validate_synthetic_timeline.py --drivers 60 --weeks 4            
 | [docs/camera_sources.md](docs/camera_sources.md) | sources, count cross-check, density scenario |
 | [docs/real_data_validation.md](docs/real_data_validation.md) | exporting and validating your own Timeline |
 | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) | open decisions and follow-ups |
-| [KTP-Capstone-Proposal-Plate-Trail.md](KTP-Capstone-Proposal-Plate-Trail.md) | the original proposal |
+| [Plate-Trail-Proposal.md](Plate-Trail-Proposal.md) | the original proposal |
 
 ## Credits
 
-KTP Capstone (Computer Science / ITI). Camera data © OpenStreetMap contributors (including DeFlock mappers); road data via OSMnx; travel behaviour from the 2022 NHTS (FHWA / ORNL). Basemap © OpenFreeMap / OpenMapTiles. Unicity method after de Montjoye et al., *Unique in the Crowd* (2013).
+Capstone project (Computer Science / ITI). Camera data © OpenStreetMap contributors (including DeFlock mappers); road data via OSMnx; travel behaviour from the 2022 NHTS (FHWA / ORNL). Basemap © OpenFreeMap / OpenMapTiles. Unicity method after de Montjoye et al., *Unique in the Crowd* (2013).
