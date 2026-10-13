@@ -34,9 +34,11 @@ def store(engine: Engine, cameras: list[MergedCamera]) -> None:
             camera_id = conn.execute(
                 text(
                     "INSERT INTO cameras (geom, town, directions_deg, has_direction, direction_raw,"
-                    " direction_key, manufacturer, source, source_id, sources, tags)"
+                    " direction_key, alt_directions_deg, direction_ambiguous, manufacturer, source, source_id,"
+                    " sources, tags)"
                     " VALUES (ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), :town, :dirs, :has_dir, :raw,"
-                    " :dir_key, :manufacturer, :source, :source_id, :sources, CAST(:tags AS jsonb)) RETURNING id"
+                    " :dir_key, :alt_dirs, :ambiguous, :manufacturer, :source, :source_id, :sources,"
+                    " CAST(:tags AS jsonb)) RETURNING id"
                 ),
                 {
                     "lon": p.lon,
@@ -46,6 +48,8 @@ def store(engine: Engine, cameras: list[MergedCamera]) -> None:
                     "has_dir": bool(cam.directions_deg),
                     "raw": cam.direction_raw,
                     "dir_key": cam.direction_key,
+                    "alt_dirs": cam.alt_directions_deg,
+                    "ambiguous": cam.alt_directions_deg is not None,
                     "manufacturer": cam.manufacturer,
                     "source": p.source,
                     "source_id": p.source_id,

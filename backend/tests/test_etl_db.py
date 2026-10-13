@@ -80,6 +80,8 @@ def test_geojson_export_has_points_and_rays(engine):
     assert len(points) == 1 and len(rays) == 2
     assert points[0]["properties"]["manufacturer"] == "Flock Safety"
     assert points[0]["properties"]["osm_id"] == "node/1"
+    assert points[0]["properties"]["camera_kind"] == "public_road"
+    assert points[0]["properties"]["lot_name"] is None
     north = next(r for r in rays if r["properties"]["bearing_deg"] == 0)
     (lon1, lat1), (lon2, lat2) = north["geometry"]["coordinates"]
     assert lon2 == pytest.approx(lon1) and lat2 > lat1

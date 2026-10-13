@@ -10,7 +10,7 @@ import time
 import httpx
 
 from platetrail.etl.cache import RawCache
-from platetrail.etl.directions import direction_from_tags
+from platetrail.etl.directions import DIRECTION_TAGS, conflicting_direction_tags, direction_from_tags, parse_direction
 from platetrail.etl.loaders.base import CameraLoader, CameraRecord
 
 # Main instance first, then public mirrors. Overpass often answers 429/504
@@ -62,6 +62,7 @@ def parse_response(town: str, response: dict) -> list[CameraRecord]:
         else:
             continue
         directions, raw, key = direction_from_tags(tags)
+        alt = alternate_directions(tags, key)
         records.append(
             CameraRecord(
                 source="osm",
@@ -72,32 +73,43 @@ def parse_response(town: str, response: dict) -> list[CameraRecord]:
                 directions_deg=directions,
                 direction_raw=raw,
                 direction_key=key,
+                alt_directions_deg=alt,
                 tags=tags,
             )
         )
     return records
 
 
-class OverpassLoader(CameraLoader):
-    source = "osm"
+def alternate_directions(tags: dict[str, str], used_key: str | None) -> list[float] | None:
+    """Bearings from a lower-priority direction tag that disagrees with the one used.
+
+    Such a camera is direction-ambiguous; the matcher can be configured to use
+    either reading.
+    """
+    if used_key is None or not conflicting_direction_tags(tags):
+        return None
+    for key in DIRECTION_TAGS:
+        if key != used_key and key in tags and (parsed := parse_direction(tags[key])):
+            return parsed
+    return None
+
+
+class OverpassClient:
+    """POSTs queries to Overpass with retries and mirror fallback."""
 
     def __init__(
         self,
-        cache: RawCache,
-        towns: dict[str, str] = TOWNS,
         client: httpx.Client | None = None,
         urls: tuple[str, ...] = OVERPASS_URLS,
         attempts_per_url: int = 3,
         backoff_s: float = 10.0,
     ):
-        self.cache = cache
-        self.towns = towns
         self.client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT})
         self.urls = urls
         self.attempts_per_url = attempts_per_url
         self.backoff_s = backoff_s
 
-    def _fetch(self, query: str) -> dict:
+    def fetch(self, query: str) -> dict:
         last_error: Exception | None = None
         for url in self.urls:
             for attempt in range(self.attempts_per_url):
@@ -116,10 +128,27 @@ class OverpassLoader(CameraLoader):
                         time.sleep(self.backoff_s * (attempt + 1))
         raise RuntimeError(f"All Overpass endpoints failed; last error: {last_error}") from last_error
 
+
+class OverpassLoader(CameraLoader):
+    source = "osm"
+
+    def __init__(
+        self,
+        cache: RawCache,
+        towns: dict[str, str] = TOWNS,
+        client: httpx.Client | None = None,
+        urls: tuple[str, ...] = OVERPASS_URLS,
+        attempts_per_url: int = 3,
+        backoff_s: float = 10.0,
+    ):
+        self.cache = cache
+        self.towns = towns
+        self.overpass = OverpassClient(client, urls, attempts_per_url, backoff_s)
+
     def load(self, refresh: bool = False) -> list[CameraRecord]:
         records: list[CameraRecord] = []
         for town, osm_name in self.towns.items():
             query = build_query(osm_name)
-            response = self.cache.get_or_fetch(query, lambda q=query: self._fetch(q), refresh=refresh)
+            response = self.cache.get_or_fetch(query, lambda q=query: self.overpass.fetch(q), refresh=refresh)
             records.extend(parse_response(town, response))
         return records

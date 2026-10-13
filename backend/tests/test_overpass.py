@@ -16,6 +16,8 @@ def test_parse_response_normalizes_records():
     assert recs["node/101"].directions_deg == [90.0]
     assert recs["node/102"].directions_deg == [321.0]  # direction wins
     assert recs["node/102"].direction_key == "direction"
+    assert recs["node/102"].alt_directions_deg == [137.0]  # disagreeing camera:direction kept
+    assert recs["node/101"].alt_directions_deg is None
     assert recs["node/101"].direction_key == "direction"
     assert recs["node/103"].direction_key is None
     assert recs["node/101"].manufacturer == "Flock Safety"

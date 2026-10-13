@@ -69,6 +69,10 @@ class MergedCamera:
         return self._direction_member.direction_key
 
     @property
+    def alt_directions_deg(self) -> list[float] | None:
+        return self._direction_member.alt_directions_deg
+
+    @property
     def manufacturer(self) -> str | None:
         return next((m.manufacturer for m in [self.primary, *self.members] if m.manufacturer), None)
 

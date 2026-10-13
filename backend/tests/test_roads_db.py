@@ -68,3 +68,46 @@ def test_reloading_cameras_clears_snaps(engine):
     run_etl(loaders=[StubLoader([CameraRecord("osm", "node/9", 40.5, -74.399, "Edison", None, None)])], engine=engine)
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM camera_edges")).scalar_one() == 0
+
+
+def test_classification_stored_and_loaded_into_camera_set(engine):
+    from shapely.geometry import LineString, box
+
+    from platetrail.roads.lots import Classification, LotAssignment, OsmFeature
+    from platetrail.roads.run_roads import store_classification
+    from platetrail.sim.trip import load_camera_set
+
+    road_cam = CameraRecord("osm", "node/1", 40.50005, -74.399, "Edison", [90.0], "90", "direction")
+    lot_cam = CameraRecord("osm", "node/3", 40.5015, -74.3985, "Edison", [321.0], "321", "direction",
+                           alt_directions_deg=[137.0])
+    run_etl(loaders=[StubLoader([road_cam, lot_cam])], engine=engine)
+    G = tiny_graph()
+    store_edges(engine, G)
+    index = EdgeIndex(ox.project_graph(G))
+    cams = {c.label: c for c in load_cameras(engine)}
+    results = [snap_camera(index, c) for c in cams.values()]
+    store_snaps(engine, [r for r in results if r.camera.label == "node/1"])
+
+    lot_geom = box(-74.3990, 40.5010, -74.3980, 40.5020)
+    way = LineString([(-74.3985, 40.5012), (-74.3985, 40.5018)])
+    cls = Classification(
+        lots={cams["node/3"].camera_id: LotAssignment(
+            camera=cams["node/3"],
+            lot=OsmFeature("way/500", "retail", {"name": "Plaza"}, lot_geom, lot_geom),
+            watched_way=OsmFeature("way/501", "service", {}, way, way),
+            facings=["into_lot"], alt_facings=["toward_road"], reason="driveway",
+        )},
+        snap_ambiguous={cams["node/1"].camera_id: 50.0},
+    )
+    store_classification(engine, cls)
+
+    cs = load_camera_set(engine)
+    road = cs.by_id[cams["node/1"].camera_id]
+    lot = cs.by_id[cams["node/3"].camera_id]
+    assert road.kind == "public_road" and road.snap_ambiguous and len(road.edges) == 2
+    assert lot.kind == "private_lot" and lot.edges == []
+    assert lot.alt_directions_deg == [137.0] and lot.direction_ambiguous
+    assert lot.facings == ["into_lot"] and lot.alt_facings == ["toward_road"]
+    assert lot.lot_name == "Plaza" and lot.lot_geom.equals(lot_geom)
+    assert cs.lots == [lot]
+    assert set(cs.by_edge) == {(1, 2, 0), (2, 1, 0)}

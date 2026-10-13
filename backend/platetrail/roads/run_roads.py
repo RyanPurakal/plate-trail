@@ -13,9 +13,12 @@ from itertools import combinations
 import osmnx as ox
 from sqlalchemy import Engine, text
 
+from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
+from platetrail.etl.cache import RawCache
 from platetrail.geo import WGS84, angle_diff
 from platetrail.roads.graph import load_or_build_graph, store_edges
+from platetrail.roads.lots import PERPENDICULAR_DEG, Classification, EntranceIndex, classify, fetch_lot_features
 from platetrail.roads.snap import (
     MAX_SNAP_M,
     AlignmentFlag,
@@ -23,7 +26,9 @@ from platetrail.roads.snap import (
     EdgeIndex,
     SnapResult,
     alignment_flags,
+    road_axis_offset,
     snap_camera,
+    snap_with_service_fallback,
 )
 
 CLOSE_PAIR_M = 30.0
@@ -35,6 +40,48 @@ def load_cameras(engine: Engine) -> list[CameraInput]:
             text("SELECT id, source_id, ST_X(geom) AS lon, ST_Y(geom) AS lat, directions_deg FROM cameras ORDER BY id")
         ).all()
     return [CameraInput(r.id, r.source_id, r.lon, r.lat, list(r.directions_deg) if r.directions_deg else None) for r in rows]
+
+
+def load_alt_directions(engine: Engine) -> dict[int, list[float]]:
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT id, alt_directions_deg FROM cameras WHERE alt_directions_deg IS NOT NULL")).all()
+    return {r.id: list(r.alt_directions_deg) for r in rows}
+
+
+def store_classification(engine: Engine, cls: Classification, service_cams: set[int] = frozenset()) -> None:
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE cameras SET camera_kind = 'public_road', snap_ambiguous = false"))
+        if service_cams:
+            conn.execute(text("UPDATE cameras SET camera_kind = 'service_road' WHERE id = ANY(:ids)"),
+                         {"ids": sorted(service_cams)})
+        conn.execute(text("DELETE FROM camera_lots"))
+        if cls.snap_ambiguous:
+            conn.execute(
+                text("UPDATE cameras SET snap_ambiguous = true WHERE id = ANY(:ids)"), {"ids": list(cls.snap_ambiguous)}
+            )
+        for cid, a in cls.lots.items():
+            conn.execute(text("UPDATE cameras SET camera_kind = 'private_lot' WHERE id = :id"), {"id": cid})
+            conn.execute(
+                text(
+                    "INSERT INTO camera_lots (camera_id, lot_osm_id, lot_kind, lot_name, lot_geom, watched_way_osm_id,"
+                    " watched_way_geom, facings, alt_facings, access_node, access_node_distance_m)"
+                    " VALUES (:cid, :lot_id, :lot_kind, :lot_name, ST_GeomFromText(:lot_wkt, 4326), :way_id,"
+                    " ST_GeomFromText(:way_wkt, 4326), :facings, :alt, :an, :and)"
+                ),
+                {
+                    "cid": cid,
+                    "lot_id": a.lot.osm_id if a.lot else None,
+                    "lot_kind": a.lot.kind if a.lot else None,
+                    "lot_name": a.lot.name if a.lot else None,
+                    "lot_wkt": a.lot.geom_wgs.wkt if a.lot else None,
+                    "way_id": a.watched_way.osm_id if a.watched_way else None,
+                    "way_wkt": a.watched_way.geom_wgs.wkt if a.watched_way else None,
+                    "facings": a.facings,
+                    "alt": a.alt_facings,
+                    "an": a.access_node,
+                    "and": a.access_node_distance_m,
+                },
+            )
 
 
 def store_snaps(engine: Engine, results: list[SnapResult]) -> None:
@@ -92,7 +139,10 @@ def classify_pair(a: SnapResult, b: SnapResult) -> str:
     return f"DIFFERENT edges ({name_a} | {name_b}; {adjacency})"
 
 
-def summarize(G, n_edges_stored: int, results: list[SnapResult], flags: list[AlignmentFlag]) -> str:
+def summarize(
+    G, n_edges_stored: int, results: list[SnapResult], flags: list[AlignmentFlag], cls: Classification,
+    service_cams: set[int] = frozenset(),
+) -> str:
     lines = ["Road network summary", "===================="]
     lines.append(f"Graph: {G.number_of_nodes():,} nodes, {G.number_of_edges():,} directed edges (stored {n_edges_stored:,})")
     snapped = [r for r in results if not r.dropped]
@@ -115,10 +165,54 @@ def summarize(G, n_edges_stored: int, results: list[SnapResult], flags: list[Ali
             "  histogram: "
             + ", ".join(f"{lo}-{hi} m: {sum(1 for d in dists if lo <= d < hi)}" for lo, hi in buckets)
         )
-    two_way = sum(1 for r in snapped if len(r.snaps) == 2)
-    lines.append(f"Snaps: {two_way} cameras on two-way edges (2 directed snaps), {len(snapped) - two_way} on one-way edges")
+    two_way = sum(1 for r in snapped if len(r.snaps) == 2 and not r.twin_added)
+    divided = sum(1 for r in snapped if r.twin_added)
+    lines.append(
+        f"Snaps: {two_way} cameras on two-way roads, {divided} on divided roads (both carriageways), "
+        f"{len(snapped) - two_way - divided} on one-way roads"
+    )
     ties = [r.camera.label for r in results if r.tie_broken]
     lines.append(f"Intersection ties broken by direction: {len(ties)} {ties or ''}")
+    twins = [r for r in results if r.twin_added]
+    lines.append(f"Divided roads (both carriageways snapped): {len(twins)}")
+    for r in twins:
+        lines.append(
+            "  TWIN " + r.camera.label + ": "
+            + ", ".join(f"{s.name or 'unnamed'} {s.bearing_deg:.0f} deg at {s.distance_m:.1f} m" for s in r.snaps)
+        )
+    for r in results:
+        if r.resnapped_from:
+            lines.append(
+                f"  RESNAPPED {r.camera.label}: {r.resnapped_from} -> {r.snaps[0].name or 'unnamed'} "
+                f"(parallel road at {r.snaps[0].distance_m:.1f} m vs nearest {r.nearest_m:.1f} m)"
+            )
+
+    lines.append("")
+    by_id = {r.camera.camera_id: r for r in results}
+    lines.append(f"Camera kinds: {len(results) - len(cls.lots) - len(service_cams)} public_road, "
+                 f"{len(cls.lots)} private_lot, {len(service_cams)} service_road")
+    for r in results:
+        if r.camera.camera_id in service_cams:
+            dirs = "/".join(f"{d:g}" for d in r.camera.directions_deg or [])
+            lines.append(
+                f"  SERVICE {r.camera.label} faces {dirs}: "
+                + ", ".join(f"{s.name or 'unnamed'} {s.bearing_deg:.0f} deg at {s.distance_m:.1f} m" for s in r.snaps)
+                + (f" (re-snapped from {r.resnapped_from})" if r.resnapped_from else "")
+            )
+    for cid, a in sorted(cls.lots.items(), key=lambda t: t[1].camera.label):
+        lot = f"{a.lot.kind} {a.lot.osm_id} ({a.lot.name or 'unnamed'})" if a.lot else "NO LOT POLYGON FOUND"
+        way = f", watches service road {a.watched_way.osm_id}" if a.watched_way else ""
+        facing = "/".join(f"{d:g}->{f}" for d, f in zip(a.camera.directions_deg or [], a.facings))
+        alt = f"; alternate reading: {'/'.join(a.alt_facings)}" if a.alt_facings else ""
+        access = (f"; entrance node {a.access_node} at {a.access_node_distance_m:.0f} m"
+                  if a.access_node is not None else "; NO ENTRANCE NODE")
+        lines.append(f"  LOT {a.camera.label} [{a.reason}]: {lot}{way}; {facing}{alt}{access}")
+    for cam in cls.unresolved_dropped:
+        lines.append(f"  STILL DROPPED {cam.label}: no lot polygon within range")
+    lines.append(f"snap_ambiguous (public road, direction > {PERPENDICULAR_DEG:g} deg off road axis): {len(cls.snap_ambiguous)}")
+    for cid, off in sorted(cls.snap_ambiguous.items(), key=lambda t: by_id[t[0]].camera.label):
+        r = by_id[cid]
+        lines.append(f"  AMBIGUOUS {r.camera.label}: {off:.0f} deg off {r.snaps[0].name or 'unnamed'} (nearest snap kept)")
 
     lines.append("")
     lines.append(f"Close pairs (<= {CLOSE_PAIR_M:g} m apart):")
@@ -134,8 +228,11 @@ def summarize(G, n_edges_stored: int, results: list[SnapResult], flags: list[Ali
         )
 
     lines.append("")
-    lines.append(f"Direction closer to perpendicular than parallel to snapped road: {len(flags)}")
-    for f in flags:
+    remaining = [f for f in flags if f.camera.camera_id not in cls.lots]
+    lines.append(
+        f"Direction closer to perpendicular than parallel to snapped road, excluding lot cameras: {len(remaining)}"
+    )
+    for f in remaining:
         multi = " (multi-direction camera)" if len(f.camera.directions_deg or []) > 1 else ""
         alt = (
             f"; parallel alternative: {f.alternative.name or 'unnamed'} at {f.alternative.distance_m:.1f} m"
@@ -155,11 +252,26 @@ def run(refresh: bool = False, engine: Engine | None = None) -> str:
     apply_migrations(engine)
     G = load_or_build_graph(refresh=refresh)
     n_stored = store_edges(engine, G)
-    index = EdgeIndex(ox.project_graph(G))
-    results = [snap_camera(index, cam) for cam in load_cameras(engine)]
-    store_snaps(engine, results)
-    flags = [f for r in results for f in alignment_flags(index, r)]
-    return summarize(G, n_stored, results, flags)
+    G_proj = ox.project_graph(G)
+    index = EdgeIndex(G_proj, public_only=True)  # cameras snap to public roads first
+    # Cameras deep inside lots/business parks (>50 m from any public road) watch internal
+    # service streets: snap them to those and match them like road cameras.
+    results, service_cams = snap_with_service_fallback(
+        index, EdgeIndex(G_proj, service_only=True), load_cameras(engine))
+    public = [r for r in results if r.camera.camera_id not in service_cams]
+
+    candidates = [
+        r.camera for r in public if r.dropped or ((road_axis_offset(r) or 0) > PERPENDICULAR_DEG)
+    ]
+    cache = RawCache(get_settings().data_dir / "raw" / "overpass_lots")
+    features = fetch_lot_features(candidates, cache, index, refresh=refresh)
+    cls = classify(public, features, index, load_alt_directions(engine), EntranceIndex(G_proj))
+
+    # Lot cameras watch private lots, so they get no road snap.
+    store_snaps(engine, [r for r in results if r.camera.camera_id not in cls.lots])
+    store_classification(engine, cls, service_cams)
+    flags = [f for r in public for f in alignment_flags(index, r)]
+    return summarize(G, n_stored, results, flags, cls, service_cams)
 
 
 def main() -> None:
