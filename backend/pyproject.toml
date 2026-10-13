@@ -26,7 +26,7 @@ build-backend = "setuptools.build_meta"
 include = ["platetrail*"]
 
 [tool.setuptools.package-data]
-platetrail = ["sql/*.sql"]
+platetrail = ["sql/*.sql", "etl/data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

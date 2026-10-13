@@ -47,6 +47,8 @@ class SimulationRequest:
     seed: int = 0
     match: MatchConfig = field(default_factory=MatchConfig)
     noise: NoiseConfig | None = None  # None: defaults with seed = request seed
+    extra_cameras: int = 0  # density scenario: synthetic cameras added (platetrail.sim.scenarios)
+    scenario_town: str = "Edison"
 
     def noise_config(self) -> NoiseConfig:
         return self.noise if self.noise is not None else NoiseConfig(seed=self.seed)
@@ -69,6 +71,8 @@ class SimulationOutput:
     passes: list[tuple[int, int, CameraPass]]  # (pass_seq, trip index, pass), time-ordered
     noise: NoiseResult
     period: tuple[datetime, datetime]
+    cameras: CameraSet | None = None  # cameras used, including any scenario cameras
+    scenario: dict | None = None
 
 
 def _config_json(cfg) -> dict:
@@ -86,18 +90,24 @@ def _place_json(p: Place) -> dict:
 
 class LocalRunner(SimulationRunner):
     def __init__(self, router: Router, cameras: CameraSet, pool: PlacePool, engine: Engine,
-                 generator: RoutineGenerator | None = None):
+                 generator: RoutineGenerator | None = None, towns: dict | None = None):
         self.router, self.cameras, self.pool, self.engine = router, cameras, pool, engine
         self.generator = generator
+        self.towns = towns or {}  # name -> lon/lat polygon, for density scenarios
 
     @classmethod
     def from_db(cls, engine: Engine | None = None) -> "LocalRunner":
         from platetrail.roads.graph import load_or_build_graph
         from platetrail.sim.trip import load_camera_set
 
+        from shapely import wkb
+
         engine = engine or get_engine()
         apply_migrations(engine)
-        return cls(Router(load_or_build_graph()), load_camera_set(engine), PlacePool.from_db(engine), engine)
+        with engine.connect() as conn:
+            towns = {r.name: wkb.loads(bytes(r.g)) for r in conn.execute(text("SELECT name, ST_AsBinary(geom) g FROM towns"))}
+        return cls(Router(load_or_build_graph()), load_camera_set(engine), PlacePool.from_db(engine), engine,
+                   towns=towns)
 
     def simulate(self, request: SimulationRequest) -> SimulationOutput:
         if request.weeks < 1:
@@ -105,7 +115,18 @@ class LocalRunner(SimulationRunner):
         gen = self.generator or TemplateRoutineGenerator(self.pool, request.template)
         routine = gen.generate(0, request.start, request.weeks, np.random.default_rng([request.seed, 1]))
         plate = synthetic_plate(np.random.default_rng([request.seed, 2]))
-        sim = simulate_routine(self.router, self.cameras, routine, request.match)
+        cameras, scenario = self.cameras, None
+        if request.extra_cameras > 0:
+            from platetrail.sim.scenarios import synthetic_cameras
+
+            sims, recs = synthetic_cameras(
+                self.router, request.extra_cameras, request.seed, within=self.towns.get(request.scenario_town),
+                existing=[(c.lon, c.lat) for c in self.cameras.by_id.values() if c.lon is not None])
+            cameras = CameraSet(list(self.cameras.by_id.values()) + sims)
+            scenario = {"extra_cameras": request.extra_cameras, "town": request.scenario_town,
+                        "placement": "assumption: arterials, length-weighted, >= 300 m apart",
+                        "cameras": [r.as_json() for r in recs]}
+        sim = simulate_routine(self.router, cameras, routine, request.match)
 
         ordered = sorted(
             ((ti, p) for ti, t in enumerate(sim.trips) for p in t.result.passes),
@@ -117,11 +138,13 @@ class LocalRunner(SimulationRunner):
         start = datetime.combine(request.start, time())
         last = max([t.result.route.arrive for t in sim.trips], default=start)
         end = max(start + timedelta(weeks=request.weeks), last + timedelta(minutes=1))
-        noise = apply_noise(true, start, end, request.noise_config(), list(self.cameras.by_id))
-        return SimulationOutput(request, f"template:{routine.template}", plate, sim, passes, noise, (start, end))
+        noise = apply_noise(true, start, end, request.noise_config(), list(cameras.by_id))
+        return SimulationOutput(request, f"template:{routine.template}", plate, sim, passes, noise, (start, end),
+                                cameras, scenario)
 
     def run(self, request: SimulationRequest) -> int:
-        return store(self.engine, self.simulate(request), self.cameras)
+        out = self.simulate(request)
+        return store(self.engine, out, out.cameras or self.cameras)
 
 
 def summarize(out: SimulationOutput) -> dict:
@@ -149,14 +172,14 @@ def store(engine: Engine, out: SimulationOutput, cameras: CameraSet) -> int:
     with engine.begin() as conn:
         run_id = conn.execute(
             text("INSERT INTO runs (generator, weeks, start_date, seed, plate, plate_state, match_config,"
-                 " noise_config, anchors, summary, camera_snapshot) VALUES (:g, :w, :s, :seed, :plate, :state,"
-                 " CAST(:m AS jsonb), CAST(:n AS jsonb), CAST(:a AS jsonb), CAST(:sum AS jsonb),"
-                 " (SELECT max(loaded_at) FROM cameras)) RETURNING id"),
+                 " noise_config, anchors, summary, camera_snapshot, scenario) VALUES (:g, :w, :s, :seed, :plate,"
+                 " :state, CAST(:m AS jsonb), CAST(:n AS jsonb), CAST(:a AS jsonb), CAST(:sum AS jsonb),"
+                 " (SELECT max(loaded_at) FROM cameras), CAST(:scn AS jsonb)) RETURNING id"),
             {"g": out.generator, "w": req.weeks, "s": req.start, "seed": req.seed, "plate": out.plate,
              "state": SYNTHETIC_STATE, "m": json.dumps(_config_json(req.match)),
              "n": json.dumps(_config_json(req.noise_config())),
              "a": json.dumps({k: _place_json(p) for k, p in sim.routine.anchors.items()}),
-             "sum": json.dumps(summarize(out))},
+             "sum": json.dumps(summarize(out)), "scn": json.dumps(out.scenario) if out.scenario else None},
         ).scalar_one()
 
         trip_ids = []
@@ -213,10 +236,12 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 12))
     ap.add_argument("--zero-noise", action="store_true", help="store the noiseless read log")
+    ap.add_argument("--extra-cameras", type=int, default=0, help="density scenario: synthetic Edison cameras")
     args = ap.parse_args()
     runner = LocalRunner.from_db()
     req = SimulationRequest(args.template, args.weeks, args.start, args.seed,
-                            noise=NoiseConfig.noiseless(args.seed) if args.zero_noise else None)
+                            noise=NoiseConfig.noiseless(args.seed) if args.zero_noise else None,
+                            extra_cameras=args.extra_cameras)
     run_id = runner.run(req)
     with runner.engine.connect() as conn:
         summary, gen, state, plate = conn.execute(

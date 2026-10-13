@@ -26,6 +26,7 @@ const COLORS = {
   public_road: "#e8e2d4",
   private_lot: "#6fa8dc",
   service_road: "#e0a85a",
+  scenario: "#b9a2e8",
   read: "#f2a541",
   truth: "#7fd1c7",
   skipped: "#d9534f",
@@ -117,7 +118,8 @@ function popupHtml(p: CameraProps & { bearing?: number }, passes: Pass[], reads:
   const label = p.osm_id ?? `camera ${p.camera_id}`;
   const mine = passes.filter((x) => x.camera_label === label);
   const rd = reads.filter((x) => x.camera_label === label);
-  const kind = { public_road: "public road", private_lot: "private lot", service_road: "service street" }[p.camera_kind];
+  const kind = { public_road: "public road", private_lot: "private lot", service_road: "service street",
+    scenario: "scenario camera (synthetic placement)" }[p.camera_kind];
   const facing = p.has_direction ? `faces ${(p.directions_deg ?? [p.bearing]).join(" / ")}°` : "no direction tag";
   const flags = [p.snap_ambiguous && "snap ambiguous", p.direction_ambiguous && "direction ambiguous"].filter(Boolean);
   const lines = [
@@ -163,7 +165,7 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
     });
     m.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
     m.on("load", () => {
-      for (const kind of ["public_road", "private_lot", "service_road"] as const) {
+      for (const kind of ["public_road", "private_lot", "service_road", "scenario"] as const) {
         m.addImage(`arrow-${kind}`, arrowImage(COLORS[kind]), { pixelRatio: 2 });
       }
       for (const id of ["routes", "trail", "reads", "passes", "cam-dir", "cam-undir", "focus", "guess-err"]) {

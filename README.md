@@ -38,7 +38,7 @@ This is the first vertical slice (about a third of the proposal).
 |---|---|
 | Infra: docker-compose (PostGIS, FastAPI, Next.js), migrations, pytest + GitHub Actions | ✅ Built |
 | Camera ETL from OpenStreetMap (Overpass), cached; dedupe; GeoJSON export | ✅ Built |
-| Additional camera sources (DeFlock export, agency portals) | 🔲 Planned (loader interface + dedupe ready) |
+| Camera sources: DeFlock (= OSM data), agency count cross-check, density scenario for Edison's 92 approved cameras | ✅ Built ([camera sources](docs/camera_sources.md)) |
 | Road network (OSMnx drive + service roads), camera snapping, lot and service-road cameras | ✅ Built |
 | Routing + direction-aware matching (configurable facing, tolerance, undirected modes) | ✅ Built |
 | Sensor noise model (misses, look-alike misreads, downtime, jitter; seeded) | ✅ Built |
@@ -96,6 +96,10 @@ against a PostGIS service container. Frontend: `cd frontend && npm install &&
 npm run dev` (expects the API on `localhost:8000`).
 
 ## Camera ETL
+
+See [docs/camera_sources.md](docs/camera_sources.md) for sources, the
+OSM-vs-agency count cross-check (`python -m platetrail.etl.cross_check`), and
+the density scenario (`extra_cameras`).
 
 ```bash
 cd backend

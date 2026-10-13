@@ -1,6 +1,6 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export type CameraKind = "public_road" | "private_lot" | "service_road";
+export type CameraKind = "public_road" | "private_lot" | "service_road" | "scenario";
 
 export type CameraProps = {
   kind: "camera";
@@ -48,6 +48,7 @@ export type RunListItem = {
   plate_state: string;
   summary: RunSummary;
   stale: boolean; // cameras were reloaded after this run was simulated
+  extra_cameras: number; // density scenario: synthetic cameras added
 };
 
 export type Place = { key: string; category: string; lon: number; lat: number; town: string | null; name: string | null };
@@ -120,11 +121,19 @@ export type NaiveGuess = {
   work: GuessPoint | null;
 };
 
+export type Scenario = {
+  extra_cameras: number;
+  town: string;
+  placement: string;
+  cameras: { label: string; lon: number; lat: number; directions_deg: number[] }[];
+};
+
 export type RunDetail = {
   run: RunListItem & {
     match_config: Record<string, string | number>;
     noise_config: Record<string, unknown>;
     anchors: Record<string, Place>;
+    scenario: Scenario | null;
   };
   naive_guess: NaiveGuess;
   trips: { type: "FeatureCollection"; features: TripFeature[] };
@@ -143,7 +152,7 @@ export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);
 
-export type SimulateBody = { template?: string; weeks: number; seed: number; zero_noise?: boolean };
+export type SimulateBody = { template?: string; weeks: number; seed: number; zero_noise?: boolean; extra_cameras?: number };
 
 export async function simulate(body: SimulateBody): Promise<{ run_id: number }> {
   const resp = await fetch(`${API_URL}/simulate`, {

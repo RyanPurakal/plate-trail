@@ -98,7 +98,7 @@ select:focus, input:focus, button:focus-visible { outline: 1px solid var(--read)
 .simulate summary { cursor: pointer; font-size: 11px; }
 .simulate summary:hover { color: var(--bone); }
 .simulate form { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-.simulate input { width: 56px; }
+.simulate input { width: 52px; }
 .simulate .unit { color: var(--dim); font-size: 10px; }
 .simulate button {
   margin-left: auto;
@@ -241,6 +241,7 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
 .lg-arrow { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 10px solid var(--bone); }
 .lg-arrow.lg-lot { border-bottom-color: var(--lot); }
 .lg-arrow.lg-svc { border-bottom-color: var(--svc); }
+.lg-arrow.lg-scn { border-bottom-color: #b9a2e8; }
 .lg-guess { width: 14px; height: 9px; border: 1.5px dashed var(--read); }
 .lg-truthpin { width: 14px; height: 9px; background: var(--truth); }
 .lg-undir { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--bone); }

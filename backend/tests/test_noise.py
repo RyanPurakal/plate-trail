@@ -283,3 +283,11 @@ def test_noise_never_changes_the_state_code():
     other = apply_noise([TruePass(0, 1, START, "D10BOS", "QQ")], START, END,
                         NoiseConfig(seed=1, p_miss=0, downtime_rate_per_week=0, p_char_misread=1.0))
     assert [r.state for r in other.reads] == ["QQ"]
+
+
+def test_negative_scenario_camera_ids_get_outages_and_dont_shift_real_ones():
+    cfg = NoiseConfig(seed=3, downtime_rate_per_week=5)
+    with_scenario = outage_windows([1, 2, -1, -2], START, END, cfg)
+    real_only = outage_windows([1, 2], START, END, cfg)
+    assert with_scenario[1] == real_only[1] and with_scenario[2] == real_only[2]
+    assert with_scenario[-1] and with_scenario[-1] != with_scenario[1]

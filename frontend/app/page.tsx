@@ -65,7 +65,7 @@ export default function Home() {
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ template: "commuter", weeks: 1, seed: 1 });
+  const [form, setForm] = useState({ template: "commuter", weeks: 1, seed: 1, extra: 0 });
 
   useEffect(() => {
     Promise.all([getCameras(), getRuns()])
@@ -85,6 +85,22 @@ export default function Home() {
     setFocus(null);
     getRun(runId).then(setDetail).catch((e: Error) => setError(e.message));
   }, [runId]);
+
+  // Real cameras plus any synthetic scenario cameras this run used.
+  const runCameras = useMemo<CameraCollection | null>(() => {
+    const scn = detail?.run.scenario;
+    if (!cameras || !scn?.cameras.length) return cameras;
+    const extra = scn.cameras.map((c, i) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [c.lon, c.lat] as [number, number] },
+      properties: {
+        kind: "camera" as const, camera_id: -(i + 1), osm_id: c.label, town: scn.town, has_direction: true,
+        directions_deg: c.directions_deg, direction_ambiguous: false, alt_directions_deg: null, snap_ambiguous: false,
+        manufacturer: null, camera_kind: "scenario" as const, lot_name: null,
+      },
+    }));
+    return { ...cameras, features: [...cameras.features, ...extra] };
+  }, [cameras, detail]);
 
   const days = useMemo(() => {
     const ds = new Set<string>();
@@ -117,7 +133,8 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
-      const { run_id } = await simulate({ template: form.template, weeks: form.weeks, seed: form.seed });
+      const { run_id } = await simulate({ template: form.template, weeks: form.weeks, seed: form.seed,
+                                          extra_cameras: form.extra });
       setRuns(await getRuns());
       setRunId(run_id);
     } catch (err) {
@@ -145,6 +162,7 @@ export default function Home() {
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 #{r.id} · {templateName(r.generator)} · {r.weeks} wk · seed {r.seed} · {r.summary.reads} reads
+                {r.extra_cameras ? ` · +${r.extra_cameras} cams` : ""}
                 {r.stale ? " · stale" : ""}
               </option>
             ))}
@@ -163,6 +181,10 @@ export default function Home() {
               <input type="number" min={0} value={form.seed} aria-label="seed"
                      onChange={(e) => setForm({ ...form, seed: Number(e.target.value) })} />
               <span className="unit">seed</span>
+              <input type="number" min={0} max={200} value={form.extra} aria-label="extra cameras"
+                     title="Density scenario: synthetic cameras added in Edison (e.g. 92 approved)"
+                     onChange={(e) => setForm({ ...form, extra: Number(e.target.value) })} />
+              <span className="unit">+cams</span>
               <button disabled={busy}>{busy ? "running…" : "run"}</button>
             </form>
           </details>
@@ -249,7 +271,7 @@ export default function Home() {
 
       <main className="stage">
         <MapView
-          cameras={cameras}
+          cameras={runCameras}
           trips={view.trips}
           passes={view.passes}
           reads={view.reads}
@@ -278,6 +300,7 @@ export default function Home() {
           <span><i className="lg-arrow lg-svc" />service street</span>
           <span><i className="lg-undir" />no direction</span>
           <span><i className="lg-guess" />naive guess</span>
+          {detail?.run.scenario && <span><i className="lg-arrow lg-scn" />scenario camera (+{detail.run.scenario.extra_cameras})</span>}
           {mode === "happened" && <span><i className="lg-truthpin" />true home / work</span>}
         </div>
         <div className="mode-stamp">{mode === "saw" ? "RECORDED" : "GROUND TRUTH"}</div>

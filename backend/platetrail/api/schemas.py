@@ -34,6 +34,7 @@ class SimulateRequest(BaseModel):
     start: date = date(2026, 10, 12)
     seed: int = Field(0, ge=0)
     zero_noise: bool = False
+    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario (synthetic cameras in Edison)
     match: MatchSettings = MatchSettings()
     noise: NoiseSettings = NoiseSettings()
 
@@ -48,4 +49,4 @@ class SimulateRequest(BaseModel):
         noise = (NoiseConfig.noiseless(self.seed) if self.zero_noise
                  else NoiseConfig(seed=self.seed, **self.noise.model_dump()))
         return SimulationRequest(self.template, self.weeks, self.start, self.seed,
-                                 MatchConfig(**self.match.model_dump()), noise)
+                                 MatchConfig(**self.match.model_dump()), noise, self.extra_cameras)

@@ -151,6 +151,12 @@ class NoiseResult:
         return [r for r in self.reads if r.misread]
 
 
+def _stream_key(camera_id: int) -> int:
+    """Non-negative RNG key for a camera id. Real cameras keep their id; synthetic scenario cameras
+    (negative ids) map to a separate range so they never collide with real ones."""
+    return camera_id if camera_id >= 0 else (1 << 40) + (-camera_id)
+
+
 def outage_windows(
     camera_ids: list[int], start: datetime, end: datetime, cfg: NoiseConfig
 ) -> dict[int, list[Outage]]:
@@ -160,7 +166,7 @@ def outage_windows(
     for cid in sorted(set(camera_ids)):
         windows: list[Outage] = []
         if cfg.downtime_rate_per_week > 0 and cfg.downtime_mean_hours > 0 and weeks > 0:
-            rng = np.random.default_rng([cfg.seed, _STREAM_OUTAGE, cid])
+            rng = np.random.default_rng([cfg.seed, _STREAM_OUTAGE, _stream_key(cid)])
             n = int(rng.poisson(cfg.downtime_rate_per_week * weeks))
             span_s = (end - start).total_seconds()
             for s, dur_h in zip(rng.random(n) * span_s, rng.exponential(cfg.downtime_mean_hours, n)):

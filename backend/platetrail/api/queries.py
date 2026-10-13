@@ -20,7 +20,8 @@ def _iso(v):
 def list_runs(engine: Engine, limit: int = 100) -> list[dict]:
     with engine.connect() as conn:
         rows = conn.execute(text(
-            f"SELECT id, created_at, generator, weeks, start_date, seed, plate, plate_state, summary, {_STALE}"
+            "SELECT id, created_at, generator, weeks, start_date, seed, plate, plate_state, summary,"
+            f" coalesce((scenario->>'extra_cameras')::int, 0) AS extra_cameras, {_STALE}"
             " FROM runs ORDER BY id DESC LIMIT :n"), {"n": limit}).mappings().all()
     return [{**dict(r), "created_at": _iso(r["created_at"]), "start_date": _iso(r["start_date"])} for r in rows]
 
@@ -29,7 +30,7 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
     with engine.connect() as conn:
         run = conn.execute(text(
             "SELECT id, created_at, generator, weeks, start_date, seed, plate, plate_state, match_config,"
-            f" noise_config, anchors, summary, {_STALE} FROM runs WHERE id = :r"), {"r": run_id}).mappings().first()
+            f" noise_config, anchors, summary, scenario, {_STALE} FROM runs WHERE id = :r"), {"r": run_id}).mappings().first()
         if run is None:
             return None
         trips = conn.execute(text(
@@ -62,6 +63,8 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
         }
         for t in trips
     ]
+    for c in (run.get("scenario") or {}).get("cameras", []):
+        coords[c["label"]] = (c["lon"], c["lat"])
     return {
         "run": run,
         "naive_guess": naive_guess(reads, coords, run["anchors"]),
