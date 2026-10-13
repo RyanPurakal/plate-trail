@@ -35,7 +35,8 @@ export default function Home() {
       .then(([c, r]) => {
         setCameras(c);
         setRuns(r);
-        if (r.length) setRunId(r[0].id);
+        const fresh = r.find((x) => !x.stale) ?? r[0];
+        if (fresh) setRunId(fresh.id);
       })
       .catch((e: Error) => setError(`API unreachable: ${e.message}`));
   }, []);
@@ -107,6 +108,7 @@ export default function Home() {
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 #{r.id} · {templateName(r.generator)} · {r.weeks} wk · seed {r.seed} · {r.summary.reads} reads
+                {r.stale ? " · stale" : ""}
               </option>
             ))}
           </select>
@@ -130,6 +132,12 @@ export default function Home() {
         </section>
 
         {error && <div className="error">{error}</div>}
+        {run?.stale && (
+          <div className="error stale">
+            Stale run: cameras were reloaded after it was simulated, so camera references may not match.
+            Simulate a new driver for current data.
+          </div>
+        )}
 
         {run && (
           <section className="tag">

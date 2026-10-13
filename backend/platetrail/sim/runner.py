@@ -149,8 +149,9 @@ def store(engine: Engine, out: SimulationOutput, cameras: CameraSet) -> int:
     with engine.begin() as conn:
         run_id = conn.execute(
             text("INSERT INTO runs (generator, weeks, start_date, seed, plate, plate_state, match_config,"
-                 " noise_config, anchors, summary) VALUES (:g, :w, :s, :seed, :plate, :state, CAST(:m AS jsonb),"
-                 " CAST(:n AS jsonb), CAST(:a AS jsonb), CAST(:sum AS jsonb)) RETURNING id"),
+                 " noise_config, anchors, summary, camera_snapshot) VALUES (:g, :w, :s, :seed, :plate, :state,"
+                 " CAST(:m AS jsonb), CAST(:n AS jsonb), CAST(:a AS jsonb), CAST(:sum AS jsonb),"
+                 " (SELECT max(loaded_at) FROM cameras)) RETURNING id"),
             {"g": out.generator, "w": req.weeks, "s": req.start, "seed": req.seed, "plate": out.plate,
              "state": SYNTHETIC_STATE, "m": json.dumps(_config_json(req.match)),
              "n": json.dumps(_config_json(req.noise_config())),

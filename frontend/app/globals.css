@@ -106,6 +106,7 @@ select:focus, input:focus, button:focus-visible { outline: 1px solid var(--read)
   padding: 7px 12px; font-weight: 600; cursor: pointer; letter-spacing: 0.05em;
 }
 .simulate button:disabled { opacity: 0.6; cursor: progress; }
+.error.stale { border-left-color: var(--svc); background: rgba(224,168,90,0.08); color: #f3d3a6; }
 .error { margin: 0 26px 10px; padding: 8px 10px; border-left: 2px solid var(--skip); background: rgba(217,83,79,0.08); color: #f0b3b1; }
 
 /* ---------- evidence tag ---------- */

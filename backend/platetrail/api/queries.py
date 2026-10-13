@@ -5,6 +5,11 @@ import json
 from sqlalchemy import Engine, text
 
 
+# A run is stale when cameras were reloaded after it was simulated (camera ids changed).
+_STALE = ("(camera_snapshot IS NULL OR camera_snapshot IS DISTINCT FROM"
+          " (SELECT max(loaded_at) FROM cameras)) AS stale")
+
+
 def _iso(v):
     return v.isoformat() if v is not None else None
 
@@ -12,7 +17,7 @@ def _iso(v):
 def list_runs(engine: Engine, limit: int = 100) -> list[dict]:
     with engine.connect() as conn:
         rows = conn.execute(text(
-            "SELECT id, created_at, generator, weeks, start_date, seed, plate, plate_state, summary"
+            f"SELECT id, created_at, generator, weeks, start_date, seed, plate, plate_state, summary, {_STALE}"
             " FROM runs ORDER BY id DESC LIMIT :n"), {"n": limit}).mappings().all()
     return [{**dict(r), "created_at": _iso(r["created_at"]), "start_date": _iso(r["start_date"])} for r in rows]
 
@@ -21,7 +26,7 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
     with engine.connect() as conn:
         run = conn.execute(text(
             "SELECT id, created_at, generator, weeks, start_date, seed, plate, plate_state, match_config,"
-            " noise_config, anchors, summary FROM runs WHERE id = :r"), {"r": run_id}).mappings().first()
+            f" noise_config, anchors, summary, {_STALE} FROM runs WHERE id = :r"), {"r": run_id}).mappings().first()
         if run is None:
             return None
         trips = conn.execute(text(

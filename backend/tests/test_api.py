@@ -96,3 +96,14 @@ def test_simulate_rejects_bad_requests(client, payload):
 
 def test_unknown_run_is_404(client):
     assert client.get("/runs/999999").status_code == 404
+
+
+def test_runs_marked_stale_after_camera_reload(client, engine):
+    from sqlalchemy import text
+
+    run_id = client.post("/simulate", json={"seed": 31}).json()["run_id"]
+    assert client.get(f"/runs/{run_id}").json()["run"]["stale"] is False
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE cameras SET loaded_at = now() + interval '1 second'"))
+    assert client.get(f"/runs/{run_id}").json()["run"]["stale"] is True
+    assert next(r for r in client.get("/runs").json() if r["id"] == run_id)["stale"] is True

@@ -47,6 +47,7 @@ export type RunListItem = {
   plate: string;
   plate_state: string;
   summary: RunSummary;
+  stale: boolean; // cameras were reloaded after this run was simulated
 };
 
 export type Place = { key: string; category: string; lon: number; lat: number; town: string | null; name: string | null };
