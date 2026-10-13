@@ -240,3 +240,29 @@ how many reads there are.
 **Caveats.** Template routines, noise defaults and camera positions shape
 these numbers. The baseline ignores time of day beyond first/last and gap
 ordering, and it can't place an anchor away from a camera.
+
+## F4. NHTS routines vs. templates: fewer, more scattered reads; the conclusions hold
+
+**Setup.** Same 300 drivers, seed, matcher, noise and cameras as F2/F3, with
+routines from the 2022 NHTS generator (`--generator nhts`) instead of the
+hand-written templates (2026-10-13). NHTS personas: 200 workers, 93
+non-workers, 7 students.
+
+| | Templates (F2/F3) | NHTS |
+|---|---|---|
+| Trips per week (worker / non-worker) | 18.5 commuter | 16.3 / 12.2 |
+| Reads per driver-week, median (IQR) | 7 (3–10.25) | 5 (2–9.25) |
+| Drivers never read | 10% | 10% |
+| Share of reads from top camera, median | 75% | 60% |
+| Errand trips ending in camera-covered lots (vs. 6.6% of places) | 5.3% | 7.4% |
+| Naive guess: no guess possible (1 week) | 50% | 51% |
+| Naive home error, median / p75 | 2.9 / 7.8 km | 3.7 / 8.8 km |
+| Naive work error, median / p75 | 1.5 / 5.4 km | 2.7 / 7.4 km |
+| Naive home guess = top camera | 81% | 85% |
+
+**What it says.** Real trip diaries give drivers more varied destinations and
+stay-at-home days (about 15% of worker weekdays, 35% of non-worker days). That
+means slightly fewer reads, spread over more cameras. The headline findings
+don't depend on the routine source: about one driver in ten is never read in
+a week, half can't be placed even naively, and naive guesses are a few
+kilometres off, mostly at the driver's top camera.

@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from platetrail.sim.matcher import MatchConfig
 from platetrail.sim.noise import NoiseConfig
@@ -29,7 +29,9 @@ class NoiseSettings(BaseModel):
 
 
 class SimulateRequest(BaseModel):
-    template: Literal["commuter", "student", "shift_worker"] | None = None
+    generator: Literal["nhts", "template"] = "nhts"
+    # template: commuter / student / shift_worker; nhts persona: worker / student / non_worker
+    template: Literal["commuter", "student", "shift_worker", "worker", "non_worker"] | None = None
     weeks: int = Field(1, ge=1, le=MAX_WEEKS)
     start: date = date(2026, 10, 12)
     seed: int = Field(0, ge=0)
@@ -37,6 +39,13 @@ class SimulateRequest(BaseModel):
     extra_cameras: int = Field(0, ge=0, le=200)  # density scenario (synthetic cameras in Edison)
     match: MatchSettings = MatchSettings()
     noise: NoiseSettings = NoiseSettings()
+
+    @model_validator(mode="after")
+    def _template_matches_generator(self):
+        allowed = {"nhts": {"worker", "student", "non_worker"}, "template": {"commuter", "student", "shift_worker"}}
+        if self.template is not None and self.template not in allowed[self.generator]:
+            raise ValueError(f"template {self.template!r} is not valid for generator {self.generator!r}")
+        return self
 
     @field_validator("start")
     @classmethod
@@ -49,4 +58,5 @@ class SimulateRequest(BaseModel):
         noise = (NoiseConfig.noiseless(self.seed) if self.zero_noise
                  else NoiseConfig(seed=self.seed, **self.noise.model_dump()))
         return SimulationRequest(self.template, self.weeks, self.start, self.seed,
-                                 MatchConfig(**self.match.model_dump()), noise, self.extra_cameras)
+                                 MatchConfig(**self.match.model_dump()), noise, self.extra_cameras,
+                                 generator=self.generator)

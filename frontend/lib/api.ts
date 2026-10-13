@@ -152,7 +152,14 @@ export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);
 
-export type SimulateBody = { template?: string; weeks: number; seed: number; zero_noise?: boolean; extra_cameras?: number };
+export type SimulateBody = {
+  generator?: "nhts" | "template";
+  template?: string;
+  weeks: number;
+  seed: number;
+  zero_noise?: boolean;
+  extra_cameras?: number;
+};
 
 export async function simulate(body: SimulateBody): Promise<{ run_id: number }> {
   const resp = await fetch(`${API_URL}/simulate`, {

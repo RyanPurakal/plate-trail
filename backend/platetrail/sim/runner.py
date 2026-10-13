@@ -41,7 +41,9 @@ from platetrail.sim.trip import CameraPass, CameraSet
 
 @dataclass(frozen=True)
 class SimulationRequest:
-    template: str | None = None  # None: drawn from TEMPLATE_WEIGHTS
+    # Template name (commuter / student / shift_worker) or, with generator="nhts", an NHTS persona
+    # (worker / student / non_worker). None: drawn from the generator's own mix.
+    template: str | None = None
     weeks: int = 1
     start: date = date(2026, 10, 12)  # a Monday
     seed: int = 0
@@ -49,6 +51,7 @@ class SimulationRequest:
     noise: NoiseConfig | None = None  # None: defaults with seed = request seed
     extra_cameras: int = 0  # density scenario: synthetic cameras added (platetrail.sim.scenarios)
     scenario_town: str = "Edison"
+    generator: str = "template"  # "template" or "nhts" (routines.nhts)
 
     def noise_config(self) -> NoiseConfig:
         return self.noise if self.noise is not None else NoiseConfig(seed=self.seed)
@@ -56,6 +59,18 @@ class SimulationRequest:
 
 class SimulationRunner(ABC):
     @abstractmethod
+    def make_generator(self, request: SimulationRequest) -> RoutineGenerator:
+        if request.generator == "nhts":
+            from platetrail.routines.nhts import NHTSRoutineGenerator
+            from platetrail.routines.nhts_data import load_diaries
+
+            if self._nhts is None:
+                self._nhts = load_diaries()
+            return NHTSRoutineGenerator(self.pool, self._nhts, request.template)
+        if request.generator != "template":
+            raise ValueError(f"unknown generator {request.generator!r}")
+        return TemplateRoutineGenerator(self.pool, request.template)
+
     def run(self, request: SimulationRequest) -> int:
         """Simulate and store; return the run id."""
 
@@ -94,6 +109,7 @@ class LocalRunner(SimulationRunner):
         self.router, self.cameras, self.pool, self.engine = router, cameras, pool, engine
         self.generator = generator
         self.towns = towns or {}  # name -> lon/lat polygon, for density scenarios
+        self._nhts = None  # NHTS diaries, loaded on first use
 
     @classmethod
     def from_db(cls, engine: Engine | None = None) -> "LocalRunner":
@@ -112,7 +128,7 @@ class LocalRunner(SimulationRunner):
     def simulate(self, request: SimulationRequest) -> SimulationOutput:
         if request.weeks < 1:
             raise ValueError("weeks must be >= 1")
-        gen = self.generator or TemplateRoutineGenerator(self.pool, request.template)
+        gen = self.generator or self.make_generator(request)
         routine = gen.generate(0, request.start, request.weeks, np.random.default_rng([request.seed, 1]))
         plate = synthetic_plate(np.random.default_rng([request.seed, 2]))
         cameras, scenario = self.cameras, None
@@ -139,8 +155,21 @@ class LocalRunner(SimulationRunner):
         last = max([t.result.route.arrive for t in sim.trips], default=start)
         end = max(start + timedelta(weeks=request.weeks), last + timedelta(minutes=1))
         noise = apply_noise(true, start, end, request.noise_config(), list(cameras.by_id))
-        return SimulationOutput(request, f"template:{routine.template}", plate, sim, passes, noise, (start, end),
+        label = routine.template if routine.template.startswith("nhts_") else f"template:{routine.template}"
+        return SimulationOutput(request, label, plate, sim, passes, noise, (start, end),
                                 cameras, scenario)
+
+    def make_generator(self, request: SimulationRequest) -> RoutineGenerator:
+        if request.generator == "nhts":
+            from platetrail.routines.nhts import NHTSRoutineGenerator
+            from platetrail.routines.nhts_data import load_diaries
+
+            if self._nhts is None:
+                self._nhts = load_diaries()
+            return NHTSRoutineGenerator(self.pool, self._nhts, request.template)
+        if request.generator != "template":
+            raise ValueError(f"unknown generator {request.generator!r}")
+        return TemplateRoutineGenerator(self.pool, request.template)
 
     def run(self, request: SimulationRequest) -> int:
         out = self.simulate(request)
@@ -231,7 +260,8 @@ def store(engine: Engine, out: SimulationOutput, cameras: CameraSet) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--template", choices=["commuter", "student", "shift_worker"])
+    ap.add_argument("--generator", choices=["template", "nhts"], default="nhts")
+    ap.add_argument("--template", help="template (commuter/student/shift_worker) or NHTS persona (worker/student/non_worker)")
     ap.add_argument("--weeks", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 12))
@@ -241,7 +271,7 @@ def main() -> None:
     runner = LocalRunner.from_db()
     req = SimulationRequest(args.template, args.weeks, args.start, args.seed,
                             noise=NoiseConfig.noiseless(args.seed) if args.zero_noise else None,
-                            extra_cameras=args.extra_cameras)
+                            extra_cameras=args.extra_cameras, generator=args.generator)
     run_id = runner.run(req)
     with runner.engine.connect() as conn:
         summary, gen, state, plate = conn.execute(

@@ -88,11 +88,15 @@ def test_template_mix_when_unspecified():
     assert 0.5 < names.count("commuter") / 300 < 0.7
 
 
-def test_nhts_is_a_stub_behind_the_same_interface():
-    gen = NHTSRoutineGenerator()
+def test_nhts_generator_implements_the_same_interface():
+    from pathlib import Path
+
+    from platetrail.routines.nhts_data import load_diaries
+
+    gen = NHTSRoutineGenerator(pool(), load_diaries(Path(__file__).parent / "fixtures" / "nhts"))
     assert isinstance(gen, RoutineGenerator)
-    with pytest.raises(NotImplementedError):
-        gen.generate(1, MONDAY, 1, np.random.default_rng(0))
+    r = gen.generate(1, MONDAY, 1, np.random.default_rng(0))
+    assert r.template.startswith("nhts_") and r.anchors["home"].category == "home"
 
 
 # ---- place pool -------------------------------------------------------------------------

@@ -97,7 +97,7 @@ select:focus, input:focus, button:focus-visible { outline: 1px solid var(--read)
 .simulate { margin-top: 8px; color: var(--dim); }
 .simulate summary { cursor: pointer; font-size: 11px; }
 .simulate summary:hover { color: var(--bone); }
-.simulate form { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.simulate form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .simulate input { width: 52px; }
 .simulate .unit { color: var(--dim); font-size: 10px; }
 .simulate button {

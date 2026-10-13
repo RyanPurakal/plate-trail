@@ -18,7 +18,7 @@ from platetrail.db import get_engine
 from platetrail.inference.naive import MIN_DAYS, LogRead, naive_home_work
 from platetrail.roads.graph import load_or_build_graph
 from platetrail.routines.places import PlacePool
-from platetrail.routines.templates import TEMPLATE_WEIGHTS, TemplateRoutineGenerator
+from platetrail.routines.templates import TemplateRoutineGenerator
 from platetrail.sim.driver import simulate_routine
 from platetrail.sim.matcher import MatchConfig
 from platetrail.sim.noise import NoiseConfig, apply_noise, true_passes
@@ -38,13 +38,20 @@ def main() -> None:
     ap.add_argument("--drivers", type=int, default=300)
     ap.add_argument("--weeks", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--generator", choices=["template", "nhts"], default="template")
     args = ap.parse_args()
 
     engine = get_engine()
     router, cameras, pool = Router(load_or_build_graph()), load_camera_set(engine), PlacePool.from_db(engine)
     coords = {c.label: (c.lon, c.lat) for c in cameras.by_id.values()}
     label = {cid: c.label for cid, c in cameras.by_id.items()}
-    gen = TemplateRoutineGenerator(pool)
+    if args.generator == "nhts":
+        from platetrail.routines.nhts import NHTSRoutineGenerator
+        from platetrail.routines.nhts_data import load_diaries
+
+        gen = NHTSRoutineGenerator(pool, load_diaries())
+    else:
+        gen = TemplateRoutineGenerator(pool)
     t0 = datetime.combine(START, datetime.min.time())
     t1 = t0 + timedelta(weeks=args.weeks, days=1)
 
@@ -62,7 +69,8 @@ def main() -> None:
             "reads": len(noisy.reads),
             "possible": res.possible,
             "home_err": res.home.error_m(home.lon, home.lat) if res.home else None,
-            "work_err": res.work.error_m(main_anchor.lon, main_anchor.lat) if res.work else None,
+            # non-workers have no work/school anchor, so no work error
+            "work_err": res.work.error_m(main_anchor.lon, main_anchor.lat) if res.work and main_anchor else None,
             "home_is_top": bool(res.home and res.home.camera_label == res.top_camera),
             "work_is_top": bool(res.work and res.work.camera_label == res.top_camera),
             "same_camera": bool(res.home and res.work and res.home.camera_label == res.work.camera_label),
@@ -73,8 +81,8 @@ def main() -> None:
     hdr = (f"{'template':<14}{'n':>5}{'no guess':>10}{'home med km':>13}{'home p75':>10}{'work med km':>13}"
            f"{'work p75':>10}{'home=top':>10}{'work=top':>10}{'home=work':>11}{'home<1km':>10}{'work<1km':>10}")
     print(hdr)
-    for name in list(TEMPLATE_WEIGHTS) + ["ALL"]:
-        rs = [r for n in TEMPLATE_WEIGHTS for r in rows[n]] if name == "ALL" else rows.get(name, [])
+    for name in sorted(rows) + ["ALL"]:
+        rs = [r for n in rows for r in rows[n]] if name == "ALL" else rows.get(name, [])
         if not rs:
             continue
         g = [r for r in rs if r["possible"]]

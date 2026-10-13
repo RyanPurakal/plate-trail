@@ -65,7 +65,7 @@ export default function Home() {
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ template: "commuter", weeks: 1, seed: 1, extra: 0 });
+  const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
 
   useEffect(() => {
     Promise.all([getCameras(), getRuns()])
@@ -133,8 +133,8 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
-      const { run_id } = await simulate({ template: form.template, weeks: form.weeks, seed: form.seed,
-                                          extra_cameras: form.extra });
+      const { run_id } = await simulate({ generator: form.generator, template: form.template || undefined,
+                                          weeks: form.weeks, seed: form.seed, extra_cameras: form.extra });
       setRuns(await getRuns());
       setRunId(run_id);
     } catch (err) {
@@ -170,10 +170,15 @@ export default function Home() {
           <details className="simulate">
             <summary>Simulate a new driver</summary>
             <form onSubmit={onSimulate}>
-              <select value={form.template} onChange={(e) => setForm({ ...form, template: e.target.value })}>
-                <option value="commuter">commuter</option>
-                <option value="student">student</option>
-                <option value="shift_worker">shift worker</option>
+              <select value={form.generator} aria-label="routine source"
+                      onChange={(e) => setForm({ ...form, generator: e.target.value as "nhts" | "template", template: "" })}>
+                <option value="nhts">NHTS</option>
+                <option value="template">template</option>
+              </select>
+              <select value={form.template} aria-label="persona" onChange={(e) => setForm({ ...form, template: e.target.value })}>
+                <option value="">any</option>
+                {(form.generator === "nhts" ? ["worker", "student", "non_worker"] : ["commuter", "student", "shift_worker"]).map(
+                  (t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
               </select>
               <input type="number" min={1} max={8} value={form.weeks} aria-label="weeks"
                      onChange={(e) => setForm({ ...form, weeks: Number(e.target.value) })} />

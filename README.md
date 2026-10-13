@@ -43,7 +43,7 @@ This is the first vertical slice (about a third of the proposal).
 | Routing + direction-aware matching (configurable facing, tolerance, undirected modes) | ✅ Built |
 | Sensor noise model (misses, look-alike misreads, downtime, jitter; seeded) | ✅ Built |
 | Routine generator: template drivers (commuter, student, shift worker) | ✅ Built |
-| Routine generator from NHTS trip diaries | 🔲 Planned (interface + stub) |
+| Routine generator from 2022 NHTS trip diaries (default) | ✅ Built |
 | Stored runs: ground truth + noisy read log | ✅ Built |
 | API: `/cameras`, `/simulate`, `/runs`, `/runs/{id}` | ✅ Built |
 | Frontend: map, routes, reads, read-log table, "cameras saw vs. what happened", run picker, simulate form | ✅ Built |
@@ -213,9 +213,38 @@ counts only if it is on the part actually driven.
 
 ## Routine generator
 
-`platetrail.routines` plans each synthetic driver's trips. It is behind a
-`RoutineGenerator` interface so an NHTS-based generator (stubbed in
-`routines/nhts.py`) can replace it without changing the simulation.
+`platetrail.routines` plans each synthetic driver's trips behind a
+`RoutineGenerator` interface. There are two generators: **NHTS** (the default
+for `/simulate` and the runner CLI) and the hand-written **templates**.
+
+### NHTS (`routines/nhts.py`, `routines/nhts_data.py`)
+
+The source is the 2022 NextGen NHTS public-use CSV v2.1
+([nhts.ornl.gov/downloads](https://nhts.ornl.gov/downloads), about 4.5 MB,
+cached in `data/raw/nhts2022/`; fetch with
+`python -m platetrail.routines.nhts_data --download`).
+
+- **One day per person.** NHTS records a single travel day per person, so a
+  week is assembled from matched one-day diaries.
+- **Persona:** worker / student / non-worker, drawn from NHTS driver weights
+  (65% / 3% / 33%).
+- **Each day:** a stay-at-home day with the weighted NHTS share for that
+  persona and weekday (workers about 15% of weekdays, non-workers about 35%),
+  or a diary drawn from matching drivers (weighted by `WTPERFIN`).
+- **Usable diaries:** 5,397. A usable diary is all private-vehicle trips as
+  driver, home to home, with valid times. That excludes 39% of weighted
+  driver travel-days (transit, walking or passenger trips), which would
+  break the car's location chain.
+- **Diary trips keep their NHTS departure time and purpose.** Destinations
+  are local Edison / New Brunswick places chosen by purpose (work and school
+  are the driver's fixed anchors; drop-offs and visits go to other homes) at
+  a distance matching the diary's trip length (straight line × 1.3
+  circuity, an **assumption**).
+- **NHTS is national, not local.** Only 582 usable diaries are from the
+  Middle Atlantic, too few to split by persona and day, so national weights
+  are used with local places, as the proposal planned.
+
+### Templates (`routines/templates.py`)
 
 ```bash
 .venv/bin/python -m platetrail.routines.places          # load towns + candidate places from OSM (cached)
