@@ -32,8 +32,8 @@ Neither side usually backs its claim with real camera positions and measured num
 All results come from synthetic drivers on the real camera network. Details and caveats are in [docs/findings.md](docs/findings.md).
 
 - **Coverage is sparse today.** A typical driver is read 5 times a week (interquartile range 3–9). About 59% of a driver's reads come from a single camera, and 7% of drivers are never read in a week.
-- **Even so, a few sightings identify a car.** In a crowd of 1,000, two (camera, hour) sightings single out about 80% of drivers, and four single out 99% of those with four. With four weeks of history, 99% of all drivers are unique at four sightings.
-- **Where you live is camera-limited; your schedule is not.** On today's network the inference engine's median home estimate is 4.2 km off, no better than a naive guess. But 92% of routine trips that pass a camera are recovered as a regular, timed pattern. With Edison's 92 approved cameras (simulated placement), half of homes are placed within 1 km.
+- **Even so, a few sightings identify a car.** In a crowd of 1,000, two (camera, hour) sightings single out 78% of the drivers who have two (3 seeds: 78–79%), and four single out 99.8% of those with four. With four weeks of history, 99% of all drivers are unique at four sightings (3 seeds: 98–99%).
+- **Where you live is camera-limited; your schedule is not.** On today's network the inference engine places home no better than a naive guess. On the 271 drivers both methods can place, the median error is 4.02 km for the engine and 4.48 km for the baseline, but the median per-driver difference is 0 km: the engine is closer for 91 drivers, farther for 88, and at the same spot for 92. Its strength is the schedule: 92% of the routines that pass a camera (3 seeds: 92–95%) are recovered as regular, timed patterns. With Edison's 92 approved cameras (simulated placement), 50% of homes are placed within 1 km. That is both the share of drivers with an estimate and the share of all drivers, because all 300 get one (3 seeds: 49–50%).
 - **Policies differ a lot.**
   - Short search windows (±12 h around an incident) and aggregate-only release remove most of what can be inferred.
   - Rounding timestamps to the hour changes almost nothing.
@@ -135,7 +135,7 @@ Rerun the data steps in that order: reloading cameras clears their snaps, so `ru
 ## Using it
 
 - **One driver:** pick or simulate a driver, then switch between what the cameras saw and what actually happened. Step through the reveal: reads, then the inferred home and work areas, then the regular schedule, then the anomalies.
-- **Population & policy:** pick a stored population to see unicity curves (share of drivers singled out by *p* sightings, for several crowd sizes). Compare policies by unicity and by how many homes the engine still places within 1 km. Click a bar for detail, or switch to the table view.
+- **Population & policy:** pick a stored population to see unicity curves (share of drivers singled out by *p* sightings, for several crowd sizes). Compare policies by unicity and by how many homes the engine still places within 1 km (as a share of all drivers). Click a bar for detail, or switch to the table view.
 - **Your week:** place your home (and work) on the map, describe your week, and see what this network could read and infer. Nothing is stored.
 - **Your real data:** see [docs/real_data_validation.md](docs/real_data_validation.md).
 
@@ -151,14 +151,23 @@ Rerun the data steps in that order: reloading cameras clears their snaps, so `ru
 
 ### Inference on synthetic drivers (300 drivers, 4 weeks, vs. ground truth; F6)
 
-| Metric | Naive baseline | Inference engine | Engine, +92 cameras |
-|---|---|---|---|
-| Home error, median | 4.48 km | 4.21 km | 1.00 km |
-| Home within 1 km | 18% | 17% | 50% |
-| Work/school error, median | 3.50 km | 5.54 km | 1.21 km |
-| Drivers with no home / work estimate | 10% / 9% | 0% / 56% | 0% / 5% |
-| Schedule recovered (observable routine trips) | n/a | 92% | 98% |
-| Anomaly precision / recall | n/a | 57% / 29% | 50% / 36% |
+Values are seed 0. Parentheses give the range over seeds 0, 1 and 2.
+
+| Metric | Naive baseline | Inference engine | Baseline, +92 cameras | Engine, +92 cameras |
+|---|---|---|---|---|
+| **Home error, median, on drivers both methods place** (n = 271; +92: 300) | 4.48 km (4.36–4.63) | **4.02 km** (3.75–4.02) | 1.02 km (1.02–1.11) | **1.00 km** (0.99–1.01) |
+| Per driver: engine closer / farther / same spot | | 91 / 88 / 92 | | 142 / 134 / 24 |
+| Home error, median, every driver each method places (engine n = 299) | 4.48 km (n = 271) | 4.21 km (3.84–4.21) | 1.02 km (n = 300) | 1.00 km (n = 300) |
+| Home within 1 km, share of drivers with an estimate | 18% (15–18%) | 17% (15–17%) | 49% (45–49%) | 50% (49–50%) |
+| Home within 1 km, share of all 300 drivers | 16% (13–16%) | 17% (15–17%) | 49% (45–49%) | 50% (49–50%) |
+| Work/school error, median (drivers with an estimate) | 3.50 km (3.49–3.75) | 5.54 km (5.43–6.17) | 1.11 km (0.89–1.11) | 1.21 km (1.00–1.40) |
+| Drivers with no home / work estimate | 10% / 9% | <1% / 56% | 0% / 0% | 0% / 5% |
+| Routines recovered | n/a | 302 of 327 (92%; 92–95%) | n/a | 640 of 654 (98%; 98% at all seeds) |
+| Anomaly precision / recall | n/a | 57% / 29% (57–63% / 29–30%) | n/a | 50% / 36% (50–55% / 36–40%) |
+
+A *routine* is a trip the driver repeats between the same two places at a similar time (within 45 minutes) on at least 3 days. It is *observable* if any of its trips produced a read, and *recovered* if at least half of its trips produced a read matching a regular pass the engine inferred (same camera, within 45 minutes).
+
+On matched drivers the engine is not better than the baseline. The median per-driver difference is 0 km at every seed, and a sign test on closer vs. farther finds no difference (p = 0.88, 0.32, 0.20 for seeds 0–2). The two methods often name the same camera.
 
 The engine's confidence label measures how consistent the evidence is, not how close the estimate is: "high" confidence homes are still 3.6 km off at the median on today's network.
 
@@ -168,40 +177,44 @@ The importer is built and verified on synthetic Timeline exports. Sixty drivers 
 
 ### Unicity (crowd of 1,000, hourly points; F5)
 
-Each cell is the share of eligible drivers who are unique, then the share of all drivers.
+Each cell is the share of eligible drivers who are unique, then the share of all drivers. "Eligible" means at least *p* distinct (camera, hour) points; for *p* = 4 in one week on today's network that is 655 of 1,000 drivers. Values are seed 0, with the 3-seed range in parentheses.
 
 | Sightings known (*p*) | 1 week, OSM | 4 weeks, OSM | 1 week, +92 cameras | 4 weeks, +92 cameras |
 |---|---|---|---|---|
-| 1 | 12% / 11% | 12% / 12% | 9% / 9% | 9% / 9% |
-| 2 | 78% / 66% | 84% / 84% | 81% / 81% | 89% / 89% |
-| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% | 99.9% / 99.9% |
-| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% | 100% / 100% |
+| 1 | 12% / 11% (12–15 / 11–14) | 12% / 12% (12–14 / 12–14) | 9% / 9% (9–11 / 9–11) | 9% / 9% (9–11 / 9–11) |
+| 2 | 78% / 66% (78–79 / 66–68) | 84% / 84% (83–84 / 82–84) | 81% / 81% (81–85 / 81–84) | 89% / 89% (89–90 / 89–90) |
+| 4 | 99.8% / 65% (99.6–99.8 / 65–65) | 99.9% / 99% (99.9–99.9 / 98–99) | 99% / 98% (99.2–99.5 / 97.9–98.1) | 99.9% / 99.9% (99.9–100 / 99.9–100) |
+| 8 | 100% / 35% (100 / 30–35) | 100% / 91% (100 / 89–91) | 99.9% / 97% (99.9–100 / 96–97) | 100% / 100% (100 / 100) |
 
-Unicity falls as the crowd grows: at *p* = 2 it is 97% in a crowd of 100 and 78% in a crowd of 1,000. Real Edison volume is far larger, so these are upper bounds.
+Unicity falls as the crowd grows: at *p* = 2 it is 97% in a crowd of 100 (3 seeds: 96–99%) and 78% in a crowd of 1,000. Real Edison volume is far larger, so these are upper bounds.
 
-### Policy comparison (population #2: 4 weeks, OSM cameras; F7)
+### Policy comparison (1,000 drivers, 4 weeks, OSM cameras; F7)
 
-| Policy | Homes within 1 km | Work estimated | Unique, *p* = 2 | Unique, *p* = 4 |
-|---|---|---|---|---|
-| No limits (4 weeks kept) | 17% | 45% | 84% | 99% |
-| Keep 7 days | 15% | 26% | 67% | 66% |
-| Keep 1 day | 0% | 0% | 15% | 4% |
-| Round timestamps to the hour | 16% | 47% | 84% (15-min points: 97% → 84%) | 99% |
-| Search window ±36 h | 9% | 16% | 56% | 30% |
-| Search window ±12 h | 1% | 7% | 24% | 6% |
-| Aggregate counts only | 0% | 0% | 0% | 0% |
+Values are seed 0, with the 3-seed range in parentheses. "Homes within 1 km" is given both ways: as a share of the drivers the engine can still place, and as a share of all 1,000 drivers. When few homes can be estimated, as with the ±12 h window, the first share rests on very few drivers.
 
-On the denser network (4 weeks, +92 cameras) 7-day retention still leaves 98% unique at *p* = 4 and 39% of homes within 1 km ([F7](docs/findings.md)). Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
+| Policy | Homes estimated | Homes within 1 km, of those estimated | Homes within 1 km, of all drivers | Work estimated | Unique, *p* = 2 | Unique, *p* = 4 |
+|---|---|---|---|---|---|---|
+| No limits (4 weeks kept) | 99% | 17% (16–17%) | 17% (16–17%) | 45% (41–45%) | 84% (82–84%) | 99% (98–99%) |
+| Keep 7 days | 78% | 19% (17–21%) | 15% (13–16%) | 26% (21–26%) | 67% (66–68%) | 66% (63–66%) |
+| Keep 1 day | 0% | — | 0% | 0% | 15% (13–15%) | 4% (3–4%) |
+| Round timestamps to the hour | 99% | 17% (15–18%) | 16% (15–17%) | 47% (43–47%) | 84% (83–84%); at 15-min points 97% → 84% | 99% (98–99%) |
+| Search window ±36 h | 43% | 22% (18–24%) | 9% (8–10%) | 16% (12–16%) | 56% (56–58%) | 30% (27–30%) |
+| Search window ±12 h | 3% | 38% (17–38%) | 1% (0–1%) | 7% (5–7%) | 24% (22–24%) | 6% (4–6%) |
+| Aggregate counts only | 0% | — | 0% | 0% | 0% | 0% |
+
+On the denser network (4 weeks, +92 cameras), 7-day retention still leaves 98% unique at *p* = 4 (3 seeds: 98–99%). It also places 39% of all drivers' homes within 1 km (37–46%), which is 40% of the 98% it can place (38–47%) ([F7](docs/findings.md)). Retention longer than the simulated 4 weeks equals "no limits", so the 4-week row is a lower bound for multi-year retention.
 
 ### Robustness
 
 Each matching and noise assumption was varied one at a time on the same 300 drivers ([F8](docs/findings.md#f8-robustness-the-conclusions-survive-every-matching-and-noise-assumption)): capture convention, tolerance, undirected and ambiguous cameras, lot events, miss and misread rates, and downtime.
 
-| | Engine home error (median) | Homes within 1 km | Unique, *p* = 2 (crowd of 300) |
-|---|---|---|---|
-| Defaults | 3.99 km | 13% | 74% |
-| Range across all 10 assumption changes | 3.70–4.22 km | 12–14% | 60–76% |
-| +92 scenario cameras | 1.14 km | 44% | 91% |
+One week, seed 0. In one week the engine places 215 of the 300 homes under the defaults.
+
+| | Engine home error (median, drivers with an estimate) | Homes within 1 km, of those estimated | Homes within 1 km, of all drivers | Unique, *p* = 2 (crowd of 300) |
+|---|---|---|---|---|
+| Defaults | 3.99 km | 17.7% (n = 215) | 13% | 74% |
+| Range across all 10 assumption changes | 3.70–4.22 km | 16.7–21.6% | 12–14% | 60–76% |
+| +92 scenario cameras | 1.14 km | 44.7% (n = 293) | 44% | 91% |
 
 Camera density changes the results far more than any single modelling assumption. The largest assumption effect is a strict 30° matching tolerance (unicity 74% → 60%).
 

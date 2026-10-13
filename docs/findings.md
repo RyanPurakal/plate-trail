@@ -200,7 +200,7 @@ as F2).
 | Shift worker | 50 | 66% | 4.4 / 10.8 km | 1.8 / 11.0 km | 82% | 76% | 65% |
 | **All** | **300** | **50%** | **2.9 / 7.8 km** | **1.5 / 5.4 km** | **81%** | **74%** | **72%** |
 
-Errors are over drivers with a guess. Within 1 km: home 26%, work 40%.
+Errors are over drivers with a guess. Within 1 km, as a share of drivers with a guess: home 26%, work 40%. As a share of all 300 drivers: about 13% and 20% (from the rounded figures above, since half have no guess).
 
 **4 weeks** (same drivers, longer history):
 
@@ -211,7 +211,7 @@ Errors are over drivers with a guess. Within 1 km: home 26%, work 40%.
 | Shift worker | 50 | 28% | 4.5 / 10.0 km | 1.6 / 8.2 km | 81% | 72% | 75% |
 | **All** | **300** | **17%** | **3.3 / 8.1 km** | **1.8 / 5.3 km** | **80%** | **72%** | **74%** |
 
-Within 1 km: home 24%, work 33%. **More history makes a guess possible far
+Within 1 km, as a share of drivers with a guess: home 24%, work 33%. As a share of all 300 drivers: about 20% and 27% (83% have a guess). **More history makes a guess possible far
 more often (no guess 50% → 17%) but doesn't make it more accurate.** The
 error stays at about 3 km because the limit is where the cameras are, not
 how many reads there are.
@@ -269,7 +269,7 @@ kilometres off, mostly at the driver's top camera.
 
 ## F5. Unicity: two hourly sightings single out most drivers, and density barely changes that
 
-**Setup.** Stored populations of 1,000 NHTS drivers each, seed 0, default
+**Setup.** Stored populations of 1,000 NHTS drivers each, seed 0 (rerun at seeds 1 and 2 for the ranges), default
 matcher and noise (`python -m platetrail.population`, 2026-10-13). A point is
 (camera, hour). Identity is the recorded plate. A driver is *unique* if *p*
 random points from their own trace match no other recorded plate
@@ -285,17 +285,17 @@ second is what the UI charts.
 | #3: 1 week, OSM + 92 scenario cameras | 34.5 | 0.1% |
 | #4: 4 weeks, OSM + 92 scenario cameras | 141 | 0% |
 
-**Crowd of 1,000, hourly points.** Each cell is unique among eligible / share of all drivers.
+**Crowd of 1,000, hourly points.** Each cell is unique among eligible / share of all drivers, seed 0, with the 3-seed range in parentheses. Eligible drivers at *p* = 4 in #1: 655 of 1,000 (650–656).
 
 | *p* | #1 (1 wk, OSM) | #2 (4 wk, OSM) | #3 (1 wk, +92) | #4 (4 wk, +92) |
 |---|---|---|---|---|
-| 1 | 12% / 11% | 12% / 12% | 9% / 9% | 9% / 9% |
-| 2 | 78% / 66% | 84% / 84% | 81% / 81% | 89% / 89% |
-| 4 | 99.8% / 65% | 99.9% / 99% | 99% / 98% | 99.9% / 99.9% |
-| 8 | 100% / 35% | 100% / 91% | 99.9% / 97% | 100% / 100% |
+| 1 | 12% / 11% (12–15 / 11–14) | 12% / 12% (12–14 / 12–14) | 9% / 9% (9–11 / 9–11) | 9% / 9% (9–11 / 9–11) |
+| 2 | 78% / 66% (78–79 / 66–68) | 84% / 84% (83–84 / 82–84) | 81% / 81% (81–85 / 81–84) | 89% / 89% (89–90 / 89–90) |
+| 4 | 99.8% / 65% (99.6–99.8 / 65–65) | 99.9% / 99% (99.9–99.9 / 98–99) | 99% / 98% (99.2–99.5 / 97.9–98.1) | 99.9% / 99.9% (99.9–100 / 99.9–100) |
+| 8 | 100% / 35% (100 / 30–35) | 100% / 91% (100 / 89–91) | 99.9% / 97% (99.9–100 / 96–97) | 100% / 100% (100 / 100) |
 
-**Crowd size** (#1, *p* = 2, unique among eligible): 97% in a crowd of 100,
-78% in 1,000. **Time resolution** (#1, *p* = 2, share of all drivers): 66% at
+**Crowd size** (#1, *p* = 2, unique among eligible): 97% in a crowd of 100
+(3 seeds: 96–99%), 78% in 1,000. **Time resolution** (#1, *p* = 2, share of all drivers): 66% at
 hourly points, 81% at 15-minute points.
 
 **What it says.**
@@ -319,37 +319,60 @@ adversary knows. Real side information (a known commute time) is less
 random and may be more or less identifying. Misreads split a car into
 fragments, which this measure counts as non-matching.
 
-## F6. The inference engine places home a little better than the naive baseline, needs the 92 cameras to be accurate, and its confidence is about consistency
+## F6. The inference engine places home no better than the naive baseline, needs the 92 cameras to be accurate, and its confidence is about consistency
 
 **Setup.** `backend/scripts/evaluate_inference.py --drivers 300 --weeks 4`
 (NHTS, seed 0, default noise; 2026-10-13), with and without the 92 scenario
-cameras. Each driver's reads under their true plate go to both methods. Errors
-are against the true home and work (or school) anchors.
+cameras, rerun at seeds 1 and 2 for the ranges in parentheses. Each driver's
+reads under their true plate go to both methods. Errors are against the true
+home and work (or school) anchors. The matched-driver comparison and both
+versions of the 1 km share come from a copy of the script that also saves
+per-driver errors; the published numbers it shares with the script are
+identical.
 
 | | OSM cameras | OSM + 92 scenario |
 |---|---|---|
-| Reads per driver (median, 4 weeks) | 21 | 138 |
-| **Home**: engine, no estimate / median / p75 error | 0% / 4.21 / 7.57 km | 0% / 1.00 / 1.88 km |
+| Reads per driver (median, 4 weeks) | 21 (19–21) | 138 (117–138) |
+| **Home, matched drivers** (those the baseline places): n | 271 (261–271) | 300 (300) |
+| Home, matched: engine / naive median error | **4.02 / 4.48 km** (3.75–4.02 / 4.36–4.63) | **1.00 / 1.02 km** (0.99–1.01 / 1.02–1.11) |
+| Home, matched: engine closer / farther / same spot | 91 / 88 / 92 | 142 / 134 / 24 |
+| Home, matched: median per-driver difference; sign test | 0 km at all seeds; p = 0.88 (0.20–0.88) | 0 km at all seeds; p = 0.67 (0.06–0.67) |
+| Home: engine, no estimate / median / p75 error, every driver it places (secondary) | <1% / 4.21 / 7.57 km (median 3.84–4.21) | 0% / 1.00 / 1.88 km |
 | Home: naive, no estimate / median / p75 | 10% / 4.48 / 8.62 km | 0% / 1.02 / 2.13 km |
-| Home within 1 km: engine / naive | 17% / 18% | 50% / 49% |
-| **Work** (drivers with a work/school anchor): engine, no estimate / median | 56% / 5.54 km | 5% / 1.21 km |
-| Work: naive, no estimate / median | 9% / 3.50 km | 0% / 1.11 km |
-| Schedule recovered (observable routine trips matched by a regular pass) | 302 / 327 (92%) | 640 / 654 (98%) |
-| Anomalies: precision / recall | 57% / 29% | 50% / 36% |
-| Engine home error by confidence: high / medium / low | 3.60 (n=239) / 5.35 (46) / 5.09 km (14) | 0.95 (283) / 1.38 km (17) / — |
+| Home within 1 km, share of drivers with an estimate: engine / naive | 17% / 18% (15–17% / 15–18%) | 50% / 49% (49–50% / 45–49%) |
+| Home within 1 km, share of all 300 drivers: engine / naive | 17% / 16% (15–17% / 13–16%) | 50% / 49% (49–50% / 45–49%) |
+| **Work** (drivers with a work/school anchor): engine, no estimate / median | 56% / 5.54 km (55–58% / 5.43–6.17) | 5% / 1.21 km (4–5% / 1.00–1.40) |
+| Work: naive, no estimate / median | 9% / 3.50 km (9–12% / 3.49–3.75) | 0% / 1.11 km (0% / 0.89–1.11) |
+| Routines recovered | 302 of 327 (92%; 92–95%) | 640 of 654 (98%; 98% at all seeds) |
+| Anomalies: precision / recall | 57% / 29% (57–63% / 29–30%) | 50% / 36% (50–55% / 36–40%) |
+| Engine home error by confidence: high / medium / low | 3.60 (n=239) / 5.35 (46) / 5.09 km (14); high 3.55–3.75 | 0.95 (283) / 1.38 km (17) / —; high 0.95–1.00 |
+
+A *routine* is a trip the driver repeats between the same two places at a
+similar time (within 45 minutes) on at least 3 days. It is *observable* if any
+of its trips produced a read, and *recovered* if at least half of its trips
+produced a read matching a regular pass the engine inferred (same camera,
+within 45 minutes). `inference/engine.py`: `routine_trips`,
+`schedule_recovery`.
 
 **What it says.**
 
-- **The engine always produces a home estimate, and on the OSM network it is
-  about 4 km off.** That is no closer than the naive guess. Both are bounded
-  by where the cameras are: the nearest camera to a typical home is
-  kilometres away, and stay evidence can only point at cameras.
+- **The engine almost always produces a home estimate, and on the OSM
+  network it is about 4 km off.** On the 271 drivers both methods place, its
+  median error is 4.02 km against the baseline's 4.48 km. Per driver,
+  though, it is closer for 91, farther for 88 and at the same spot for 92:
+  the median difference is 0 km and a sign test finds no difference
+  (p = 0.88; 0.20–0.88 across seeds). The gap between the two medians is not
+  a per-driver improvement. Both methods are bounded by where the cameras
+  are: the nearest camera to a typical home is kilometres away, and stay
+  evidence can only point at cameras.
 - **With the 92 extra cameras, half of drivers' homes are placed within
-  1 km** by either method, and work within about 1.2 km. Density, not
+  1 km** by either method: 50% (engine) and 49% (baseline), the same as a
+  share of drivers with an estimate or of all drivers, because every driver
+  gets one. Work is placed within about 1.2 km. Density, not
   cleverness, decides what a read log reveals.
-- **Schedules are what the cameras reveal best.** 92% of routine trips that
-  pass a camera are recovered as a regular pass (same camera, similar time,
-  3+ days) on the OSM network, and 98% with the extra cameras. "This car
+- **Schedules are what the cameras reveal best.** 302 of the 327 observable
+  routines (92%; 92–95% across seeds) are recovered on the OSM network, and
+  98% with the extra cameras. "This car
   passes Albany St at about 8:10 on weekdays" is the strongest conclusion the
   data supports.
 - **Work detection is the engine's weak point on sparse cameras.** It needs a
@@ -367,62 +390,70 @@ are against the true home and work (or school) anchors.
 ## F7. Policy comparison: short search windows and aggregation work; rounding to the hour barely helps
 
 **Setup.** `GET /populations/{id}/policies` (`backend/scripts/policy_report.py`,
-2026-10-13) on populations #1–#3 from F5. Each policy transforms the read log
-an analyst could query, then the same measurements run on what remains.
-"Home ≤ 1 km" is the share of **all** drivers whose engine home estimate is
-within 1 km. Unicity is the share of all drivers singled out by 2 or 4
-hourly points.
+2026-10-13) on populations #1–#4 from F5. Each policy transforms the read log
+an analyst could query, then the same measurements run on what remains
+(`analysis/policies.py`: `compare`, `_metrics`). Values are seed 0; parentheses
+give the range over seeds 0, 1 and 2, from a clean rebuild that reproduced
+every seed-0 value exactly. "Reads queryable" is seed 0.
+
+"Home ≤ 1 km" is reported two ways: **of estimated** is the share of drivers
+with an engine home estimate whose estimate is within 1 km; **of all drivers**
+is the same count over all 1,000 drivers. When a policy leaves few estimates
+(for example the ±12 h window, about 3% of drivers on today's network), the
+first share rests on a few dozen drivers and swings widely between seeds.
+Unicity is the share of all drivers singled out by 2 or 4 hourly points.
 
 **Population #2 (4 weeks, OSM cameras).**
 
-| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
-|---|---|---|---|---|---|---|
-| No limits (4 weeks kept) | 26,402 | 99% | 17% | 45% | 84% | 99% |
-| Keep 14 days | 13,196 | 94% | 16% | 33% | 78% | 89% |
-| Keep 7 days | 6,640 | 78% | 15% | 26% | 67% | 66% |
-| Keep 1 day | 785 | 0% | 0% | 0% | 15% | 4% |
-| Round timestamps to the hour (unicity at 15-min points: 97% → 84%) | 26,402 | 99% | 16% | 47% | 84% | 99% |
-| Search window ±36 h around an incident | 2,788 | 43% | 9% | 16% | 56% | 30% |
-| Search window ±12 h | 940 | 3% | 1% | 7% | 24% | 6% |
-| Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km, of estimated | Home ≤ 1 km, of all drivers | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
+|---|---|---|---|---|---|---|---|
+| No limits (4 weeks kept) | 26,402 | 99% | 17% (16%–17%) | 17% (16%–17%) | 45% (41%–45%) | 84% (82%–84%) | 99% (98%–99%) |
+| Keep 14 days | 13,196 | 94% | 17% (16%–18%) | 16% (15%–17%) | 33% (28%–33%) | 78% (78%–80%) | 89% (87%–89%) |
+| Keep 7 days | 6,640 | 78% (76%–78%) | 19% (17%–21%) | 15% (13%–16%) | 26% (21%–26%) | 67% (66%–68%) | 66% (63%–66%) |
+| Keep 1 day | 785 | 0% | — | 0% | 0% | 15% (13%–15%) | 4% (3%–4%) |
+| Round timestamps to the hour (unicity at 15-min points: 97% (96%–97%) → 84% (83%–84%)) | 26,402 | 99% | 17% (15%–18%) | 16% (15%–17%) | 47% (43%–47%) | 84% (83%–84%) | 99% (98%–99%) |
+| Search window ±36 h around an incident | 2,788 | 43% (42%–43%) | 22% (18%–24%) | 9% (8%–10%) | 16% (12%–16%) | 56% (56%–58%) | 30% (27%–30%) |
+| Search window ±12 h | 940 | 3% (3%–4%) | 38% (17%–38%) | 1% (0%–1%) | 7% (5%–7%) | 24% (22%–24%) | 6% (4%–6%) |
+| Aggregate counts only | 0 | 0% | — | 0% | 0% | 0% | 0% |
 
 **Population #3 (1 week, OSM + 92 cameras).**
 
-| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
-|---|---|---|---|---|---|---|
-| No limits (1 week) | 37,778 | 99% | 43% | 75% | 81% | 98% |
-| Keep 1 day | 4,470 | 0% | 0% | 0% | 32% | 40% |
-| Round to the hour (15-min unicity: 93% → 81%) | 37,778 | 99% | 42% | 77% | 81% | 98% |
-| Search window ±36 h | 14,842 | 72% | 26% | 50% | 76% | 86% |
-| Search window ±12 h | 5,118 | 12% | 4% | 21% | 55% | 50% |
-| Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km, of estimated | Home ≤ 1 km, of all drivers | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
+|---|---|---|---|---|---|---|---|
+| No limits (1 week) | 37,778 | 99% (98%–99%) | 43% (43%–46%) | 43% (42%–46%) | 75% (71%–75%) | 81% (81%–84%) | 98% |
+| Keep 1 day | 4,470 | 0% | — | 0% | 0% | 32% (32%–39%) | 40% (39%–40%) |
+| Round to the hour (15-min unicity: 93% (93%–95%) → 81% (81%–85%)) | 37,778 | 99% (98%–99%) | 42% (42%–47%) | 42% (41%–46%) | 77% (72%–77%) | 81% (81%–85%) | 98% |
+| Search window ±36 h | 14,842 | 72% (69%–72%) | 36% (36%–38%) | 26% (25%–27%) | 50% (46%–50%) | 76% (76%–79%) | 86% (82%–86%) |
+| Search window ±12 h | 5,118 | 12% (10%–12%) | 33% (31%–37%) | 4% (3%–5%) | 21% (19%–21%) | 55% (55%–56%) | 50% (46%–50%) |
+| Aggregate counts only | 0 | 0% | — | 0% | 0% | 0% | 0% |
 
 **Population #4 (4 weeks, OSM + 92 cameras)**, the densest and longest case:
 
-| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
-|---|---|---|---|---|---|---|
-| No limits (4 weeks) | 150,828 | 100% | 47% | 94% | 89% | 100% |
-| Keep 14 days | 75,259 | 100% | 44% | 86% | 85% | 100% |
-| Keep 7 days | 37,884 | 98% | 39% | 75% | 81% | 98% |
-| Keep 1 day | 4,612 | 0% | 0% | 0% | 32% | 39% |
-| Round to the hour (15-min unicity: 98% → 88%) | 150,828 | 100% | 47% | 96% | 88% | 100% |
-| Search window ±36 h | 15,907 | 75% | 28% | 49% | 85% | 86% |
-| Search window ±12 h | 5,438 | 11% | 4% | 22% | 62% | 49% |
-| Aggregate counts only | 0 | 0% | 0% | 0% | 0% | 0% |
+| Policy | Reads queryable | Engine home estimated | Home ≤ 1 km, of estimated | Home ≤ 1 km, of all drivers | Engine work estimated | Unique, p = 2 | Unique, p = 4 |
+|---|---|---|---|---|---|---|---|
+| No limits (4 weeks) | 150,828 | 100% | 47% (46%–53%) | 47% (46%–53%) | 94% (92%–94%) | 89% (89%–90%) | 100% |
+| Keep 14 days | 75,259 | 100% | 45% (43%–50%) | 44% (43%–50%) | 86% (83%–86%) | 85% (85%–88%) | 100% |
+| Keep 7 days | 37,884 | 98% | 40% (38%–47%) | 39% (37%–46%) | 75% (72%–75%) | 81% (81%–84%) | 98% (98%–99%) |
+| Keep 1 day | 4,612 | 0% | — | 0% | 0% | 32% (32%–38%) | 39% (38%–40%) |
+| Round to the hour (15-min unicity: 98% → 88% (88%–90%)) | 150,828 | 100% | 47% (46%–53%) | 47% (46%–53%) | 96% (94%–96%) | 88% (88%–90%) | 100% |
+| Search window ±36 h | 15,907 | 75% (75%–77%) | 37% (35%–40%) | 28% (27%–30%) | 49% (46%–51%) | 85% (85%–88%) | 86% |
+| Search window ±12 h | 5,438 | 11% (10%–11%) | 37% (31%–37%) | 4% (3%–4%) | 22% (19%–22%) | 62% (62%–63%) | 49% (44%–51%) |
+| Aggregate counts only | 0 | 0% | — | 0% | 0% | 0% | 0% |
 
 On the dense network, 7-day retention still leaves 98% of drivers unique at
 p = 4 and 75% with a work estimate. Retention limits only bite when they are
 very short.
 
-Population #1 (1 week, OSM) follows the same pattern: no limits 76% home
-estimated and 66% unique at p = 2; ±12 h window 3% and 22%; 1-day retention
-0% and 14% (`data/exports/policy_pop1.txt`).
+Population #1 (1 week, OSM) follows the same pattern: no limits
+76% (76%–78%) home estimated and 66% (66%–68%) unique at p = 2;
+±12 h window 3% (3%–5%) and 22% (20%–24%); 1-day retention
+0% and 14% (13%–14%) (`data/exports/policy_pop1.txt`).
 
 **What it says.**
 
 - **Retention matters in proportion to how much history it removes.** Going
-  from 4 weeks to 7 days cuts work estimates from 45% to 26% and *p* = 4
-  unicity from 99% to 66%. Home placement stays poor throughout, because on
+  from 4 weeks to 7 days cuts work estimates from 45% to 26% (3 seeds:
+  21–26%) and *p* = 4 unicity from 99% to 66% (63–66%). Home placement stays poor throughout, because on
   this network it was camera-limited to begin with. A 1-day limit removes
   almost everything.
 - **Rounding timestamps to the hour changes almost nothing** for inference,
@@ -431,14 +462,17 @@ estimated and 66% unique at p = 2; ±12 h window 3% and 22%; 1-day retention
   As a privacy measure it is mostly cosmetic.
 - **Limited search windows are the strongest lever short of aggregation.** A
   ±12 h window around an incident leaves a few hours of reads per car: home
-  is estimable for 3% of drivers and two-point unicity falls to 24% (OSM).
-  With the denser network the same window still leaves 55% unique, so
+  is estimable for 3% of drivers (3–4%), 1% of all drivers' homes are placed
+  within 1 km, and two-point unicity falls to 24% (22–24%; 4 weeks, OSM).
+  With the denser network the same window still leaves 55% unique (55–56%;
+  1 week), so
   windows must shrink as camera networks grow.
 - **Aggregate-only release removes per-vehicle inference entirely**, at the
   cost of every per-vehicle investigative use.
 - **Density outweighs most policies.** One week of the denser network (#3)
   reveals more than four weeks of the current one (#2): 43% vs. 17% of homes
-  within 1 km.
+  within 1 km, whether counted over drivers with an estimate or over all
+  drivers (both 43% vs. 17%).
 
 **Caveats.** Retention beyond the simulated period (up to 4 weeks here) equals
 "no limits", so the proposal's 3-year retention is not simulated directly.
@@ -451,28 +485,29 @@ which favours no particular part of the week.
 **Setup.** `backend/scripts/sensitivity.py --drivers 300 --weeks 1` (NHTS,
 seed 0; 2026-10-13). The same 300 routines are rerun with one assumption
 changed at a time from the defaults ([assumptions.md](assumptions.md)).
-"Home ≤ 1 km" and "unique, p = 2" are shares of all drivers. Unicity is
+"Home ≤ 1 km" is given two ways: of drivers with an engine home estimate, and of all 300 drivers. "Unique, p = 2" is a share of all drivers. The two 1 km columns come from a copy of the script that also prints the estimate count; every other column is identical to the script's output. Unicity is
 measured in this crowd of 300.
 
-| Assumption changed | Reads per driver (median) | Never read | Engine home error (median) | Home ≤ 1 km | Unique, p = 2 |
-|---|---|---|---|---|---|
-| Defaults | 5 | 10% | 3.99 km | 13% | 74% |
-| Tolerance 30° (from 45°) | 3 | 15% | 3.71 km | 13% | 60% |
-| Tolerance 60° | 5 | 10% | 3.99 km | 13% | 74% |
-| Capture oncoming (from rear plate) | 4 | 14% | 3.70 km | 14% | 69% |
-| Undirected cameras capture nothing | 5 | 10% | 3.99 km | 13% | 74% |
-| Ambiguous direction: alternate tag | 5 | 10% | 3.89 km | 13% | 74% |
-| Lot events: every camera at the lot | 5 | 8% | 3.84 km | 13% | 76% |
-| No noise | 5 | 9% | 3.94 km | 13% | 73% |
-| Miss rate 15% (from 5%) | 4 | 10% | 4.22 km | 12% | 74% |
-| Misreads ×3 | 5 | 10% | 3.99 km | 13% | 74% |
-| Downtime ×4 | 5 | 10% | 3.94 km | 12% | 73% |
-| **+92 scenario cameras** | **33** | **0%** | **1.14 km** | **44%** | **91%** |
+| Assumption changed | Reads per driver (median) | Never read | Engine home error (median, drivers with an estimate) | Homes estimated (of 300) | Home ≤ 1 km, of estimated | Home ≤ 1 km, of all drivers | Unique, p = 2 |
+|---|---|---|---|---|---|---|---|
+| Defaults | 5 | 10% | 3.99 km | 215 | 17.7% | 13% | 74% |
+| Tolerance 30° (from 45°) | 3 | 15% | 3.71 km | 180 | 21.1% | 13% | 60% |
+| Tolerance 60° | 5 | 10% | 3.99 km | 215 | 18.1% | 13% | 74% |
+| Capture oncoming (from rear plate) | 4 | 14% | 3.70 km | 199 | 21.6% | 14% | 69% |
+| Undirected cameras capture nothing | 5 | 10% | 3.99 km | 215 | 17.7% | 13% | 74% |
+| Ambiguous direction: alternate tag | 5 | 10% | 3.89 km | 215 | 17.7% | 13% | 74% |
+| Lot events: every camera at the lot | 5 | 8% | 3.84 km | 224 | 17.9% | 13% | 76% |
+| No noise | 5 | 9% | 3.94 km | 220 | 18.2% | 13% | 73% |
+| Miss rate 15% (from 5%) | 4 | 10% | 4.22 km | 209 | 16.7% | 12% | 74% |
+| Misreads ×3 | 5 | 10% | 3.99 km | 213 | 17.8% | 13% | 74% |
+| Downtime ×4 | 5 | 10% | 3.94 km | 212 | 17.5% | 12% | 73% |
+| **+92 scenario cameras** | **33** | **0%** | **1.14 km** | **293** | **44.7%** | **44%** | **91%** |
 
 **What it says.**
 
 - **No single modelling assumption changes the picture.** Across all of them,
-  home error stays at 3.7–4.2 km and about 13% of homes fall within 1 km.
+  home error stays at 3.7–4.2 km, and 12–14% of all drivers' homes fall
+  within 1 km (16.7–21.6% of the drivers with an estimate).
   The largest effect is a strict 30° tolerance, which loses captures on
   curved roads (median reads 5 → 3) and lowers two-point unicity from 74% to
   60%.
@@ -485,7 +520,8 @@ measured in this crowd of 300.
   nothing measurable at this sample size. Misreads leave the read count
   unchanged, and the engine ignores reads under other plates.
 - **Camera density dominates.** The 92 scenario cameras multiply reads by
-  six, place 44% of homes within 1 km, and raise two-point unicity to 91%.
+  six, place 44% of all drivers' homes within 1 km (44.7% of the 293 with an
+  estimate), and raise two-point unicity to 91%.
 
 **Caveats.** One week and 300 drivers, so differences of a percentage point or
 two are within sampling noise. Free-flow routing and the NHTS-derived

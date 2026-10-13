@@ -297,8 +297,8 @@ Three tabs:
   conclusions.
 - **Population & policy:** pick a stored population. A line chart shows
   unicity by number of known sightings for crowds of 100, 300 and N cars.
-  Two bar charts compare policies (two-point unicity, homes placed within
-  1 km). Click a bar for detail; there is also a table view.
+  Two bar charts compare policies (two-point unicity, and homes placed within
+  1 km as a share of all drivers). Click a bar for detail; there is also a table view.
 - **Your week:** place home (and optionally work) on the map, set workdays,
   leave times, errands and weeks, and see the same driver views for a
   simulated version of that week. Nothing is stored (`POST /yourweek`).
