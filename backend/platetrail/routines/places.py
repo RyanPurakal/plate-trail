@@ -33,7 +33,8 @@ from platetrail.db import apply_migrations, get_engine
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
 from platetrail.geo import WGS84
-from platetrail.roads.graph import STUDY_AREA_RELATIONS, _configure_osmnx
+from platetrail.region import get_region
+from platetrail.roads.graph import _configure_osmnx
 
 # Places farther than this from the drive network (service roads included) are
 # not sampled as anchors. The user's requirement: snap or reject anchors more
@@ -53,7 +54,7 @@ WORK_CATEGORIES = ("work", "retail", "grocery", "food", "services", "hospital", 
 
 
 def build_query() -> str:
-    area = ",".join(str(3600000000 + rid) for rid in STUDY_AREA_RELATIONS.values())
+    area = ",".join(str(3600000000 + rid) for rid in get_region().relations.values())
     return f"""[out:json][timeout:180];
 area(id:{area})->.a;
 (
@@ -110,9 +111,10 @@ def parse_places(response: dict) -> list[dict]:
 
 def load_towns(engine: Engine) -> None:
     _configure_osmnx(get_settings().data_dir)
-    gdf = ox.geocode_to_gdf([f"R{rid}" for rid in STUDY_AREA_RELATIONS.values()], by_osmid=True)
+    relations = get_region().relations
+    gdf = ox.geocode_to_gdf([f"R{rid}" for rid in relations.values()], by_osmid=True)
     with engine.begin() as conn:
-        for (name, rid), geom in zip(STUDY_AREA_RELATIONS.items(), gdf.geometry):
+        for (name, rid), geom in zip(relations.items(), gdf.geometry):
             mp = geom if isinstance(geom, MultiPolygon) else MultiPolygon([geom])
             conn.execute(
                 text("INSERT INTO towns (name, osm_id, geom) VALUES (:n, :o, ST_GeomFromText(:w, 4326))"

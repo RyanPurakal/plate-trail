@@ -1,0 +1,10 @@
+{
+  "id": "nj_edison_new_brunswick",
+  "name": "Edison and New Brunswick, New Jersey",
+  "parent_iso3166_2": "US-NJ",
+  "buffer_m": 2000,
+  "towns": [
+    {"label": "Edison", "osm_name": "Edison", "osm_relation": 171019, "admin_level": 8},
+    {"label": "New Brunswick", "osm_name": "New Brunswick", "osm_relation": 170536, "admin_level": 8}
+  ]
+}

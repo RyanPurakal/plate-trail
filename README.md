@@ -134,6 +134,8 @@ open http://localhost:3000
 
 Rerun the data steps in that order: reloading cameras clears their snaps, so `run_roads` must follow `run_etl`.
 
+**Study area.** The towns covered by the data steps come from a region file in `backend/platetrail/regions/`. The default, `nj_edison_new_brunswick`, is the NJ study. Set `PLATETRAIL_REGION` to another bundled id or to the path of a JSON file with the same fields (towns with their OSM boundary relation ids, the parent ISO 3166-2 code, and a buffer in meters) to build cameras, the road graph and places for a different area. Some parts of the simulation, such as the student routine and the density scenario, still name the NJ towns; [docs/ROADMAP.md](docs/ROADMAP.md) tracks that work.
+
 ## Using it
 
 - **One driver:** pick or simulate a driver, then switch between what the cameras saw and what actually happened. Step through the reveal: reads, then the inferred home and work areas, then the regular schedule, then the anomalies.
@@ -275,6 +277,7 @@ python scripts/validate_synthetic_timeline.py --drivers 60 --weeks 4            
 | [docs/camera_sources.md](docs/camera_sources.md) | sources, count cross-check, hypothetical density scenario |
 | [docs/real_data_validation.md](docs/real_data_validation.md) | exporting and validating your own Timeline |
 | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) | open decisions and follow-ups |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | prioritized plan: correctness, reusability, neutral framing |
 | [Plate-Trail-Proposal.md](Plate-Trail-Proposal.md) | the original proposal |
 
 ## Credits

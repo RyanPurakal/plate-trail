@@ -1,8 +1,8 @@
 """ALPR cameras from OpenStreetMap via the Overpass API.
 
-One query per town. Each query also returns the town's boundary relation so
-a misspelled or missing boundary fails loudly instead of looking like a town
-with zero cameras.
+One query per town of the configured region (platetrail.region). Each query
+also returns the town's boundary relation so a misspelled or missing boundary
+fails loudly instead of looking like a town with zero cameras.
 """
 
 import time
@@ -12,6 +12,7 @@ import httpx
 from platetrail.etl.cache import RawCache
 from platetrail.etl.directions import DIRECTION_TAGS, conflicting_direction_tags, direction_from_tags, parse_direction
 from platetrail.etl.loaders.base import CameraLoader, CameraRecord
+from platetrail.region import Region, get_region
 
 # Main instance first, then public mirrors. Overpass often answers 429/504
 # under load, so each endpoint gets a few attempts with backoff.
@@ -22,15 +23,9 @@ OVERPASS_URLS = (
 RETRYABLE_STATUS = {429, 502, 503, 504}
 USER_AGENT = "PlateTrail/0.1 (privacy-audit research; synthetic drivers only)"
 
-# Town label -> OSM boundary name (admin_level 8 municipality within NJ).
-TOWNS: dict[str, str] = {
-    "Edison": "Edison",
-    "New Brunswick": "New Brunswick",
-}
-
 QUERY_TEMPLATE = """[out:json][timeout:90];
-area["ISO3166-2"="US-NJ"]["admin_level"="4"]->.nj;
-rel(area.nj)["boundary"="administrative"]["admin_level"="8"]["name"="{name}"]->.boundary;
+area["ISO3166-2"="{parent}"]["admin_level"="4"]->.nj;
+rel(area.nj)["boundary"="administrative"]["admin_level"="{admin_level}"]["name"="{name}"]->.boundary;
 .boundary out tags;
 .boundary map_to_area->.town;
 nwr(area.town)["man_made"="surveillance"]["surveillance:type"~"^alpr$",i];
@@ -41,8 +36,15 @@ class BoundaryNotFound(RuntimeError):
     pass
 
 
-def build_query(osm_name: str) -> str:
-    return QUERY_TEMPLATE.format(name=osm_name)
+def build_query(osm_name: str, parent_iso3166_2: str = "US-NJ", admin_level: int = 8) -> str:
+    # The parent area keeps its original ".nj" set name so cached responses for
+    # the default region (keyed on the query text) stay valid.
+    return QUERY_TEMPLATE.format(name=osm_name, parent=parent_iso3166_2, admin_level=admin_level)
+
+
+def towns_for(region: Region) -> dict[str, tuple[str, int]]:
+    """Town label -> (OSM boundary name, admin_level)."""
+    return {t.label: (t.osm_name, t.admin_level) for t in region.towns}
 
 
 def parse_response(town: str, response: dict) -> list[CameraRecord]:
@@ -135,20 +137,20 @@ class OverpassLoader(CameraLoader):
     def __init__(
         self,
         cache: RawCache,
-        towns: dict[str, str] = TOWNS,
+        region: Region | None = None,
         client: httpx.Client | None = None,
         urls: tuple[str, ...] = OVERPASS_URLS,
         attempts_per_url: int = 3,
         backoff_s: float = 10.0,
     ):
         self.cache = cache
-        self.towns = towns
+        self.region = region or get_region()
         self.overpass = OverpassClient(client, urls, attempts_per_url, backoff_s)
 
     def load(self, refresh: bool = False) -> list[CameraRecord]:
         records: list[CameraRecord] = []
-        for town, osm_name in self.towns.items():
-            query = build_query(osm_name)
+        for town, (osm_name, admin_level) in towns_for(self.region).items():
+            query = build_query(osm_name, self.region.parent_iso3166_2, admin_level)
             response = self.cache.get_or_fetch(query, lambda q=query: self.overpass.fetch(q), refresh=refresh)
             records.extend(parse_response(town, response))
         return records

@@ -6,6 +6,9 @@ import pytest
 
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import BoundaryNotFound, OverpassLoader, build_query, parse_response
+from platetrail.region import Region, Town
+
+TESTVILLE = Region("testville", "Testville", "US-NJ", (Town("Testville", "Testville", 1),))
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "overpass_town.json").read_text())
 
@@ -42,9 +45,28 @@ def test_query_uses_requested_tags():
     assert '["surveillance:type"~"^alpr$",i]' in q
 
 
+def test_default_query_text_is_unchanged():
+    # Raw responses are cached by query text; the region config must not change it for NJ.
+    assert build_query("Edison") == (
+        '[out:json][timeout:90];\n'
+        'area["ISO3166-2"="US-NJ"]["admin_level"="4"]->.nj;\n'
+        'rel(area.nj)["boundary"="administrative"]["admin_level"="8"]["name"="Edison"]->.boundary;\n'
+        '.boundary out tags;\n'
+        '.boundary map_to_area->.town;\n'
+        'nwr(area.town)["man_made"="surveillance"]["surveillance:type"~"^alpr$",i];\n'
+        'out center tags;'
+    )
+
+
+def test_query_uses_region_parent_and_admin_level():
+    q = build_query("Springfield", "US-IL", 7)
+    assert '["ISO3166-2"="US-IL"]' in q
+    assert '["admin_level"="7"]["name"="Springfield"]' in q
+
+
 def _loader(tmp_path, handler, **kw):
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return OverpassLoader(RawCache(tmp_path), towns={"Testville": "Testville"}, client=client, backoff_s=0, **kw)
+    return OverpassLoader(RawCache(tmp_path), region=TESTVILLE, client=client, backoff_s=0, **kw)
 
 
 def test_cache_prevents_second_request(tmp_path):

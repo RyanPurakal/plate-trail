@@ -1,8 +1,9 @@
 """Download, cache, and store the drive network for the study area.
 
-The study area is the union of the Edison and New Brunswick boundaries,
-buffered so routes that briefly leave town (Route 1, the Turnpike, I-287)
-stay on the graph.
+The study area is the union of the configured region's town boundaries
+(platetrail.region; the default is Edison and New Brunswick, NJ), buffered so
+routes that briefly leave town (in the default region: Route 1, the Turnpike,
+I-287) stay on the graph.
 
 The network is OSMnx's drive network plus service roads, except parking
 aisles, drive-throughs, emergency access and private roads (CUSTOM_FILTER).
@@ -23,10 +24,8 @@ from shapely.geometry import MultiPolygon, Polygon
 from sqlalchemy import Engine, text
 
 from platetrail.config import get_settings
+from platetrail.region import DEFAULT_REGION, get_region
 
-# OSM boundary relations (confirmed by the camera ETL's Overpass responses).
-STUDY_AREA_RELATIONS = {"Edison": 171019, "New Brunswick": 170536}
-BUFFER_M = 2000.0
 NETWORK_TYPE = "drive_service"  # label for the cache file; the actual filter is CUSTOM_FILTER
 # OSMnx's drive_service filter, additionally excluding parking aisles and drive-throughs.
 CUSTOM_FILTER = (
@@ -47,12 +46,17 @@ def _configure_osmnx(data_dir: Path) -> None:
     ox.settings.log_console = False
 
 
-def graph_path(data_dir: Path) -> Path:
-    return data_dir / "graphs" / f"study_area_{NETWORK_TYPE}.graphml"
+def graph_path(data_dir: Path, region_id: str | None = None) -> Path:
+    region_id = region_id or get_region().id
+    # The default region keeps its original, unsuffixed cache file.
+    suffix = "" if region_id == DEFAULT_REGION else f"_{region_id}"
+    return data_dir / "graphs" / f"study_area_{NETWORK_TYPE}{suffix}.graphml"
 
 
-def study_area_polygon(buffer_m: float = BUFFER_M) -> Polygon | MultiPolygon:
-    gdf = ox.geocode_to_gdf([f"R{rid}" for rid in STUDY_AREA_RELATIONS.values()], by_osmid=True)
+def study_area_polygon(buffer_m: float | None = None) -> Polygon | MultiPolygon:
+    region = get_region()
+    buffer_m = region.buffer_m if buffer_m is None else buffer_m
+    gdf = ox.geocode_to_gdf([f"R{rid}" for rid in region.relations.values()], by_osmid=True)
     utm = gdf.to_crs(gdf.estimate_utm_crs())
     area = utm.union_all().buffer(buffer_m)
     return utm.__class__(geometry=[area], crs=utm.crs).to_crs("EPSG:4326").geometry.iloc[0]
@@ -75,8 +79,9 @@ def load_or_build_graph(refresh: bool = False, data_dir: Path | None = None) -> 
         json.dumps(
             {
                 "built_at": datetime.now(timezone.utc).isoformat(),
-                "relations": STUDY_AREA_RELATIONS,
-                "buffer_m": BUFFER_M,
+                "region": get_region().id,
+                "relations": get_region().relations,
+                "buffer_m": get_region().buffer_m,
                 "network_type": NETWORK_TYPE,
                 "custom_filter": CUSTOM_FILTER,
                 "service_speed_kph": SERVICE_SPEED_KPH,
