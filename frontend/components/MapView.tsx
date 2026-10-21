@@ -26,6 +26,7 @@ type Props = {
   onPick?: (kind: "home" | "work", lonlat: [number, number]) => void;
   pins?: { home?: [number, number] | null; work?: [number, number] | null };
   initialView?: MapDefaults | null; // region's starting view (GET /region), applied until a run is fitted
+  scenarioTown?: string; // where hypothetical cameras are placed (region's scenario_town)
 };
 
 /** A geodesic-ish circle polygon (radius in metres) for the inferred anchor areas. */
@@ -135,12 +136,12 @@ function passFeatures(passes: Pass[], idx: Map<string, PointFeature>) {
   return { ...EMPTY, features };
 }
 
-function popupHtml(p: CameraProps & { bearing?: number }, passes: Pass[], reads: Read[]) {
+function popupHtml(p: CameraProps & { bearing?: number }, passes: Pass[], reads: Read[], scenarioTown: string) {
   const label = p.osm_id ?? `camera ${p.camera_id}`;
   const mine = passes.filter((x) => x.camera_label === label);
   const rd = reads.filter((x) => x.camera_label === label);
   const kind = { public_road: "public road", private_lot: "private lot", service_road: "service street",
-    scenario: "hypothetical camera (simulated placement on an Edison arterial)" }[p.camera_kind];
+    scenario: `hypothetical camera (simulated placement on an arterial in ${scenarioTown})` }[p.camera_kind];
   const facing = p.has_direction ? `faces ${(p.directions_deg ?? [p.bearing]).join(" / ")}°` : "no direction tag";
   const flags = [p.snap_ambiguous && "snap ambiguous", p.direction_ambiguous && "direction ambiguous"].filter(Boolean);
   const lines = [
@@ -165,12 +166,12 @@ function markerEl(text: string, cls: string, title: string) {
 }
 
 export default function MapView({ cameras, trips, passes, reads, mode, layers, focusLabel, fitKey, guess,
-  inference = null, reveal = 0, pickMode = null, onPick, pins, initialView = null }: Props) {
+  inference = null, reveal = 0, pickMode = null, onPick, pins, initialView = null, scenarioTown = "the study area" }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
-  const latest = useRef({ cameras, passes, reads });
-  latest.current = { cameras, passes, reads };
+  const latest = useRef({ cameras, passes, reads, scenarioTown });
+  latest.current = { cameras, passes, reads, scenarioTown };
   const pickRef = useRef({ mode: pickMode, onPick });
   pickRef.current = { mode: pickMode, onPick };
 
@@ -283,9 +284,9 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
           m.getCanvas().style.cursor = "crosshair";
           const f = e.features?.[0];
           if (!f) return;
-          const { passes: ps, reads: rs } = latest.current;
+          const { passes: ps, reads: rs, scenarioTown: town } = latest.current;
           popup.setLngLat((f.geometry as Point).coordinates as [number, number])
-            .setHTML(popupHtml(f.properties as unknown as CameraProps & { bearing?: number }, ps, rs)).addTo(m);
+            .setHTML(popupHtml(f.properties as unknown as CameraProps & { bearing?: number }, ps, rs, town)).addTo(m);
         });
         m.on("mouseleave", layer, () => {
           m.getCanvas().style.cursor = "";

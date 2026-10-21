@@ -7,6 +7,9 @@ import PopulationView from "@/components/PopulationView";
 import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
+  EXAMPLE_REGION_ID,
+  FALLBACK_REGION_NAME,
+  FALLBACK_SCENARIO_TOWN,
   getCameras,
   getRegion,
   getRun,
@@ -14,9 +17,9 @@ import {
   simulateJob,
   type CameraCollection,
   type Job,
-  type MapDefaults,
   type Inference,
   type NaiveGuess,
+  type Region,
   type RunDetail,
   type RunListItem,
 } from "@/lib/api";
@@ -137,12 +140,12 @@ export default function Home() {
   const [reveal, setReveal] = useState(0);
   const [pickMode, setPickMode] = useState<"home" | "work" | null>(null);
   const [pins, setPins] = useState<{ home: [number, number] | null; work: [number, number] | null }>({ home: null, work: null });
-  const [regionView, setRegionView] = useState<MapDefaults | null>(null);
+  const [region, setRegion] = useState<Region | null>(null);
   const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
 
   useEffect(() => {
     // Optional: without it the map keeps its built-in default view.
-    getRegion().then((r) => setRegionView(r.map)).catch(() => {});
+    getRegion().then(setRegion).catch(() => {});
     Promise.all([getCameras(), getRuns()])
       .then(([c, r]) => {
         setCameras(c);
@@ -172,6 +175,8 @@ export default function Home() {
     if (t === "yourweek" && detail?.stored !== false) setDetail(null);
   }
 
+  const regionName = region?.name ?? FALLBACK_REGION_NAME;
+  const scenarioTown = region?.scenario_town ?? FALLBACK_SCENARIO_TOWN;
   const showDriver = tab === "driver" || (tab === "yourweek" && detail?.stored === false);
 
   // Real cameras plus any synthetic scenario cameras this run used.
@@ -240,7 +245,7 @@ export default function Home() {
           <div className="kicker">Plate Trail · ALPR privacy audit</div>
           <h1>What the cameras saw</h1>
           <p className="lede">
-            One synthetic driver, real camera positions in Edison &amp; New Brunswick, NJ. Compare the read log an
+            One synthetic driver, real camera positions in {regionName}. Compare the read log an
             agency would hold with the week the driver actually drove.
           </p>
         </header>
@@ -251,7 +256,7 @@ export default function Home() {
           ))}
         </nav>
 
-        {tab === "population" && <PopulationView />}
+        {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
         {tab === "yourweek" && (
           <YourWeek pins={pins} pickMode={pickMode} setPickMode={setPickMode}
                     onResult={(d) => { setDetail(d); setDay(null); setReveal(1); setMode("saw");
@@ -290,7 +295,7 @@ export default function Home() {
                      onChange={(e) => setForm({ ...form, seed: Number(e.target.value) })} />
               <span className="unit">seed</span>
               <input type="number" min={0} max={200} value={form.extra} aria-label="extra cameras"
-                     title="Hypothetical cameras added in Edison (e.g. 92, the approved count). Locations are not public, so placement is simulated: arterials chosen in proportion to length, at least 300 m apart, one direction each."
+                     title={`Hypothetical cameras added in ${scenarioTown}. Placement is simulated: arterials chosen in proportion to length, at least 300 m apart, one direction each.`}
                      onChange={(e) => setForm({ ...form, extra: Number(e.target.value) })} />
               <span className="unit">+hypothetical cams</span>
               <button disabled={busy}>{busy ? jobLabel(job) : "run"}</button>
@@ -398,7 +403,8 @@ export default function Home() {
           pickMode={tab === "yourweek" ? pickMode : null}
           onPick={(kind, pt) => { setPins({ ...pins, [kind]: pt }); setPickMode(null); }}
           pins={tab === "yourweek" ? pins : undefined}
-          initialView={regionView}
+          initialView={region?.map ?? null}
+          scenarioTown={scenarioTown}
         />
         <div className="legend">
           {mode === "saw" ? (

@@ -188,6 +188,12 @@ export type Region = {
 };
 
 export const getRegion = () => get<Region>("/region");
+
+/** Labels used until GET /region answers (or if it fails): the bundled example region. */
+export const FALLBACK_REGION_NAME = "Edison & New Brunswick, NJ";
+export const FALLBACK_SCENARIO_TOWN = "Edison";
+// Facts in the UI that describe the example dataset only (e.g. the agency's published read count).
+export const EXAMPLE_REGION_ID = "nj_edison_new_brunswick";
 export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);

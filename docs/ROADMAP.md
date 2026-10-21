@@ -36,8 +36,14 @@ Three directions:
       (`center` + `zoom` and/or `bounds`), served by `GET /region`. The
       frontend applies it on load unless a run has already been fitted; the
       old NJ center/zoom stay as a fallback when the API omits it.
-- [ ] Frontend: show the region name and town labels from `GET /region` in the
-      header and anywhere the UI still names Edison or New Brunswick.
+- [x] Frontend: show the region name and town labels from `GET /region` in the
+      header and anywhere the UI still names Edison or New Brunswick. The lede,
+      hypothetical-camera tooltip, map popup and population notes use
+      `name`/`scenario_town`; NJ-only published figures (92 approved cameras,
+      the agency's 30-day read count) show only for the example region.
+- [ ] Optional region `notes` (or similar) so dataset-specific comparison
+      figures live in the region file instead of being gated by region id in
+      `PopulationView.tsx`.
 - [ ] Region bounding box option: allow a plain bbox instead of OSM boundary
       relations for areas without clean municipal boundaries.
 - [ ] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
@@ -80,3 +86,6 @@ Three directions:
   `source` name (needed to list two files); the OSM source stays "osm".
 - 2026-10-21: `GET /region` and region map defaults landed. `get_region()` is
   cached per process, so changing `PLATETRAIL_REGION` needs an API restart.
+- 2026-10-21: frontend labels come from `GET /region`; fallbacks in
+  `lib/api.ts` keep the NJ text if the API is unreachable. The masthead kicker
+  still says "ALPR privacy audit" (left for the wording pass).

@@ -47,7 +47,12 @@ async function get<T>(path: string): Promise<T> {
   return r.json();
 }
 
-export default function PopulationView() {
+type Props = {
+  scenarioTown: string; // where hypothetical cameras are placed (region's scenario_town)
+  exampleRegion: boolean; // true for the bundled NJ example, which has published figures to compare against
+};
+
+export default function PopulationView({ scenarioTown, exampleRegion }: Props) {
   const [pops, setPops] = useState<PopulationItem[]>([]);
   const [pid, setPid] = useState<number | null>(null);
   const [unicity, setUnicity] = useState<UnicityRow[] | null>(null);
@@ -113,7 +118,8 @@ export default function PopulationView() {
           </p>
           {pop.extra_cameras > 0 && (
             <div className="nb-note">
-              Includes {pop.extra_cameras} hypothetical cameras. Edison's 92 approved cameras have no public locations, so this placement is simulated: arterial roads (trunk to tertiary) chosen in proportion to length, at least 300 m from any other camera, each reading one direction, drawn per seed.
+              Includes {pop.extra_cameras} hypothetical cameras in {scenarioTown}.
+              {exampleRegion && " Edison's 92 approved cameras have no public locations."} Placement is simulated: arterial roads (trunk to tertiary) chosen in proportion to length, at least 300 m from any other camera, each reading one direction, drawn per seed.
             </div>
           )}
         </section>
@@ -126,8 +132,13 @@ export default function PopulationView() {
         ) : <div className="nb-note">Computing unicity…</div>}
         <div className="nb-note">
           Unicity (after de Montjoye et al. 2013): if plates were hashed, would p known sightings pick out one car?
-          It falls as the crowd grows. Edison PD&apos;s portal reports 518,797 &ldquo;unique plate reads&rdquo; in 30
-          days, far more than any simulated crowd, so these shares are upper bounds.
+          It falls as the crowd grows.{" "}
+          {exampleRegion ? (
+            <>Edison PD&apos;s portal reports 518,797 &ldquo;unique plate reads&rdquo; in 30 days, far more than any
+            simulated crowd, so these shares are upper bounds.</>
+          ) : (
+            <>A real network sees far more cars than any simulated crowd, so these shares are upper bounds.</>
+          )}
         </div>
       </section>
 
