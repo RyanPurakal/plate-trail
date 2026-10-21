@@ -171,6 +171,23 @@ async function get<T>(path: string): Promise<T> {
   return resp.json();
 }
 
+/** Initial map view from the region file; any field may be null (the map keeps its fallback). */
+export type MapDefaults = {
+  center: [number, number] | null;
+  zoom: number | null;
+  bounds: [number, number, number, number] | null; // west, south, east, north
+};
+
+export type Region = {
+  id: string;
+  name: string;
+  towns: string[];
+  student_town: string | null;
+  scenario_town: string | null;
+  map: MapDefaults;
+};
+
+export const getRegion = () => get<Region>("/region");
 export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);

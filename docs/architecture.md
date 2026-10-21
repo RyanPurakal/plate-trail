@@ -27,7 +27,7 @@ flowchart LR
 
     %% ---------- app ----------
     FE["Frontend<br/>Next.js + MapLibre"]
-    API["FastAPI<br/>/cameras · /simulate · /runs · /jobs<br/>/populations · /yourweek"]
+    API["FastAPI<br/>/region · /cameras · /simulate · /runs · /jobs<br/>/populations · /yourweek"]
     LOCAL["LocalRunner (in-process)<br/>routines → routing → matching<br/>→ sensor noise → store"]
     REDIS[("Redis<br/>broker · route cache · run cache<br/>unicity + policy results")]
     QUEUE["Celery queue<br/>(progress reporting)"]

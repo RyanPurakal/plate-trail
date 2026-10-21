@@ -9,5 +9,6 @@
   ],
   "student_town": "New Brunswick",
   "student_home_share": 0.7,
-  "scenario_town": "Edison"
+  "scenario_town": "Edison",
+  "map": {"center": [-74.39, 40.53], "zoom": 11.6}
 }

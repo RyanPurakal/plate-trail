@@ -32,8 +32,12 @@ Three directions:
       `camera_sources` list picks the loaders (`osm`, `file`) in priority
       order; default is OSM only, so the NJ ETL is unchanged. Documented in
       `docs/camera_sources.md`.
-- [ ] Map defaults from the region: frontend initial center/zoom and bounds
-      served by an API endpoint (`GET /region`) instead of hard-coded values.
+- [x] Map defaults from the region: optional `map` block in the region file
+      (`center` + `zoom` and/or `bounds`), served by `GET /region`. The
+      frontend applies it on load unless a run has already been fitted; the
+      old NJ center/zoom stay as a fallback when the API omits it.
+- [ ] Frontend: show the region name and town labels from `GET /region` in the
+      header and anywhere the UI still names Edison or New Brunswick.
 - [ ] Region bounding box option: allow a plain bbox instead of OSM boundary
       relations for areas without clean municipal boundaries.
 - [ ] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
@@ -74,3 +78,5 @@ Three directions:
   `student_town` draws student homes and schools from the whole area.
 - 2026-10-21: file sensor loader landed. File sources may set a custom
   `source` name (needed to list two files); the OSM source stays "osm".
+- 2026-10-21: `GET /region` and region map defaults landed. `get_region()` is
+  cached per process, so changing `PLATETRAIL_REGION` needs an API restart.

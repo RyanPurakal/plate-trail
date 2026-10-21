@@ -4,7 +4,7 @@ import type { Feature, FeatureCollection, Point } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MLMap, MapLayerMouseEvent } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import type { CameraCollection, CameraProps, Inference, NaiveGuess, Pass, Read, TripFeature } from "@/lib/api";
+import type { CameraCollection, CameraProps, Inference, MapDefaults, NaiveGuess, Pass, Read, TripFeature } from "@/lib/api";
 import { shortTime } from "@/lib/format";
 
 export type Mode = "saw" | "happened";
@@ -25,6 +25,7 @@ type Props = {
   pickMode?: "home" | "work" | null; // "your week": next map click sets this point
   onPick?: (kind: "home" | "work", lonlat: [number, number]) => void;
   pins?: { home?: [number, number] | null; work?: [number, number] | null };
+  initialView?: MapDefaults | null; // region's starting view (GET /region), applied until a run is fitted
 };
 
 /** A geodesic-ish circle polygon (radius in metres) for the inferred anchor areas. */
@@ -49,6 +50,9 @@ const COLORS = {
   skipped: "#d9534f",
   lost: "#8a8f94",
 };
+
+// Used until the region's view arrives, and if the API doesn't send one.
+const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
 
 const EMPTY = { type: "FeatureCollection" as const, features: [] as Feature[] };
 
@@ -161,7 +165,7 @@ function markerEl(text: string, cls: string, title: string) {
 }
 
 export default function MapView({ cameras, trips, passes, reads, mode, layers, focusLabel, fitKey, guess,
-  inference = null, reveal = 0, pickMode = null, onPick, pins }: Props) {
+  inference = null, reveal = 0, pickMode = null, onPick, pins, initialView = null }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -179,8 +183,8 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
     const m = new maplibregl.Map({
       container: el.current,
       style: BASEMAP,
-      center: [-74.39, 40.53],
-      zoom: 11.6,
+      center: FALLBACK_VIEW.center,
+      zoom: FALLBACK_VIEW.zoom,
       attributionControl: { compact: true },
     });
     m.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
@@ -412,6 +416,19 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
     set("focus", f ? { ...EMPTY, features: [{ type: "Feature", geometry: f.geometry, properties: {} }] } : EMPTY);
     if (f) map.current!.easeTo({ center: f.geometry.coordinates, zoom: Math.max(map.current!.getZoom(), 14), duration: 700 });
   }, [ready, focusLabel, cameras]);
+
+  // Move to the region's starting view once, unless a run has already been fitted.
+  const viewApplied = useRef(false);
+  useEffect(() => {
+    if (!ready || !initialView || viewApplied.current) return;
+    viewApplied.current = true;
+    if (fitKey) return;
+    const { bounds, center, zoom } = initialView;
+    if (bounds) map.current!.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: 40, duration: 0 });
+    else if (center && zoom != null) map.current!.jumpTo({ center, zoom });
+    // fitKey intentionally omitted: it is only checked at the moment the view arrives
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, initialView]);
 
   // Fit to the run when it (or the day filter) changes.
   useEffect(() => {

@@ -8,11 +8,13 @@ import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
   getCameras,
+  getRegion,
   getRun,
   getRuns,
   simulateJob,
   type CameraCollection,
   type Job,
+  type MapDefaults,
   type Inference,
   type NaiveGuess,
   type RunDetail,
@@ -135,9 +137,12 @@ export default function Home() {
   const [reveal, setReveal] = useState(0);
   const [pickMode, setPickMode] = useState<"home" | "work" | null>(null);
   const [pins, setPins] = useState<{ home: [number, number] | null; work: [number, number] | null }>({ home: null, work: null });
+  const [regionView, setRegionView] = useState<MapDefaults | null>(null);
   const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
 
   useEffect(() => {
+    // Optional: without it the map keeps its built-in default view.
+    getRegion().then((r) => setRegionView(r.map)).catch(() => {});
     Promise.all([getCameras(), getRuns()])
       .then(([c, r]) => {
         setCameras(c);
@@ -393,6 +398,7 @@ export default function Home() {
           pickMode={tab === "yourweek" ? pickMode : null}
           onPick={(kind, pt) => { setPins({ ...pins, [kind]: pt }); setPickMode(null); }}
           pins={tab === "yourweek" ? pins : undefined}
+          initialView={regionView}
         />
         <div className="legend">
           {mode === "saw" ? (

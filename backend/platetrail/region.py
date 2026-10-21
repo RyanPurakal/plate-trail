@@ -17,7 +17,8 @@ Example file:
       "student_town": "Example",
       "student_home_share": 0.7,
       "scenario_town": "Example",
-      "camera_sources": [{"type": "file", "path": "example_sensors.geojson"}]
+      "camera_sources": [{"type": "file", "path": "example_sensors.geojson"}],
+      "map": {"center": [-74.4, 40.5], "zoom": 12}
     }
 
 student_town (optional) is the town with the main university campus: student
@@ -31,6 +32,11 @@ priority order for deduplication: {"type": "osm"} queries OpenStreetMap per
 town; {"type": "file", "path": ..., "source": ...} reads a GeoJSON or CSV
 file (see platetrail.etl.loaders.file), with a relative path resolved against
 the region file's folder. The default is [{"type": "osm"}].
+
+map (optional) sets the frontend's initial view, served by GET /region:
+"center" as [lon, lat] with "zoom", and/or "bounds" as [west, south, east,
+north] (fitted on load, taking precedence over center/zoom). Without it the
+frontend falls back to its own default view.
 """
 
 import json
@@ -66,6 +72,20 @@ SOURCE_TYPES = ("osm", "file")
 
 
 @dataclass(frozen=True)
+class MapDefaults:
+    center: tuple[float, float] | None = None  # (lon, lat)
+    zoom: float | None = None
+    bounds: tuple[float, float, float, float] | None = None  # (west, south, east, north)
+
+    def as_dict(self) -> dict:
+        return {
+            "center": list(self.center) if self.center else None,
+            "zoom": self.zoom,
+            "bounds": list(self.bounds) if self.bounds else None,
+        }
+
+
+@dataclass(frozen=True)
 class Region:
     id: str
     name: str
@@ -76,6 +96,7 @@ class Region:
     student_home_share: float = 0.7
     scenario_town: str | None = None  # resolved to the first town by parse_region
     camera_sources: tuple[CameraSource, ...] = (CameraSource("osm"),)
+    map: MapDefaults = MapDefaults()
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -109,6 +130,36 @@ def _parse_sources(raw: list | None, base_dir: Path | None) -> tuple[CameraSourc
     return tuple(sources)
 
 
+def _valid_lonlat(lon: float, lat: float) -> bool:
+    return -180 <= lon <= 180 and -90 <= lat <= 90
+
+
+def _parse_map(raw: dict | None) -> MapDefaults:
+    if raw is None:
+        return MapDefaults()
+    center, zoom, bounds = raw.get("center"), raw.get("zoom"), raw.get("bounds")
+    if center is not None and len(center) != 2:
+        raise ValueError("map.center must be [lon, lat]")
+    if bounds is not None and len(bounds) != 4:
+        raise ValueError("map.bounds must be [west, south, east, north]")
+    if (center is None) != (zoom is None):
+        raise ValueError("map.center and map.zoom go together")
+    view = MapDefaults(
+        center=None if center is None else (float(center[0]), float(center[1])),
+        zoom=None if zoom is None else float(zoom),
+        bounds=None if bounds is None else tuple(float(v) for v in bounds),
+    )
+    if view.center is not None and not _valid_lonlat(*view.center):
+        raise ValueError("map.center is out of range")
+    if view.zoom is not None and not 0 <= view.zoom <= 22:
+        raise ValueError("map.zoom must be in [0, 22]")
+    if view.bounds is not None:
+        w, s, e, n = view.bounds
+        if not (_valid_lonlat(w, s) and _valid_lonlat(e, n) and w < e and s < n):
+            raise ValueError("map.bounds needs west < east and south < north, in range")
+    return view
+
+
 def parse_region(data: dict, base_dir: Path | None = None) -> Region:
     try:
         towns = tuple(
@@ -125,6 +176,7 @@ def parse_region(data: dict, base_dir: Path | None = None) -> Region:
             student_home_share=float(data.get("student_home_share", 0.7)),
             scenario_town=str(data.get("scenario_town") or towns[0].label) if towns else None,
             camera_sources=_parse_sources(data.get("camera_sources"), base_dir),
+            map=_parse_map(data.get("map")),
         )
     except (KeyError, TypeError, ValueError) as e:
         raise RegionConfigError(f"invalid region config: {e!r}") from e

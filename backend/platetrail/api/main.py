@@ -1,6 +1,7 @@
 """FastAPI application.
 
     GET  /health
+    GET  /region           active study area: id, name, town labels, initial map view
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -31,6 +32,7 @@ from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
 from platetrail.etl.export_geojson import cameras_feature_collection
 from platetrail.jobs import job_status, submit_population, submit_simulation
+from platetrail.region import get_region
 from platetrail.sim.routing import AnchorTooFar, NoRoute
 from platetrail.sim.runner import SimulationRunner
 from platetrail.sim.service import get_local_runner
@@ -61,6 +63,20 @@ def health() -> dict:
     with get_engine().connect() as conn:
         postgis = conn.execute(text("SELECT postgis_lib_version()")).scalar_one()
     return {"status": "ok", "postgis": postgis}
+
+
+@app.get("/region")
+def region() -> dict:
+    """The active region (PLATETRAIL_REGION); the frontend uses `map` for its initial view."""
+    r = get_region()
+    return {
+        "id": r.id,
+        "name": r.name,
+        "towns": list(r.labels),
+        "student_town": r.student_town,
+        "scenario_town": r.scenario_town,
+        "map": r.map.as_dict(),
+    }
 
 
 @app.get("/cameras")
