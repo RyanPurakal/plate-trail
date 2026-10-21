@@ -4,14 +4,77 @@ A prioritized checklist for ongoing work. Each item should fit in one small,
 reviewable change. Check items off as they land and add notes or new items
 underneath.
 
-Three directions:
+## Product direction: location-privacy check-up (from 2026-10-21)
 
-1. **Keep improving the app**: correctness, tests, performance, UX, docs.
-2. **Make it reusable**: any city or region, any fixed sensor network loaded
-   from a file. The Edison and New Brunswick study stays as one example dataset.
-3. **Keep it neutral**: educational, evidence-based wording framed as
-   privacy-engineering and data-retention analysis. No features that track,
-   identify or de-anonymize real people, and no stored real location data.
+Plate Trail is becoming a practical tool people come back to: a
+location-privacy check-up for any area and for your own routes. It is not a
+game (no scores, streaks, levels, leaderboards or guessing challenges).
+Wording stays neutral and educational, with data-source credits only. No
+camera-avoidance routing, nothing about specific real vehicles or plates,
+nothing that helps track or identify real people, and no real location data
+stored server-side. The Edison and New Brunswick study stays as the
+"Example study".
+
+### 1. Explore any area
+
+- [x] Backend `GET /area?bbox=w,s,e,n`: public fixed sensors from
+      OpenStreetMap (`surveillance:type=ALPR`) for any box up to 0.5 deg a side,
+      snapped outward to a 0.01 deg grid so nearby requests share a disk cache
+      (refetched after 7 days). Returns GeoJSON plus a summary (sensor count,
+      how many have a known direction, sources with fetch time and latest OSM
+      edit). No region file needed.
+- [ ] Include configured file sensors (region `camera_sources` of type `file`)
+      that fall in the box, credited by source name.
+- [ ] Frontend "Explore" view: map + area summary card from `GET /area`, area
+      in the URL (`?bbox=...`), good empty and error states.
+- [ ] Place search: geocode a town or address to a box (Nominatim, with
+      attribution and rate limit, cached server-side by query text only).
+- [ ] Draw a box on the map to explore it.
+- [ ] Main-road coverage in the summary: share of primary/secondary road length
+      within a short distance of a sensor (needs a road fetch for the box).
+- [ ] Sensor detail panel: source, direction if known, last edited in OSM.
+
+### 2. My routes, kept on your device
+
+- [ ] Route storage in localStorage only (name, start, end); add/rename/delete.
+- [ ] Add a route by clicking start and end on the map.
+- [ ] `POST /route/check`: route + sensors passed + read timeline for one route;
+      compute-only, never stored, cached or logged (same rule as `/yourweek`).
+- [ ] Route timeline: where reads would happen along the drive; click a step
+      to show it on the map.
+- [ ] What a 7-day / 30-day / 1-year read history could suggest for a route
+      (reuse the simulator and inference engine), in plain language.
+
+### 3. What changed since your last visit
+
+- [ ] Local snapshot (localStorage) of sensor ids for saved areas and routes,
+      with the fetch date.
+- [ ] "Since your last visit" panel: new or removed sensors on saved routes or
+      areas, and data-update dates.
+
+### 4. Compare and drill down
+
+- [ ] Side-by-side comparison of two areas or two routes.
+- [ ] Retention-period slider that updates route results live.
+
+### 5. Learn more panels
+
+- [ ] Short neutral explainers: what fixed sensors record, how retention
+      length changes what can be inferred, the unicity finding. Link them from
+      where they are relevant.
+- [ ] Move the NJ study (map run, log table, population view, your week) to an
+      "Example study" section; the check-up becomes the home page.
+- [ ] Wording pass across README, docs and UI: describe the project as a
+      location-privacy check-up, with the NJ ALPR study as the example. The
+      masthead kicker still says "ALPR privacy audit". Keep data-source
+      credits factual.
+
+### 6. Polish
+
+- [ ] Mobile layout, keyboard and screen-reader access for the new views.
+- [ ] Fast loading: lazy-load the example study; skeletons for the area card.
+- [ ] Docker setup still works with the new views (data dir for the area
+      cache mounted).
 
 ## Reusability (configurable region and sensors)
 
@@ -53,11 +116,8 @@ Three directions:
 - [ ] Document which parts depend on US data (NHTS trip diaries) and what an
       alternative routine source would need to provide.
 
-## Rescope and neutral framing
+## Neutral wording in code
 
-- [ ] Wording pass across README, docs and UI: describe the project as a
-      location-sensor data-retention and data-minimization simulator, with the
-      NJ ALPR study as the example. Keep data-source credits factual.
 - [ ] Rename vendor-specific wording in core code comments (e.g. in
       `sim/scenarios.py`) to neutral terms ("additional cameras").
 - [ ] Generic "sensor" terminology in new code and API fields where it does
@@ -89,3 +149,8 @@ Three directions:
 - 2026-10-21: frontend labels come from `GET /region`; fallbacks in
   `lib/api.ts` keep the NJ text if the API is unreachable. The masthead kicker
   still says "ALPR privacy audit" (left for the wording pass).
+- 2026-10-21: product direction changed to a location-privacy check-up tool;
+  roadmap restructured with the new direction on top. The older "Rescope"
+  wording item moved under Learn more. `GET /area` landed: Overpass bbox
+  query with `out center meta` (per-sensor last-edit time, no editor names
+  exposed); cache in `data/raw/overpass_areas`.

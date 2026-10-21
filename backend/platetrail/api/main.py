@@ -2,6 +2,7 @@
 
     GET  /health
     GET  /region           active study area: id, name, town labels, initial map view
+    GET  /area             public fixed sensors and a summary for any bbox (no region file needed)
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -15,6 +16,7 @@ configured (platetrail.worker, platetrail.jobs), with progress and a run cache.
 
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -28,6 +30,7 @@ from platetrail.api.queries import (
     population_unicity_rows,
 )
 from platetrail.api.schemas import PopulationRequestBody, SimulateRequest, YourWeekBody
+from platetrail.area import AreaError, load_area, parse_bbox
 from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
 from platetrail.etl.export_geojson import cameras_feature_collection
@@ -77,6 +80,19 @@ def region() -> dict:
         "scenario_town": r.scenario_town,
         "map": r.map.as_dict(),
     }
+
+
+@app.get("/area")
+def area(bbox: str) -> dict:
+    """Sensors in `bbox` (west,south,east,north) from OpenStreetMap, snapped to a 0.01 deg grid and cached."""
+    try:
+        box = parse_bbox(bbox)
+    except AreaError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    try:
+        return load_area(box)
+    except (RuntimeError, httpx.HTTPError) as e:
+        raise HTTPException(status_code=503, detail="map data source is busy; try again shortly") from e
 
 
 @app.get("/cameras")

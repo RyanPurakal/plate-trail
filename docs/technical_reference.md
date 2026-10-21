@@ -414,6 +414,7 @@ FastAPI on `:8000` (interactive docs at `/docs`):
 |---|---|
 | `GET /health` | status and PostGIS version |
 | `GET /region` | active region (`PLATETRAIL_REGION`): id, name, town labels, student and scenario towns, and the optional initial map view (`center`/`zoom`, `bounds`) the frontend opens on |
+| `GET /area?bbox=w,s,e,n` | public fixed sensors (OSM `surveillance:type=ALPR`) in any box up to 0.5° a side, snapped outward to a 0.01° grid and cached on disk (`data/raw/overpass_areas`, refetched after 7 days, stale copy used if Overpass is down). Returns the snapped `bbox`, a `summary` (sensor count, with known direction, area, density, sources with fetch time and latest OSM edit) and `sensors` as GeoJSON. 422 for a bad box, 503 if Overpass is unavailable and nothing is cached |
 | `GET /cameras[?rays=true]` | cameras as GeoJSON: kind (`public_road` / `private_lot` / `service_road`), directions, ambiguity flags, lot info; optional 30 m direction rays |
 | `POST /simulate` | simulates and stores one driver. Body: `template`, `weeks` (1–8), `start` (a Monday), `seed`, `zero_noise`, `match` {`tolerance_deg`, `facing`, `undirected`, `ambiguous_direction`, `lot_entrance`}, `noise` {`p_miss`, `p_char_misread`, `downtime_rate_per_week`, `downtime_mean_hours`, `jitter_sd_s`}. Returns `run_id`, summary, plate. |
 | `POST /jobs/simulate` | the same request as `/simulate`, queued on the Celery worker; returns `job_id` (or the cached run if an identical request already ran on the same camera data) |
