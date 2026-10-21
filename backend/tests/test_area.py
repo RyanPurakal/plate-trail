@@ -10,6 +10,7 @@ from platetrail.area import (
     AreaError,
     area_summary,
     build_area_query,
+    file_area_features,
     load_area,
     parse_area_response,
     parse_bbox,
@@ -17,6 +18,7 @@ from platetrail.area import (
 )
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
+from platetrail.region import parse_region
 
 RESPONSE = {
     "elements": [
@@ -126,3 +128,45 @@ def test_area_endpoint(monkeypatch, tmp_path):
 
     monkeypatch.setattr("platetrail.api.main.load_area", busy)
     assert client.get("/area", params={"bbox": "-74.42,40.5,-74.3,40.6"}).status_code == 503
+
+
+def file_region(tmp_path, extra_sources=()):
+    (tmp_path / "survey.csv").write_text(
+        "id,lon,lat,direction,note\n"
+        "a,-74.41,40.55,90,inside\n"
+        "b,-74.00,40.55,,outside\n"
+        ",-74.35,40.58,,inside no id\n"
+    )
+    return parse_region({
+        "id": "t", "name": "T", "parent_iso3166_2": "US-NJ",
+        "towns": [{"label": "T", "osm_name": "T", "osm_relation": 1}],
+        "camera_sources": [{"type": "osm"}, {"type": "file", "path": "survey.csv", "source": "survey"},
+                           *extra_sources],
+    }, base_dir=tmp_path)
+
+
+def test_file_area_features_filters_to_bbox_and_credits_source(tmp_path):
+    region = file_region(tmp_path, [{"type": "file", "path": "missing.geojson", "source": "gone"}])
+    feats, sources = file_area_features((-74.42, 40.5, -74.3, 40.6), region)
+    assert [f["properties"]["id"] for f in feats] == ["survey:2", "survey:a"]
+    a = feats[1]
+    assert a["geometry"]["coordinates"] == [-74.41, 40.55]
+    assert a["properties"]["source"] == "survey" and a["properties"]["directions_deg"] == [90.0]
+    assert "note" not in a["properties"]  # extra columns are not passed on
+    assert [s["id"] for s in sources] == ["survey"]  # the missing file is skipped
+    assert sources[0]["updated_at"]
+
+
+def test_load_area_includes_file_sensors(tmp_path):
+    calls = []
+    region = file_region(tmp_path)
+    result = load_area((-74.42, 40.5, -74.3, 40.6), cache=RawCache(tmp_path / "cache"),
+                       client=overpass_client(calls), region=region)
+    summary = result["summary"]
+    assert summary["sensor_count"] == 4 and summary["with_direction"] == 2
+    osm, survey = summary["sources"]
+    assert osm["id"] == "osm" and osm["count"] == 2 and osm["latest_edit"] == "2026-01-15T08:00:00Z"
+    assert survey["id"] == "survey" and survey["count"] == 2 and survey["latest_edit"] is None
+    assert survey["fetched_at"] is not None
+    ids = [f["properties"]["id"] for f in result["sensors"]["features"]]
+    assert ids == ["osm:node/2", "osm:way/7", "survey:2", "survey:a"]

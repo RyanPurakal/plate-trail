@@ -44,6 +44,11 @@ Other properties or columns are kept as tags. Rows with bad coordinates, an
 unknown town or a non-Point geometry stop the ETL with an error rather than
 being skipped. See `platetrail.etl.loaders.file`.
 
+`GET /area` (explore any area) also returns the active region's file sensors
+that fall inside the requested box, alongside OpenStreetMap, each credited by
+its `source` name. There a missing or malformed file is logged and skipped
+instead of stopping the request.
+
 ## Count cross-check
 
 `python -m platetrail.etl.cross_check` compares counts. Agency figures live in

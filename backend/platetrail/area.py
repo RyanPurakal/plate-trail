@@ -8,6 +8,7 @@ itself is not personal data and nothing about the request is stored besides
 the cached Overpass response.
 """
 
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 
@@ -15,8 +16,12 @@ import httpx
 
 from platetrail.config import get_settings
 from platetrail.etl.cache import RawCache
-from platetrail.etl.directions import direction_from_tags
+from platetrail.etl.directions import direction_from_tags, parse_direction
+from platetrail.etl.loaders.file import read_rows
 from platetrail.etl.loaders.overpass import OverpassClient
+from platetrail.region import Region, get_region
+
+log = logging.getLogger(__name__)
 
 GRID_DEG = 0.01
 MAX_SPAN_DEG = 0.5
@@ -105,8 +110,64 @@ def parse_area_response(response: dict) -> list[dict]:
     return features
 
 
-def area_summary(bbox: tuple[float, float, float, float], features: list[dict], fetched_at: datetime | None) -> dict:
-    edits = [f["properties"]["last_edited"] for f in features if f["properties"]["last_edited"]]
+def _in_bbox(lon: float, lat: float, bbox: tuple[float, float, float, float]) -> bool:
+    w, s, e, n = bbox
+    return w <= lon <= e and s <= lat <= n
+
+
+def file_area_features(bbox: tuple[float, float, float, float], region: Region) -> tuple[list[dict], list[dict]]:
+    """Features from the region's file sources inside bbox, plus one source entry per file.
+
+    Each source entry has the source name and the file's last-modified time.
+    A file that is missing or malformed is logged and skipped so one bad
+    config file doesn't break exploring other areas.
+    """
+    features, sources = [], []
+    for src in region.camera_sources:
+        if src.type != "file" or src.path is None:
+            continue
+        name = src.source or "file"
+        try:
+            rows = read_rows(src.path)
+            updated = datetime.fromtimestamp(src.path.stat().st_mtime, timezone.utc)
+        except (OSError, ValueError) as e:  # SensorFileError and JSON errors are ValueErrors
+            log.warning("skipping sensor file %s: %s", src.path, e)
+            continue
+        for i, row in enumerate(rows):
+            try:
+                lon, lat = float(row["lon"]), float(row["lat"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not _in_bbox(lon, lat, bbox):
+                continue
+            raw = row.get("direction")
+            raw = None if raw is None else str(raw)
+            sid = row.get("id")
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    "id": f"{name}:{i if sid in (None, '') else sid}",
+                    "source": name,
+                    "directions_deg": parse_direction(raw),
+                    "direction_raw": raw,
+                    "last_edited": None,
+                },
+            })
+        sources.append({"id": name, "name": name, "updated_at": updated.isoformat()})
+    features.sort(key=lambda f: f["properties"]["id"])
+    return features, sources
+
+
+def area_summary(
+    bbox: tuple[float, float, float, float],
+    features: list[dict],
+    fetched_at: datetime | None,
+    file_sources: list[dict] | tuple = (),
+) -> dict:
+    """Counts and per-source credits. OSM is listed first, then file sources in config order."""
+    osm = [f for f in features if f["properties"]["source"] == "osm"]
+    edits = [f["properties"]["last_edited"] for f in osm if f["properties"]["last_edited"]]
     area = bbox_area_km2(bbox)
     return {
         "sensor_count": len(features),
@@ -115,10 +176,18 @@ def area_summary(bbox: tuple[float, float, float, float], features: list[dict], 
         "sensors_per_100km2": round(100 * len(features) / area, 2) if area else None,
         "sources": [{
             **OSM_SOURCE,
-            "count": sum(1 for f in features if f["properties"]["source"] == "osm"),
+            "count": len(osm),
             "fetched_at": fetched_at.isoformat() if fetched_at else None,
             "latest_edit": max(edits) if edits else None,
-        }],
+        }] + [{
+            "id": fs["id"],
+            "name": fs["name"],
+            "license": None,
+            "url": None,
+            "count": sum(1 for f in features if f["properties"]["source"] == fs["id"]),
+            "fetched_at": fs["updated_at"],  # file's last-modified time
+            "latest_edit": None,
+        } for fs in file_sources],
     }
 
 
@@ -131,8 +200,12 @@ def load_area(
     cache: RawCache | None = None,
     client: OverpassClient | None = None,
     now: datetime | None = None,
+    region: Region | None = None,
 ) -> dict:
     """Sensors and summary for a bbox (snapped). Fetches from Overpass if not cached or stale.
+
+    File sensors come from `region` (default: the active region) and are
+    included only where they fall inside the snapped box.
 
     A stale cached response is still used if the refetch fails, so a busy
     Overpass server only delays updates. Without any cached response the
@@ -152,8 +225,10 @@ def load_area(
             raise
         response = cache.get_or_fetch(query, lambda: overpass.fetch(query))
     features = parse_area_response(response)
+    file_features, file_sources = file_area_features(snapped, region or get_region())
+    features += file_features
     return {
         "bbox": list(snapped),
-        "summary": area_summary(snapped, features, cache.fetched_at(query)),
+        "summary": area_summary(snapped, features, cache.fetched_at(query), file_sources),
         "sensors": {"type": "FeatureCollection", "features": features},
     }

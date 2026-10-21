@@ -23,7 +23,7 @@ stored server-side. The Edison and New Brunswick study stays as the
       (refetched after 7 days). Returns GeoJSON plus a summary (sensor count,
       how many have a known direction, sources with fetch time and latest OSM
       edit). No region file needed.
-- [ ] Include configured file sensors (region `camera_sources` of type `file`)
+- [x] Include configured file sensors (region `camera_sources` of type `file`)
       that fall in the box, credited by source name.
 - [ ] Frontend "Explore" view: map + area summary card from `GET /area`, area
       in the URL (`?bbox=...`), good empty and error states.
@@ -154,3 +154,8 @@ stored server-side. The Edison and New Brunswick study stays as the
   wording item moved under Learn more. `GET /area` landed: Overpass bbox
   query with `out center meta` (per-sensor last-edit time, no editor names
   exposed); cache in `data/raw/overpass_areas`.
+- 2026-10-21: `GET /area` now adds the active region's file sensors inside
+  the snapped box, ids `<source>:<row id>`, with one summary source entry per
+  file (`fetched_at` is the file's modified time, no license/url). Not
+  deduplicated against OSM; a missing or malformed file is logged and
+  skipped. Extra file columns are not returned.
