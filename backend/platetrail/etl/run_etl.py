@@ -16,13 +16,22 @@ from platetrail.etl.cache import RawCache
 from platetrail.etl.directions import conflicting_direction_tags
 from platetrail.etl.dedupe import DedupeStats, MergedCamera, dedupe
 from platetrail.etl.loaders.base import CameraLoader, CameraRecord
+from platetrail.etl.loaders.file import FileCameraLoader
 from platetrail.etl.loaders.overpass import OverpassLoader
+from platetrail.region import Region, get_region
 
 
-def default_loaders() -> list[CameraLoader]:
+def default_loaders(region: Region | None = None) -> list[CameraLoader]:
+    """One loader per camera source of the region. Order = source priority."""
+    region = region or get_region()
     data_dir = get_settings().data_dir
-    # Future: DeFlockLoader, agency portal loaders. Order = source priority.
-    return [OverpassLoader(RawCache(data_dir / "raw" / "overpass"))]
+    loaders: list[CameraLoader] = []
+    for src in region.camera_sources:
+        if src.type == "osm":
+            loaders.append(OverpassLoader(RawCache(data_dir / "raw" / "overpass"), region=region))
+        else:
+            loaders.append(FileCameraLoader(src.path, region=region, source=src.source or "file"))
+    return loaders
 
 
 def store(engine: Engine, cameras: list[MergedCamera]) -> None:

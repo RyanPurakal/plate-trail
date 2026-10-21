@@ -27,9 +27,11 @@ Three directions:
       template and NHTS fixture routines over many seeds).
 - [ ] `sim/scenarios.py` module docstring still describes the NJ camera
       approval; reword neutrally (covered by the vendor-wording item below).
-- [ ] Camera list from a file: a `FileCameraLoader` that reads GeoJSON or CSV
-      (lon, lat, optional bearing/direction) so any fixed sensor network can be
-      used without OSM. Select the loader per region.
+- [x] Camera list from a file: `FileCameraLoader` reads GeoJSON Points or CSV
+      (lon, lat, optional id/town/direction). The region's optional
+      `camera_sources` list picks the loaders (`osm`, `file`) in priority
+      order; default is OSM only, so the NJ ETL is unchanged. Documented in
+      `docs/camera_sources.md`.
 - [ ] Map defaults from the region: frontend initial center/zoom and bounds
       served by an API endpoint (`GET /region`) instead of hard-coded values.
 - [ ] Region bounding box option: allow a plain bbox instead of OSM boundary
@@ -56,6 +58,9 @@ Three directions:
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
 - [ ] API: validate `extra_cameras` and other scenario inputs against the
       active region.
+- [ ] Sensor files: optionally assign `town` by point-in-boundary when a
+      multi-town region's file has no town column (needs boundaries without
+      OSM, so pairs well with the bbox item).
 - [ ] Tests: an end-to-end smoke test on a tiny synthetic region (fixture graph
       + fixture cameras) that does not need network access.
 - [ ] Performance: profile the population runner after the C++ router and note
@@ -67,3 +72,5 @@ Three directions:
   Overpass camera query is kept on purpose (cache keys are the query text).
 - 2026-10-20: town roles moved to the region file. A region with no
   `student_town` draws student homes and schools from the whole area.
+- 2026-10-21: file sensor loader landed. File sources may set a custom
+  `source` name (needed to list two files); the OSM source stays "osm".

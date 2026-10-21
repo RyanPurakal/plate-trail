@@ -17,6 +17,33 @@ The loader interface (`platetrail.etl.loaders.base.CameraLoader`) and
 cross-source dedupe are in place for any future source that does publish
 locations.
 
+## Sensors from a file
+
+Any fixed sensor network can be loaded from a local GeoJSON or CSV file
+instead of (or alongside) OpenStreetMap. List the sources in the region file
+with `camera_sources`, in source-priority order for dedupe:
+
+```json
+"camera_sources": [
+  {"type": "file", "path": "my_sensors.csv", "source": "survey"},
+  {"type": "osm"}
+]
+```
+
+A relative `path` is resolved against the region file's folder. The default,
+used by the Edison and New Brunswick region, is `[{"type": "osm"}]`.
+
+- **GeoJSON**: a FeatureCollection of Point features. Optional properties
+  `id`, `town` (a region town label; required when the region has more than
+  one town) and `direction` (same formats as the OSM tag: `90`, `90;270`,
+  `NE`, `45-135`).
+- **CSV**: a header row with `lon` and `lat`, plus the same optional `id`,
+  `town` and `direction` columns.
+
+Other properties or columns are kept as tags. Rows with bad coordinates, an
+unknown town or a non-Point geometry stop the ETL with an error rather than
+being skipped. See `platetrail.etl.loaders.file`.
+
 ## Count cross-check
 
 `python -m platetrail.etl.cross_check` compares counts. Agency figures live in
