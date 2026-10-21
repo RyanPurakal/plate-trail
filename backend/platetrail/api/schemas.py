@@ -36,7 +36,7 @@ class SimulateRequest(BaseModel):
     start: date = date(2026, 10, 12)
     seed: int = Field(0, ge=0)
     zero_noise: bool = False
-    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario (synthetic cameras in Edison)
+    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario (synthetic cameras in the region's scenario_town)
     match: MatchSettings = MatchSettings()
     noise: NoiseSettings = NoiseSettings()
 

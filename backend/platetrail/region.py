@@ -13,8 +13,17 @@ Example file:
       "name": "Example Town",
       "parent_iso3166_2": "US-NJ",
       "buffer_m": 2000,
-      "towns": [{"label": "Example", "osm_name": "Example", "osm_relation": 123, "admin_level": 8}]
+      "towns": [{"label": "Example", "osm_name": "Example", "osm_relation": 123, "admin_level": 8}],
+      "student_town": "Example",
+      "student_home_share": 0.7,
+      "scenario_town": "Example"
     }
+
+student_town (optional) is the town with the main university campus: student
+routines study there and live there with probability student_home_share.
+Without it, students' homes and schools are drawn from the whole region.
+scenario_town is where the density scenario adds synthetic sensors; it
+defaults to the first town.
 """
 
 import json
@@ -46,6 +55,16 @@ class Region:
     parent_iso3166_2: str
     towns: tuple[Town, ...]
     buffer_m: float = 2000.0
+    student_town: str | None = None
+    student_home_share: float = 0.7
+    scenario_town: str | None = None  # resolved to the first town by parse_region
+
+    @property
+    def labels(self) -> tuple[str, ...]:
+        return tuple(t.label for t in self.towns)
+
+    def other_towns(self, label: str) -> tuple[str, ...]:
+        return tuple(t for t in self.labels if t != label)
 
     @property
     def relations(self) -> dict[str, int]:
@@ -65,6 +84,9 @@ def parse_region(data: dict) -> Region:
             parent_iso3166_2=str(data["parent_iso3166_2"]),
             towns=towns,
             buffer_m=float(data.get("buffer_m", 2000.0)),
+            student_town=None if data.get("student_town") is None else str(data["student_town"]),
+            student_home_share=float(data.get("student_home_share", 0.7)),
+            scenario_town=str(data.get("scenario_town") or towns[0].label) if towns else None,
         )
     except (KeyError, TypeError, ValueError) as e:
         raise RegionConfigError(f"invalid region config: {e!r}") from e
@@ -75,6 +97,12 @@ def parse_region(data: dict) -> Region:
         raise RegionConfigError(f"region {region.id!r} has duplicate town labels")
     if region.buffer_m < 0:
         raise RegionConfigError(f"region {region.id!r} has a negative buffer_m")
+    for key in ("student_town", "scenario_town"):
+        value = getattr(region, key)
+        if value is not None and value not in labels:
+            raise RegionConfigError(f"region {region.id!r}: {key} {value!r} is not one of its towns")
+    if not 0 <= region.student_home_share <= 1:
+        raise RegionConfigError(f"region {region.id!r}: student_home_share must be in [0, 1]")
     return region
 
 

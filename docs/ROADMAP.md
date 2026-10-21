@@ -20,10 +20,13 @@ Three directions:
       with `PLATETRAIL_REGION`. Used by the camera ETL, road graph and places.
       The default region's Overpass query text and graph cache file name are
       unchanged, so existing caches stay valid.
-- [ ] Move the remaining NJ town names out of core code into the region file:
-      `routines/templates.py` and `routines/nhts.py` (student home/school town),
-      `sim/runner.py` and `population.py` (`scenario_town` default),
-      `api/schemas.py` comment, `realdata/validate.py` message.
+- [x] Move the remaining NJ town names out of core code into the region file:
+      `student_town`, `student_home_share` and `scenario_town` are optional
+      region keys used by both routine generators and the density scenario.
+      Default-region routines are byte-identical to before (checked by hashing
+      template and NHTS fixture routines over many seeds).
+- [ ] `sim/scenarios.py` module docstring still describes the NJ camera
+      approval; reword neutrally (covered by the vendor-wording item below).
 - [ ] Camera list from a file: a `FileCameraLoader` that reads GeoJSON or CSV
       (lon, lat, optional bearing/direction) so any fixed sensor network can be
       used without OSM. Select the loader per region.
@@ -62,3 +65,5 @@ Three directions:
 
 - 2026-10-20: roadmap created; region config landed. The `.nj` set name in the
   Overpass camera query is kept on purpose (cache keys are the query text).
+- 2026-10-20: town roles moved to the region file. A region with no
+  `student_town` draws student homes and schools from the whole area.

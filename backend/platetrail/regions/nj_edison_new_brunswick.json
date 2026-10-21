@@ -6,5 +6,8 @@
   "towns": [
     {"label": "Edison", "osm_name": "Edison", "osm_relation": 171019, "admin_level": 8},
     {"label": "New Brunswick", "osm_name": "New Brunswick", "osm_relation": 170536, "admin_level": 8}
-  ]
+  ],
+  "student_town": "New Brunswick",
+  "student_home_share": 0.7,
+  "scenario_town": "Edison"
 }

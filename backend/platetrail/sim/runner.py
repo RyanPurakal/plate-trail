@@ -50,7 +50,7 @@ class SimulationRequest:
     match: MatchConfig = field(default_factory=MatchConfig)
     noise: NoiseConfig | None = None  # None: defaults with seed = request seed
     extra_cameras: int = 0  # density scenario: synthetic cameras added (platetrail.sim.scenarios)
-    scenario_town: str = "Edison"
+    scenario_town: str | None = None  # None: the region's scenario_town
     generator: str = "template"  # "template" or "nhts" (routines.nhts)
 
     def noise_config(self) -> NoiseConfig:
@@ -123,13 +123,15 @@ class LocalRunner(SimulationRunner):
         plate = synthetic_plate(np.random.default_rng([request.seed, 2]))
         cameras, scenario = self.cameras, None
         if request.extra_cameras > 0:
+            from platetrail.region import get_region
             from platetrail.sim.scenarios import synthetic_cameras
 
+            town = request.scenario_town or get_region().scenario_town
             sims, recs = synthetic_cameras(
-                self.router, request.extra_cameras, request.seed, within=self.towns.get(request.scenario_town),
+                self.router, request.extra_cameras, request.seed, within=self.towns.get(town),
                 existing=[(c.lon, c.lat) for c in self.cameras.by_id.values() if c.lon is not None])
             cameras = CameraSet(list(self.cameras.by_id.values()) + sims)
-            scenario = {"extra_cameras": request.extra_cameras, "town": request.scenario_town,
+            scenario = {"extra_cameras": request.extra_cameras, "town": town,
                         "placement": "assumption: arterials, length-weighted, >= 300 m apart",
                         "cameras": [r.as_json() for r in recs]}
         report("routing", 0, len(routine.trips))
@@ -261,7 +263,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 12))
     ap.add_argument("--zero-noise", action="store_true", help="store the noiseless read log")
-    ap.add_argument("--extra-cameras", type=int, default=0, help="density scenario: synthetic Edison cameras")
+    ap.add_argument("--extra-cameras", type=int, default=0, help="density scenario: synthetic cameras in the region's scenario town")
     args = ap.parse_args()
     runner = LocalRunner.from_db()
     req = SimulationRequest(args.template, args.weeks, args.start, args.seed,

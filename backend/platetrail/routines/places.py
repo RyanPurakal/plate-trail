@@ -278,8 +278,9 @@ class PlacePool:
             ]
         return cls(places, residential)
 
-    def sample_home(self, rng: np.random.Generator, town: str | None = None) -> Place:
-        streets = [s for s in self.residential if town is None or s[3] == town]
+    def sample_home(self, rng: np.random.Generator, town: str | tuple[str, ...] | None = None) -> Place:
+        towns = (town,) if isinstance(town, str) else town
+        streets = [s for s in self.residential if towns is None or s[3] in towns]
         if not streets:
             raise ValueError(f"no residential streets in {town!r}")
         lengths = np.array([s[2] for s in streets])

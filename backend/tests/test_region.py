@@ -49,3 +49,26 @@ def test_invalid_configs_are_rejected(bad):
 def test_graph_cache_path_keeps_default_name(tmp_path):
     assert graph_path(tmp_path, DEFAULT_REGION).name == "study_area_drive_service.graphml"
     assert graph_path(tmp_path, "elsewhere").name == "study_area_drive_service_elsewhere.graphml"
+
+
+def test_default_region_names_student_and_scenario_towns():
+    r = load_region()
+    assert r.student_town == "New Brunswick"
+    assert r.student_home_share == 0.7
+    assert r.scenario_town == "Edison"
+    assert r.other_towns("New Brunswick") == ("Edison",)
+
+
+def test_optional_town_roles_default_sensibly():
+    r = parse_region({"id": "x", "name": "x", "parent_iso3166_2": "US-PA",
+                      "towns": [{"label": "A", "osm_name": "A", "osm_relation": 1},
+                                {"label": "B", "osm_name": "B", "osm_relation": 2}]})
+    assert r.student_town is None
+    assert r.scenario_town == "A"
+
+
+@pytest.mark.parametrize("extra", [{"student_town": "Z"}, {"scenario_town": "Z"}, {"student_home_share": 1.5}])
+def test_town_roles_must_be_valid(extra):
+    with pytest.raises(RegionConfigError):
+        parse_region({"id": "x", "name": "x", "parent_iso3166_2": "US-PA",
+                      "towns": [{"label": "A", "osm_name": "A", "osm_relation": 1}], **extra})
