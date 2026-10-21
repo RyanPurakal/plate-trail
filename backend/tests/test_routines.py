@@ -141,3 +141,29 @@ def test_errand_sampling_distance_decay():
 def test_classify(tags, expected):
     got = _classify(tags)
     assert (got[0] if got else None) == expected
+
+
+def test_region_without_student_town_draws_students_region_wide():
+    from platetrail.region import parse_region
+
+    region = parse_region({"id": "x", "name": "x", "parent_iso3166_2": "US-NJ",
+                           "towns": [{"label": "Edison", "osm_name": "Edison", "osm_relation": 1},
+                                     {"label": "New Brunswick", "osm_name": "New Brunswick", "osm_relation": 2}]})
+    gen = TemplateRoutineGenerator(pool(), "student", region=region)
+    homes = {gen.generate(1, MONDAY, 1, np.random.default_rng(s)).anchors["home"].town for s in range(40)}
+    assert homes == {"Edison", "New Brunswick"}
+
+
+def test_student_town_comes_from_region():
+    from platetrail.region import parse_region
+
+    region = parse_region({"id": "x", "name": "x", "parent_iso3166_2": "US-NJ", "student_town": "Edison",
+                           "student_home_share": 1.0,
+                           "towns": [{"label": "Edison", "osm_name": "Edison", "osm_relation": 1},
+                                     {"label": "New Brunswick", "osm_name": "New Brunswick", "osm_relation": 2}]})
+    p = pool()
+    p.by_category["university"].append(Place("place/uni-e", "university", -74.40, 40.55, "Edison"))
+    for s in range(10):
+        r = TemplateRoutineGenerator(p, "student", region=region).generate(1, MONDAY, 1, np.random.default_rng(s))
+        assert r.anchors["home"].town == "Edison"
+        assert r.anchors["school"].town == "Edison"

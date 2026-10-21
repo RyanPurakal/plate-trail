@@ -30,6 +30,7 @@ from datetime import date, datetime, time, timedelta
 
 import numpy as np
 
+from platetrail.region import Region, get_region
 from platetrail.routines.base import PlannedTrip, Routine, RoutineGenerator
 from platetrail.routines.nhts_data import PERSONAS, Diary, NHTSDiaries
 from platetrail.routines.places import (
@@ -72,10 +73,11 @@ TRAVDAY = {0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 1}
 
 
 class NHTSRoutineGenerator(RoutineGenerator):
-    def __init__(self, pool: PlacePool, diaries: NHTSDiaries, persona: str | None = None):
+    def __init__(self, pool: PlacePool, diaries: NHTSDiaries, persona: str | None = None, region: Region | None = None):
         if persona is not None and persona not in PERSONAS:
             raise ValueError(f"unknown persona {persona!r}; choose from {PERSONAS}")
         self.pool, self.data, self.persona = pool, diaries, persona
+        self.region = region or get_region()
 
     def _pick_persona(self, rng: np.random.Generator) -> str:
         if self.persona:
@@ -98,12 +100,14 @@ class NHTSRoutineGenerator(RoutineGenerator):
             raise ValueError("start must be a Monday")
         persona = self._pick_persona(rng)
         student = persona == "student"
-        home = self.pool.sample_home(rng, town="New Brunswick" if student and rng.random() < 0.7 else None)
+        uni = self.region.student_town
+        near_campus = student and uni is not None and rng.random() < self.region.student_home_share
+        home = self.pool.sample_home(rng, town=uni if near_campus else None)
         anchors: dict[str, Place] = {"home": home}
         if persona == "worker":
             anchors["work"] = self.pool.sample(WORK_CATEGORIES, rng)
         if student:
-            anchors["school"] = self.pool.sample("university", rng, town="New Brunswick")
+            anchors["school"] = self.pool.sample("university", rng, town=uni)
         habits: dict[tuple[str, ...], Place] = {}
         trips: list[PlannedTrip] = []
 

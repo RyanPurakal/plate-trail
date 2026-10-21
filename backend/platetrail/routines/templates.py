@@ -22,6 +22,7 @@ from datetime import date, datetime, time, timedelta
 import numpy as np
 
 from platetrail.routines.base import PlannedTrip, Routine, RoutineGenerator
+from platetrail.region import Region, get_region
 from platetrail.routines.places import WORK_CATEGORIES, Place, PlacePool
 
 # ASSUMPTION: share of errand trips by destination category.
@@ -83,11 +84,12 @@ class _Planner:
 
 
 class TemplateRoutineGenerator(RoutineGenerator):
-    def __init__(self, pool: PlacePool, template: str | None = None):
+    def __init__(self, pool: PlacePool, template: str | None = None, region: Region | None = None):
         if template is not None and template not in TEMPLATE_WEIGHTS:
             raise ValueError(f"unknown template {template!r}; choose from {sorted(TEMPLATE_WEIGHTS)}")
         self.pool = pool
         self.template = template
+        self.region = region or get_region()
 
     def generate(self, driver_id: int, start: date, weeks: int, rng: np.random.Generator) -> Routine:
         if start.weekday() != 0:
@@ -125,9 +127,11 @@ class TemplateRoutineGenerator(RoutineGenerator):
         return Routine(driver_id, "commuter", {"home": home, "work": work, **_habit_anchors(p)}, p.trips)
 
     def _student(self, driver_id: int, start: date, weeks: int, rng: np.random.Generator) -> Routine:
-        home = self.pool.sample_home(rng, town="New Brunswick" if rng.random() < 0.7 else "Edison")
+        uni = self.region.student_town
+        near_campus = rng.random() < self.region.student_home_share
+        home = self.pool.sample_home(rng, town=None if uni is None else uni if near_campus else self.region.other_towns(uni))
         p = _Planner(self.pool, rng, home)
-        school = self.pool.sample("university", rng, town="New Brunswick")
+        school = self.pool.sample("university", rng, town=uni)
         for d in (start + timedelta(days=i) for i in range(7 * weeks)):
             wd = d.weekday()
             if wd < 4 or (wd == 4 and rng.random() < 0.5):

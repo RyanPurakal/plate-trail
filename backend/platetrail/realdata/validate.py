@@ -252,7 +252,7 @@ def format_report(r: dict) -> str:
         f"Timeline ({r['format']} export), {r['period']['weeks']} weeks from {r['period']['start']}",
         f"  {c['visits']} visits at {c['places']} places; {c['drives_total']} drives found "
         f"({c['drives_assumed']} assumed from distance), {c['walk_or_transit_gaps']} walk/transit gaps",
-        f"  in period: {c['drives_in_period']} drives; {c['drives_outside_area']} outside Edison/New Brunswick; "
+        f"  in period: {c['drives_in_period']} drives; {c['drives_outside_area']} outside the study area; "
         f"{c['drives_simulated']} simulated",
         "  ground truth: " + (", ".join(f"{k} = {v}" for k, v in r["truth_sources"].items()) or "none found"),
     ]

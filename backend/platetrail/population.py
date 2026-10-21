@@ -33,7 +33,7 @@ class PopulationRequest:
     match: MatchConfig = field(default_factory=MatchConfig)
     noise: NoiseConfig | None = None  # None: defaults; each driver gets seed * 100_000 + i
     extra_cameras: int = 0
-    scenario_town: str = "Edison"
+    scenario_town: str | None = None  # None: the region's scenario_town
 
 
 @dataclass
@@ -59,13 +59,15 @@ def simulate_population(runner, request: PopulationRequest, progress=None, keep_
     report = progress or (lambda stage, done, total: None)
     cameras, scenario = runner.cameras, None
     if request.extra_cameras > 0:
+        from platetrail.region import get_region
         from platetrail.sim.scenarios import synthetic_cameras
 
+        town = request.scenario_town or get_region().scenario_town
         sims, recs = synthetic_cameras(
-            runner.router, request.extra_cameras, request.seed, within=runner.towns.get(request.scenario_town),
+            runner.router, request.extra_cameras, request.seed, within=runner.towns.get(town),
             existing=[(c.lon, c.lat) for c in runner.cameras.by_id.values() if c.lon is not None])
         cameras = CameraSet(list(runner.cameras.by_id.values()) + sims)
-        scenario = {"extra_cameras": request.extra_cameras, "town": request.scenario_town,
+        scenario = {"extra_cameras": request.extra_cameras, "town": town,
                     "cameras": [r.as_json() for r in recs]}
     gen = runner.make_generator(SimulationRequest(generator=request.generator))
     start = datetime.combine(request.start, time())
