@@ -3,6 +3,7 @@
     GET  /health
     GET  /region           active study area: id, name, town labels, initial map view
     GET  /area             public fixed sensors and a summary for any bbox (no region file needed)
+    POST /geocode          place search (Nominatim) -> boxes to explore; the text is never stored or logged
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -29,10 +30,11 @@ from platetrail.api.queries import (
     population_policies,
     population_unicity_rows,
 )
-from platetrail.api.schemas import PopulationRequestBody, SimulateRequest, YourWeekBody
+from platetrail.api.schemas import GeocodeBody, PopulationRequestBody, SimulateRequest, YourWeekBody
 from platetrail.area import AreaError, load_area, parse_bbox
 from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
+from platetrail.geocode import ATTRIBUTION, GeocodeError, get_geocoder
 from platetrail.etl.export_geojson import cameras_feature_collection
 from platetrail.jobs import job_status, submit_population, submit_simulation
 from platetrail.region import get_region
@@ -93,6 +95,18 @@ def area(bbox: str) -> dict:
         return load_area(box)
     except (RuntimeError, httpx.HTTPError) as e:
         raise HTTPException(status_code=503, detail="map data source is busy; try again shortly") from e
+
+
+@app.post("/geocode")
+def geocode(body: GeocodeBody) -> dict:
+    """Places matching the search text, each with a box sized for GET /area. Session-only: not stored or logged."""
+    try:
+        results = get_geocoder().search(body.q)
+    except GeocodeError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=503, detail="place search is busy; try again shortly") from e
+    return {"results": results, "attribution": ATTRIBUTION}
 
 
 @app.get("/cameras")

@@ -362,6 +362,17 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
   font-weight: 600; letter-spacing: 0.04em; }
 .ex-go:disabled { opacity: 0.6; cursor: progress; }
 .ex-go:focus-visible, .ex-share:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+.ex-search { margin-bottom: 8px; }
+.ex-search label { display: block; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.ex-search-row { display: flex; gap: 6px; }
+.ex-search-row input { flex: 1; min-width: 0; padding: 6px 8px; background: transparent; color: inherit; border: 1px solid var(--rule); font: inherit; }
+.ex-search-row input:focus-visible, .ex-places button:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+.ex-places ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.ex-places button { width: 100%; text-align: left; padding: 6px 4px; background: transparent; color: inherit; border: 0;
+  border-bottom: 1px dotted var(--rule); cursor: pointer; font: inherit; line-height: 1.4; }
+.ex-places button:hover { color: var(--bone); }
+.ex-credit { font-size: 10px; margin-bottom: 6px; }
+.explore > .picker > .nb-note { margin-bottom: 10px; }
 .ex-count { font-family: var(--display); font-size: 40px; line-height: 1; margin: 4px 0 8px; }
 .ex-count small { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 6px; }
 .ex-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dotted var(--rule); }

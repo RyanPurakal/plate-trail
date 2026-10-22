@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { AreaResult } from "@/lib/api";
-import { shortDate } from "@/lib/area";
+import { searchPlaces, type AreaResult, type PlaceMatch } from "@/lib/api";
+import { shortDate, type BBox } from "@/lib/area";
 
 type Props = {
   area: AreaResult | null;
@@ -10,14 +10,42 @@ type Props = {
   error: string | null;
   shrunk: boolean; // the last request was cut down to the API's maximum box size
   onExplore: () => void; // explore the current map view
+  onPick: (bbox: BBox) => void; // explore a place found by search
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Sidebar for the Explore view: action button plus a plain-language summary of the area. */
-export default function ExploreView({ area, loading, error, shrunk, onExplore }: Props) {
+export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick }: Props) {
   const [copied, setCopied] = useState(false);
+  const [query, setQuery] = useState("");
+  const [places, setPlaces] = useState<PlaceMatch[] | null>(null);
+  const [credit, setCredit] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const s = area?.summary;
+
+  async function search(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim() || searching) return;
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const r = await searchPlaces(query);
+      setPlaces(r.results);
+      setCredit(r.attribution);
+    } catch (err) {
+      setPlaces(null);
+      setSearchError((err as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function pick(p: PlaceMatch) {
+    setPlaces(null);
+    onPick(p.bbox);
+  }
 
   function share() {
     navigator.clipboard?.writeText(window.location.href).then(() => {
@@ -30,9 +58,41 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore }:
     <div className="explore">
       <section className="picker">
         <p className="ex-lede">
-          Move the map to any area, then load the fixed sensors (such as license-plate readers) recorded there in
-          public map data.
+          Search for a place, or move the map to any area, then load the fixed sensors (such as license-plate
+          readers) recorded there in public map data.
         </p>
+        <form className="ex-search" role="search" onSubmit={search}>
+          <label htmlFor="ex-q">Find a place</label>
+          <div className="ex-search-row">
+            <input id="ex-q" type="search" value={query} maxLength={200} autoComplete="off"
+              placeholder="Town, landmark or address" onChange={(e) => setQuery(e.target.value)} />
+            <button type="submit" className="ex-share" disabled={searching || !query.trim()}>
+              {searching ? "Searching…" : "Search"}
+            </button>
+          </div>
+        </form>
+        {searchError && <div className="error" role="alert">{searchError}</div>}
+        {places && (
+          <div className="ex-places" aria-live="polite">
+            {places.length === 0 ? (
+              <div className="nb-note">No places matched. Try a town name or add the state.</div>
+            ) : (
+              <ul>
+                {places.map((p, i) => (
+                  <li key={`${p.lat},${p.lon},${i}`}>
+                    <button onClick={() => pick(p)} disabled={loading}>
+                      {p.name}{p.kind && <span className="dim"> · {p.kind}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {credit && <div className="dim ex-credit">{credit}</div>}
+          </div>
+        )}
+        <div className="nb-note">
+          Search text is used only to look up the place and is not saved. The page address keeps just the map box.
+        </div>
         <button className="ex-go" onClick={onExplore} disabled={loading}>
           {loading ? "Loading public map data…" : area ? "Explore the current view" : "Explore this view"}
         </button>

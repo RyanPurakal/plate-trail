@@ -32,8 +32,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       a `?bbox=` link opens straight into it. Clicking a sensor shows source,
       direction and last OSM edit. The default tab is still "One driver"
       until the check-up becomes the home page (section 5).
-- [ ] Place search: geocode a town or address to a box (Nominatim, with
-      attribution and rate limit, cached server-side by query text only).
+- [x] Place search: `POST /geocode` sends a town or address to Nominatim
+      (identifying User-Agent, one request per second, attribution shown) and
+      returns up to 5 matches, each with a box sized for `GET /area`. Search box
+      and result list in the Explore sidebar; picking a match loads that area
+      and only the box goes in the URL. Because a query can be a home address,
+      it travels in the POST body (not the logged URL), the httpx request log
+      line is filtered out, and the cache is in memory only (256 entries, 24 h)
+      rather than on disk as first planned.
 - [ ] Draw a box on the map to explore it.
 - [ ] Main-road coverage in the summary: share of primary/secondary road length
       within a short distance of a sensor (needs a road fetch for the box).

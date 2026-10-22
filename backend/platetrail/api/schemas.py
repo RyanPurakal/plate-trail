@@ -92,6 +92,11 @@ class LonLat(BaseModel):
     lat: float = Field(ge=40.0, le=41.0)
 
 
+class GeocodeBody(BaseModel):
+    """Place search text; in the body so it never appears in access logs. Never stored."""
+    q: str = Field(..., min_length=1, max_length=200)
+
+
 class YourWeekBody(BaseModel):
     """Session-only inputs; never stored."""
     home: LonLat

@@ -306,7 +306,8 @@ export default function Home() {
         </nav>
 
         {tab === "explore" && (
-          <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView} />
+          <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
+            onPick={(b) => { setAreaShrunk(false); loadArea(b); }} />
         )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
         {tab === "yourweek" && (
