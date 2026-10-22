@@ -51,7 +51,12 @@ stored server-side. The Edison and New Brunswick study stays as the
       geom`), cached and refreshed like the sensors; measured in 20 m pieces
       clipped to the box. If roads can't be loaded, `main_roads` is null and
       the card just leaves the row out.
-- [ ] Sensor detail panel: source, direction if known, last edited in OSM.
+- [x] Sensor detail panel: clicking a sensor rings it on the map and opens a
+      sidebar card (replacing the map popup) with direction as a compass word
+      and bearing, location, source and licence, last OSM edit, data fetch or
+      file date, a neutral note on what the direction does and does not say,
+      and a link to the OSM object. Previous/Next and "Step through sensors"
+      reach every sensor from the keyboard; the map eases to off-screen ones.
 
 ### 2. My routes, kept on your device
 
@@ -182,3 +187,6 @@ stored server-side. The Edison and New Brunswick study stays as the
   within_m). Distance only: the card says direction and lanes matter. The
   live Overpass check timed out during the run, so the road query is covered
   by mocked tests only; check it against a real box when Overpass is idle.
+- 2026-10-22: sensor detail card landed (frontend only; `lib/area.ts` gained
+  `compassWord`, `osmUrl`, `parseDirections`). Checked by typecheck and build,
+  not yet clicked through in a browser against live Overpass data.

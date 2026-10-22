@@ -1,11 +1,11 @@
 "use client";
 
-import type { Feature, Point } from "geojson";
+import type { Feature } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLat, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import type { AreaResult, AreaSensorProps, AreaSource, MapDefaults } from "@/lib/api";
-import { cornersToBBox, shortDate, type BBox } from "@/lib/area";
+import type { AreaResult, MapDefaults } from "@/lib/api";
+import { cornersToBBox, type BBox } from "@/lib/area";
 
 type Props = {
   area: AreaResult | null;
@@ -13,6 +13,8 @@ type Props = {
   onView: (bounds: BBox) => void; // current visible box, reported after each move
   drawing?: boolean; // drag on the map draws a box instead of panning
   onDraw?: (box: BBox | null) => void; // drawn box, or null when drawing is cancelled
+  selectedId?: string | null; // sensor shown in the sidebar's detail card
+  onSelect?: (id: string) => void; // a sensor was clicked
 };
 
 const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
@@ -25,29 +27,13 @@ const boxPolygon = ([w, s, e, n]: BBox): Feature => ({
   geometry: { type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
 });
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-function popupHtml(p: AreaSensorProps, sources: AreaSource[]) {
-  const src = sources.find((s) => s.id === p.source);
-  const dirs: number[] = typeof p.directions_deg === "string" ? JSON.parse(p.directions_deg) : p.directions_deg ?? [];
-  const dir = dirs.length
-    ? `faces ${dirs.map((d) => `${Math.round(d)}°`).join(", ")}`
-    : p.direction_raw ? `direction "${esc(p.direction_raw)}" (not a compass bearing)` : "direction not recorded";
-  const edited = shortDate(p.last_edited);
-  return `<div class="pop-title">Fixed sensor</div>`
-    + `<div class="pop-row">${dir}</div>`
-    + `<div class="pop-sep pop-dim">source: ${esc(src?.name ?? p.source)}</div>`
-    + (edited ? `<div class="pop-dim">last edited in OSM: ${edited}</div>` : "")
-    + `<div class="pop-dim">${esc(p.id)}</div>`;
-}
-
 /** Map for the Explore view: the explored box and the public sensors inside it. */
-export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw }: Props) {
+export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
-  const latest = useRef({ area, onView, drawing, onDraw });
-  latest.current = { area, onView, drawing, onDraw };
+  const latest = useRef({ area, onView, drawing, onDraw, onSelect });
+  latest.current = { area, onView, drawing, onDraw, onSelect };
 
   useEffect(() => {
     if (!el.current) return;
@@ -83,6 +69,15 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
           "circle-stroke-width": 1.5,
         },
       });
+      m.addLayer({
+        id: "area-sensor-selected", type: "circle", source: "area-sensors", filter: ["==", ["get", "id"], ""],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 15, 13],
+          "circle-color": "transparent",
+          "circle-stroke-color": "#e8e2d4",
+          "circle-stroke-width": 2,
+        },
+      });
       m.addLayer({ id: "draw-box-fill", type: "fill", source: "draw-box", paint: { "fill-color": "#f2a541", "fill-opacity": 0.08 } });
       m.addLayer({ id: "draw-box-line", type: "line", source: "draw-box", paint: { "line-color": "#f2a541", "line-width": 1.5 } });
 
@@ -116,12 +111,9 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
       m.on("mouseup", finish);
       m.on("touchend", finish);
 
-      const popup = new maplibregl.Popup({ className: "pt-popup", maxWidth: "260px" });
       m.on("click", "area-sensors", (e: MapLayerMouseEvent) => {
-        const f = e.features?.[0];
-        if (!f || latest.current.drawing) return;
-        popup.setLngLat((f.geometry as Point).coordinates as [number, number])
-          .setHTML(popupHtml(f.properties as unknown as AreaSensorProps, latest.current.area?.summary.sources ?? [])).addTo(m);
+        const id = e.features?.[0]?.properties?.id;
+        if (typeof id === "string" && !latest.current.drawing) latest.current.onSelect?.(id);
       });
       m.on("mouseenter", "area-sensors", () => { if (!latest.current.drawing) m.getCanvas().style.cursor = "pointer"; });
       m.on("mouseleave", "area-sensors", () => { if (!latest.current.drawing) m.getCanvas().style.cursor = ""; });
@@ -185,6 +177,17 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
     });
     m.fitBounds([[w, s], [e, n]], { padding: 40, duration: 600 });
   }, [ready, area]);
+
+  // Ring the selected sensor; bring it into view if it is off screen (e.g. picked with Previous/Next).
+  useEffect(() => {
+    if (!ready) return;
+    const m = map.current!;
+    m.setFilter("area-sensor-selected", ["==", ["get", "id"], selectedId ?? ""]);
+    const f = selectedId ? area?.sensors.features.find((x) => x.properties.id === selectedId) : null;
+    if (!f) return;
+    const at = f.geometry.coordinates as [number, number];
+    if (!m.getBounds().contains(at)) m.easeTo({ center: at, duration: 400 });
+  }, [ready, area, selectedId]);
 
   return <div ref={el} className="map" role="region" aria-label="Map of the explored area" />;
 }

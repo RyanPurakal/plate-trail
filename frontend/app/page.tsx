@@ -160,6 +160,7 @@ export default function Home() {
   const [areaError, setAreaError] = useState<string | null>(null);
   const [areaShrunk, setAreaShrunk] = useState(false);
   const [drawing, setDrawing] = useState(false);
+  const [sensorId, setSensorId] = useState<string | null>(null);
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
@@ -168,6 +169,7 @@ export default function Home() {
     try {
       const a = await getArea(bbox);
       setArea(a);
+      setSensorId(null);
       setAreaUrl(a.bbox);
     } catch (e) {
       setAreaError((e as Error).message);
@@ -317,7 +319,7 @@ export default function Home() {
 
         {tab === "explore" && (
           <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
-            drawing={drawing} onDrawToggle={() => setDrawing(!drawing)}
+            drawing={drawing} onDrawToggle={() => setDrawing(!drawing)} selectedId={sensorId} onSelect={setSensorId}
             onPick={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
         )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
@@ -454,7 +456,7 @@ export default function Home() {
       {tab === "explore" ? (
       <main className="stage">
         <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }}
-          drawing={drawing} onDraw={exploreDrawn} />
+          drawing={drawing} onDraw={exploreDrawn} selectedId={sensorId} onSelect={setSensorId} />
         {drawing && <div className="draw-hint" role="status">Drag on the map to draw a box · Esc to cancel</div>}
         <div className="legend">
           <span><i className="lg-sensor" />sensor, direction known</span>

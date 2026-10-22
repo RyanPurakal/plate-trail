@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { searchPlaces, type AreaResult, type PlaceMatch } from "@/lib/api";
 import { shortDate, type BBox } from "@/lib/area";
+import SensorDetail from "./SensorDetail";
 
 type Props = {
   area: AreaResult | null;
@@ -13,12 +14,14 @@ type Props = {
   onPick: (bbox: BBox) => void; // explore a place found by search
   drawing: boolean; // the map is in draw-a-box mode
   onDrawToggle: () => void;
+  selectedId: string | null; // sensor whose details are shown
+  onSelect: (id: string | null) => void;
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Sidebar for the Explore view: action button plus a plain-language summary of the area. */
-export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick, drawing, onDrawToggle }: Props) {
+export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick, drawing, onDrawToggle, selectedId, onSelect }: Props) {
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<PlaceMatch[] | null>(null);
@@ -120,6 +123,8 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
         </section>
       )}
 
+      {area && selectedId && <SensorDetail area={area} selectedId={selectedId} onSelect={onSelect} />}
+
       {area && s && (
         <section className="naive area-card" aria-live="polite">
           <div className="nb-head">
@@ -151,8 +156,13 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
               )}
               <div className="nb-note">
                 A sensor with a known direction records vehicles travelling one way past it. Click a sensor on the map
-                for details.
+                for details, or step through them in a list.
               </div>
+              {!selectedId && (
+                <button className="ex-share ex-step" onClick={() => onSelect(area.sensors.features[0]?.properties.id ?? null)}>
+                  Step through sensors
+                </button>
+              )}
               {s.main_roads?.share != null && (
                 <div className="nb-note">
                   Main roads are motorways, trunk, primary and secondary roads in OpenStreetMap. A stretch counts as
