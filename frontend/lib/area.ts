@@ -16,6 +16,11 @@ export function parseBBox(raw: string | null): BBox | null {
 
 export const formatBBox = (b: BBox) => b.map((v) => v.toFixed(2)).join(",");
 
+/** Box spanned by two dragged corners, in either order. */
+export function cornersToBBox(a: [number, number], b: [number, number]): BBox {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+}
+
 /** The visible map box, shrunk around its centre if it is larger than the API allows. */
 export function viewToBBox(b: BBox): { bbox: BBox; shrunk: boolean } {
   const [w, s, e, n] = b;

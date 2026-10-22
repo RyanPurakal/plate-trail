@@ -11,12 +11,14 @@ type Props = {
   shrunk: boolean; // the last request was cut down to the API's maximum box size
   onExplore: () => void; // explore the current map view
   onPick: (bbox: BBox) => void; // explore a place found by search
+  drawing: boolean; // the map is in draw-a-box mode
+  onDrawToggle: () => void;
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Sidebar for the Explore view: action button plus a plain-language summary of the area. */
-export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick }: Props) {
+export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick, drawing, onDrawToggle }: Props) {
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<PlaceMatch[] | null>(null);
@@ -58,7 +60,7 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
     <div className="explore">
       <section className="picker">
         <p className="ex-lede">
-          Search for a place, or move the map to any area, then load the fixed sensors (such as license-plate
+          Search for a place, move the map to any area or draw a box on it, then load the fixed sensors (such as license-plate
           readers) recorded there in public map data.
         </p>
         <form className="ex-search" role="search" onSubmit={search}>
@@ -93,11 +95,17 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
         <div className="nb-note">
           Search text is used only to look up the place and is not saved. The page address keeps just the map box.
         </div>
-        <button className="ex-go" onClick={onExplore} disabled={loading}>
-          {loading ? "Loading public map data…" : area ? "Explore the current view" : "Explore this view"}
-        </button>
+        <div className="ex-actions">
+          <button className="ex-go" onClick={onExplore} disabled={loading || drawing}>
+            {loading ? "Loading public map data…" : area ? "Explore the current view" : "Explore this view"}
+          </button>
+          <button className="ex-share ex-draw" onClick={onDrawToggle} disabled={loading} aria-pressed={drawing}>
+            {drawing ? "Cancel drawing" : "Draw a box"}
+          </button>
+        </div>
+        {drawing && <div className="nb-note">Press and drag on the map to draw the area to explore. Esc cancels.</div>}
         {shrunk && !loading && (
-          <div className="nb-note">The view was larger than the 0.5° limit, so its centre was used. Zoom in to choose the exact area.</div>
+          <div className="nb-note">The area was larger than the 0.5° limit, so its centre was used. Zoom in or draw a smaller box to choose the exact area.</div>
         )}
       </section>
 

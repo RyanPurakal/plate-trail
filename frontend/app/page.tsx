@@ -159,6 +159,7 @@ export default function Home() {
   const [areaLoading, setAreaLoading] = useState(false);
   const [areaError, setAreaError] = useState<string | null>(null);
   const [areaShrunk, setAreaShrunk] = useState(false);
+  const [drawing, setDrawing] = useState(false);
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
@@ -178,6 +179,14 @@ export default function Home() {
   function exploreView() {
     if (!viewBox.current) return;
     const { bbox, shrunk } = viewToBBox(viewBox.current);
+    setAreaShrunk(shrunk);
+    loadArea(bbox);
+  }
+
+  function exploreDrawn(box: BBox | null) {
+    setDrawing(false);
+    if (!box) return;
+    const { bbox, shrunk } = viewToBBox(box);
     setAreaShrunk(shrunk);
     loadArea(bbox);
   }
@@ -216,6 +225,7 @@ export default function Home() {
   function switchTab(t: Tab) {
     setTab(t);
     setPickMode(null);
+    setDrawing(false);
     setAreaUrl(t === "explore" ? area?.bbox ?? null : null);
     if (t === "driver" && detail?.stored === false && runId != null) {
       setDetail(null);
@@ -307,7 +317,8 @@ export default function Home() {
 
         {tab === "explore" && (
           <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
-            onPick={(b) => { setAreaShrunk(false); loadArea(b); }} />
+            drawing={drawing} onDrawToggle={() => setDrawing(!drawing)}
+            onPick={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
         )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
         {tab === "yourweek" && (
@@ -442,7 +453,9 @@ export default function Home() {
 
       {tab === "explore" ? (
       <main className="stage">
-        <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }} />
+        <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }}
+          drawing={drawing} onDraw={exploreDrawn} />
+        {drawing && <div className="draw-hint" role="status">Drag on the map to draw a box · Esc to cancel</div>}
         <div className="legend">
           <span><i className="lg-sensor" />sensor, direction known</span>
           <span><i className="lg-undir lg-sensor-undir" />direction not recorded</span>

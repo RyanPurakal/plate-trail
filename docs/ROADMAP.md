@@ -40,7 +40,11 @@ stored server-side. The Edison and New Brunswick study stays as the
       it travels in the POST body (not the logged URL), the httpx request log
       line is filtered out, and the cache is in memory only (256 entries, 24 h)
       rather than on disk as first planned.
-- [ ] Draw a box on the map to explore it.
+- [x] Draw a box on the map to explore it. "Draw a box" in the Explore
+      sidebar switches the map to draw mode (press and drag with mouse or one
+      finger; panning is paused, Esc or the button cancels). Drags under about
+      200 m are ignored as clicks; a box over the size limit is shrunk around
+      its centre, like the view.
 - [ ] Main-road coverage in the summary: share of primary/secondary road length
       within a short distance of a sensor (needs a road fetch for the box).
 - [ ] Sensor detail panel: source, direction if known, last edited in OSM.
