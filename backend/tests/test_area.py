@@ -10,8 +10,10 @@ from platetrail.area import (
     AreaError,
     area_summary,
     build_area_query,
+    build_roads_query,
     file_area_features,
     load_area,
+    main_road_coverage,
     parse_area_response,
     parse_bbox,
     snap_bbox,
@@ -31,10 +33,30 @@ RESPONSE = {
 }
 
 
+# One east-west main road along lat 40.55 from lon -74.41 to -74.31 (about 8.5 km),
+# plus a road outside the snapped box that must not be counted.
+ROADS = {
+    "elements": [
+        {"type": "way", "id": 1, "geometry": [{"lat": 40.55, "lon": -74.41}, {"lat": 40.55, "lon": -74.31}]},
+        {"type": "way", "id": 2, "geometry": [{"lat": 41.0, "lon": -74.41}, {"lat": 41.0, "lon": -74.31}]},
+    ]
+}
+
+
+def is_roads(request: httpx.Request) -> bool:
+    return b"highway" in request.content
+
+
+def sensor_calls(calls: list) -> list:
+    return [c for c in calls if not is_roads(c)]
+
+
 def overpass_client(calls: list, status: int = 200) -> OverpassClient:
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        return httpx.Response(status, json=RESPONSE) if status == 200 else httpx.Response(status)
+        if status != 200:
+            return httpx.Response(status)
+        return httpx.Response(200, json=ROADS if is_roads(request) else RESPONSE)
 
     return OverpassClient(httpx.Client(transport=httpx.MockTransport(handler)), urls=("http://overpass.test",),
                           attempts_per_url=1, backoff_s=0)
@@ -91,13 +113,14 @@ def test_load_area_caches_and_refetches_when_stale(tmp_path):
     box = (-74.4123, 40.5011, -74.3001, 40.5999)
     first = load_area(box, cache=cache, client=client)
     assert first["bbox"] == [-74.42, 40.5, -74.3, 40.6]
-    assert first["summary"]["sensor_count"] == 2 and len(calls) == 1
-    # a nearby box on the same grid reuses the cached response
+    assert first["summary"]["sensor_count"] == 2 and len(sensor_calls(calls)) == 1
+    assert len(calls) == 2  # sensors + main roads
+    # a nearby box on the same grid reuses the cached responses
     load_area((-74.415, 40.502, -74.305, 40.598), cache=cache, client=client)
-    assert len(calls) == 1
+    assert len(calls) == 2
     later = datetime.now(timezone.utc) + area_mod.MAX_AGE + timedelta(hours=1)
     load_area(box, cache=cache, client=client, now=later)
-    assert len(calls) == 2
+    assert len(sensor_calls(calls)) == 2 and len(calls) == 4
 
 
 def test_load_area_uses_stale_cache_when_overpass_fails(tmp_path):
@@ -107,6 +130,7 @@ def test_load_area_uses_stale_cache_when_overpass_fails(tmp_path):
     later = datetime.now(timezone.utc) + area_mod.MAX_AGE + timedelta(days=1)
     result = load_area(box, cache=cache, client=overpass_client(calls, status=504), now=later)
     assert result["summary"]["sensor_count"] == 2
+    assert result["summary"]["main_roads"]["road_km"] > 0  # stale roads are used too
     with pytest.raises(RuntimeError):
         load_area((0.0, 0.0, 0.1, 0.1), cache=cache, client=overpass_client(calls, status=504))
 
@@ -170,3 +194,39 @@ def test_load_area_includes_file_sensors(tmp_path):
     assert survey["fetched_at"] is not None
     ids = [f["properties"]["id"] for f in result["sensors"]["features"]]
     assert ids == ["osm:node/2", "osm:way/7", "survey:2", "survey:a"]
+
+
+def test_roads_query_lists_main_classes_in_bbox():
+    q = build_roads_query((-74.42, 40.5, -74.3, 40.6))
+    assert "(40.50,-74.42,40.60,-74.30)" in q
+    assert "motorway|trunk|primary|secondary" in q and "out skel geom;" in q
+
+
+def test_main_road_coverage_measures_length_near_sensors():
+    bbox = (-74.42, 40.5, -74.3, 40.6)
+    sensors = parse_area_response(RESPONSE)  # one at (-74.41, 40.52), 3.3 km off the road; one at 40.53
+    far = main_road_coverage(bbox, ROADS, sensors)
+    assert 8.3 <= far["road_km"] <= 8.6  # only the road inside the box
+    assert far["near_sensor_km"] == 0 and far["share"] == 0
+    on_road = [{"geometry": {"type": "Point", "coordinates": [-74.36, 40.5505]}}]
+    near = main_road_coverage(bbox, ROADS, on_road)
+    assert near["near_sensor_km"] == 0.2  # 100 m either side
+    assert 0.02 < near["share"] < 0.03
+    assert near["within_m"] == 100 and near["road_classes"][0] == "motorway"
+    assert main_road_coverage(bbox, {"elements": []}, on_road)["share"] is None
+
+
+def test_load_area_without_roads_still_returns_sensors(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(504) if is_roads(request) else httpx.Response(200, json=RESPONSE)
+
+    client = OverpassClient(httpx.Client(transport=httpx.MockTransport(handler)), urls=("http://overpass.test",),
+                            attempts_per_url=1, backoff_s=0)
+    result = load_area((-74.42, 40.5, -74.3, 40.6), cache=RawCache(tmp_path), client=client)
+    assert result["summary"]["sensor_count"] == 2 and result["summary"]["main_roads"] is None
+
+
+def test_load_area_reports_main_road_coverage(tmp_path):
+    result = load_area((-74.42, 40.5, -74.3, 40.6), cache=RawCache(tmp_path), client=overpass_client([]))
+    roads = result["summary"]["main_roads"]
+    assert roads["road_km"] > 8 and roads["share"] == 0

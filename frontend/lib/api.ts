@@ -264,6 +264,15 @@ export type AreaSource = {
   latest_edit: string | null;
 };
 
+/** Main-road length in the box and how much of it lies near a mapped sensor (distance only). */
+export type MainRoads = {
+  road_classes: string[];
+  within_m: number;
+  road_km: number;
+  near_sensor_km: number;
+  share: number | null; // null when the box has no main roads
+};
+
 export type AreaResult = {
   bbox: [number, number, number, number]; // west, south, east, north, snapped to a 0.01 deg grid
   summary: {
@@ -271,6 +280,7 @@ export type AreaResult = {
     with_direction: number;
     area_km2: number;
     sensors_per_100km2: number | null;
+    main_roads: MainRoads | null; // null if road data couldn't be loaded
     sources: AreaSource[];
   };
   sensors: { type: "FeatureCollection"; features: PointFeature<AreaSensorProps>[] };

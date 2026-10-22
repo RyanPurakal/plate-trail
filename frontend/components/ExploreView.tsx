@@ -141,10 +141,25 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
               <div className="ex-row">
                 <span>Direction known</span><span>{s.with_direction} of {s.sensor_count}</span>
               </div>
+              {s.main_roads?.share != null && (
+                <div className="ex-row">
+                  <span>Main roads near a sensor</span>
+                  <span>
+                    {Math.round(s.main_roads.share * 100)}% ({s.main_roads.near_sensor_km} of {s.main_roads.road_km} km)
+                  </span>
+                </div>
+              )}
               <div className="nb-note">
                 A sensor with a known direction records vehicles travelling one way past it. Click a sensor on the map
                 for details.
               </div>
+              {s.main_roads?.share != null && (
+                <div className="nb-note">
+                  Main roads are motorways, trunk, primary and secondary roads in OpenStreetMap. A stretch counts as
+                  near a sensor if it is within {s.main_roads.within_m} m of one; being near a sensor does not mean
+                  every vehicle there is recorded, since direction and lanes matter.
+                </div>
+              )}
             </>
           )}
 

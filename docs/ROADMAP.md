@@ -45,8 +45,12 @@ stored server-side. The Edison and New Brunswick study stays as the
       finger; panning is paused, Esc or the button cancels). Drags under about
       200 m are ignored as clicks; a box over the size limit is shrunk around
       its centre, like the view.
-- [ ] Main-road coverage in the summary: share of primary/secondary road length
-      within a short distance of a sensor (needs a road fetch for the box).
+- [x] Main-road coverage in the summary: share of main-road length
+      (motorway, trunk, primary, secondary) within 100 m of a mapped sensor.
+      Roads come from a second Overpass query for the snapped box (`out skel
+      geom`), cached and refreshed like the sensors; measured in 20 m pieces
+      clipped to the box. If roads can't be loaded, `main_roads` is null and
+      the card just leaves the row out.
 - [ ] Sensor detail panel: source, direction if known, last edited in OSM.
 
 ### 2. My routes, kept on your device
@@ -174,3 +178,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   file (`fetched_at` is the file's modified time, no license/url). Not
   deduplicated against OSM; a missing or malformed file is logged and
   skipped. Extra file columns are not returned.
+- 2026-10-22: `summary.main_roads` landed (road_km, near_sensor_km, share,
+  within_m). Distance only: the card says direction and lanes matter. The
+  live Overpass check timed out during the run, so the road query is covered
+  by mocked tests only; check it against a real box when Overpass is idle.
