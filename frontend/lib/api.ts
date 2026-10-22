@@ -171,6 +171,29 @@ async function get<T>(path: string): Promise<T> {
   return resp.json();
 }
 
+/** Initial map view from the region file; any field may be null (the map keeps its fallback). */
+export type MapDefaults = {
+  center: [number, number] | null;
+  zoom: number | null;
+  bounds: [number, number, number, number] | null; // west, south, east, north
+};
+
+export type Region = {
+  id: string;
+  name: string;
+  towns: string[];
+  student_town: string | null;
+  scenario_town: string | null;
+  map: MapDefaults;
+};
+
+export const getRegion = () => get<Region>("/region");
+
+/** Labels used until GET /region answers (or if it fails): the bundled example region. */
+export const FALLBACK_REGION_NAME = "Edison & New Brunswick, NJ";
+export const FALLBACK_SCENARIO_TOWN = "Edison";
+// Facts in the UI that describe the example dataset only (e.g. the agency's published read count).
+export const EXAMPLE_REGION_ID = "nj_edison_new_brunswick";
 export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);
@@ -219,5 +242,52 @@ export async function simulate(body: SimulateBody): Promise<{ run_id: number }> 
     body: JSON.stringify(body),
   });
   if (!resp.ok) throw new Error(`simulate: ${resp.status} ${await resp.text()}`);
+  return resp.json();
+}
+
+/** GET /area: public fixed sensors inside a box. No region file needed. */
+export type AreaSensorProps = {
+  id: string;
+  source: string; // "osm" or a configured file source's name
+  directions_deg: number[] | null;
+  direction_raw: string | null;
+  last_edited: string | null; // OSM edit time; null for file sensors
+};
+
+export type AreaSource = {
+  id: string;
+  name: string;
+  license: string | null;
+  url: string | null;
+  count: number;
+  fetched_at: string | null; // OSM: when the cached response was fetched; file: last-modified time
+  latest_edit: string | null;
+};
+
+export type AreaResult = {
+  bbox: [number, number, number, number]; // west, south, east, north, snapped to a 0.01 deg grid
+  summary: {
+    sensor_count: number;
+    with_direction: number;
+    area_km2: number;
+    sensors_per_100km2: number | null;
+    sources: AreaSource[];
+  };
+  sensors: { type: "FeatureCollection"; features: PointFeature<AreaSensorProps>[] };
+};
+
+/** Fetch an area; errors carry the API's plain-language detail (bad box, busy data source). */
+export async function getArea(bbox: [number, number, number, number]): Promise<AreaResult> {
+  let resp: Response;
+  try {
+    resp = await fetch(`${API_URL}/area?bbox=${bbox.join(",")}`);
+  } catch {
+    throw new Error("Can't reach the Plate Trail API.");
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    const detail = typeof body?.detail === "string" ? body.detail : `request failed (${resp.status})`;
+    throw new Error(detail);
+  }
   return resp.json();
 }

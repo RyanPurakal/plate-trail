@@ -72,3 +72,35 @@ def test_town_roles_must_be_valid(extra):
     with pytest.raises(RegionConfigError):
         parse_region({"id": "x", "name": "x", "parent_iso3166_2": "US-PA",
                       "towns": [{"label": "A", "osm_name": "A", "osm_relation": 1}], **extra})
+
+
+BASE = {"id": "x", "name": "x", "parent_iso3166_2": "US-PA",
+        "towns": [{"label": "A", "osm_name": "A", "osm_relation": 1}]}
+
+
+def test_default_region_map_view():
+    m = load_region().map
+    assert m.center == (-74.39, 40.53)
+    assert m.zoom == 11.6
+    assert m.bounds is None
+
+
+def test_map_view_is_optional_and_parsed():
+    assert parse_region(BASE).map.as_dict() == {"center": None, "zoom": None, "bounds": None}
+    r = parse_region({**BASE, "map": {"bounds": [-75.2, 39.9, -75.1, 40.0]}})
+    assert r.map.bounds == (-75.2, 39.9, -75.1, 40.0)
+    assert r.map.center is None
+
+
+@pytest.mark.parametrize("bad", [
+    {"center": [-74.4, 40.5]},  # zoom missing
+    {"center": [-74.4], "zoom": 12},
+    {"center": [-200, 40.5], "zoom": 12},
+    {"center": [-74.4, 40.5], "zoom": 30},
+    {"bounds": [-74.3, 40.4, -74.5, 40.6]},  # west > east
+    {"bounds": [-74.5, 40.4, -74.3]},
+    {"bounds": "nope"},
+])
+def test_invalid_map_view_is_rejected(bad):
+    with pytest.raises(RegionConfigError):
+        parse_region({**BASE, "map": bad})

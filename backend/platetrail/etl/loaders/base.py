@@ -1,9 +1,10 @@
 """Loader interface for camera sources.
 
-Each source (OSM via Overpass now; DeFlock exports and agency transparency
-portals later) implements CameraLoader. Loaders only fetch and normalize;
-cross-source deduplication happens afterwards in etl.dedupe, so adding a
-source means adding one loader class and registering it in run_etl.
+Each source (OSM via Overpass, or a local GeoJSON/CSV file) implements
+CameraLoader. Loaders only fetch and normalize; cross-source deduplication
+happens afterwards in etl.dedupe. A region's camera_sources choose which
+loaders run_etl uses, so adding a source type means one loader class and one
+branch in run_etl.default_loaders.
 """
 
 from abc import ABC, abstractmethod
