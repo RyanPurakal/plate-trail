@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ExploreView from "@/components/ExploreView";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
 import YourWeek from "@/components/YourWeek";
@@ -10,11 +11,13 @@ import {
   EXAMPLE_REGION_ID,
   FALLBACK_REGION_NAME,
   FALLBACK_SCENARIO_TOWN,
+  getArea,
   getCameras,
   getRegion,
   getRun,
   getRuns,
   simulateJob,
+  type AreaResult,
   type CameraCollection,
   type Job,
   type Inference,
@@ -23,9 +26,19 @@ import {
   type RunDetail,
   type RunListItem,
 } from "@/lib/api";
+import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
+
+type Tab = "explore" | "driver" | "population" | "yourweek";
+
+/** Keep the explored box (and nothing else) in the address bar so the area page can be shared. */
+function setAreaUrl(bbox: BBox | null) {
+  const url = bbox ? `${window.location.pathname}?bbox=${formatBBox(bbox)}` : window.location.pathname;
+  window.history.replaceState(null, "", url);
+}
 
 const REVEAL_STEPS = ["Reads", "Places", "Schedule", "Anomalies"];
 
@@ -136,12 +149,47 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
-  const [tab, setTab] = useState<"driver" | "population" | "yourweek">("driver");
+  const [tab, setTab] = useState<Tab>("driver");
   const [reveal, setReveal] = useState(0);
   const [pickMode, setPickMode] = useState<"home" | "work" | null>(null);
   const [pins, setPins] = useState<{ home: [number, number] | null; work: [number, number] | null }>({ home: null, work: null });
   const [region, setRegion] = useState<Region | null>(null);
   const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
+  const [area, setArea] = useState<AreaResult | null>(null);
+  const [areaLoading, setAreaLoading] = useState(false);
+  const [areaError, setAreaError] = useState<string | null>(null);
+  const [areaShrunk, setAreaShrunk] = useState(false);
+  const viewBox = useRef<BBox | null>(null);
+
+  async function loadArea(bbox: BBox) {
+    setAreaLoading(true);
+    setAreaError(null);
+    try {
+      const a = await getArea(bbox);
+      setArea(a);
+      setAreaUrl(a.bbox);
+    } catch (e) {
+      setAreaError((e as Error).message);
+    } finally {
+      setAreaLoading(false);
+    }
+  }
+
+  function exploreView() {
+    if (!viewBox.current) return;
+    const { bbox, shrunk } = viewToBBox(viewBox.current);
+    setAreaShrunk(shrunk);
+    loadArea(bbox);
+  }
+
+  useEffect(() => {
+    // An area link (?bbox=w,s,e,n) opens straight into the Explore view.
+    const bbox = parseBBox(new URLSearchParams(window.location.search).get("bbox"));
+    if (bbox) {
+      setTab("explore");
+      loadArea(bbox);
+    }
+  }, []);
 
   useEffect(() => {
     // Optional: without it the map keeps its built-in default view.
@@ -165,9 +213,10 @@ export default function Home() {
     getRun(runId).then(setDetail).catch((e: Error) => setError(e.message));
   }, [runId]);
 
-  function switchTab(t: "driver" | "population" | "yourweek") {
+  function switchTab(t: Tab) {
     setTab(t);
     setPickMode(null);
+    setAreaUrl(t === "explore" ? area?.bbox ?? null : null);
     if (t === "driver" && detail?.stored === false && runId != null) {
       setDetail(null);
       getRun(runId).then(setDetail).catch((e: Error) => setError(e.message));
@@ -251,11 +300,14 @@ export default function Home() {
         </header>
 
         <nav className="tabs" role="tablist" aria-label="section">
-          {([["driver", "One driver"], ["population", "Population & policy"], ["yourweek", "Your week"]] as const).map(([k, label]) => (
+          {([["explore", "Explore an area"], ["driver", "One driver"], ["population", "Population & policy"], ["yourweek", "Your week"]] as const).map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => switchTab(k)}>{label}</button>
           ))}
         </nav>
 
+        {tab === "explore" && (
+          <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView} />
+        )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
         {tab === "yourweek" && (
           <YourWeek pins={pins} pickMode={pickMode} setPickMode={setPickMode}
@@ -304,7 +356,7 @@ export default function Home() {
         </section>
         )}
 
-        {error && <div className="error">{error}</div>}
+        {error && tab !== "explore" && <div className="error">{error}</div>}
         {showDriver && (<>
         {tab === "yourweek" && <div className="error stale yw-banner">Your week, simulated just now and not stored.</div>}
         {run?.stale && (
@@ -387,6 +439,16 @@ export default function Home() {
         </>)}
       </aside>
 
+      {tab === "explore" ? (
+      <main className="stage">
+        <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }} />
+        <div className="legend">
+          <span><i className="lg-sensor" />sensor, direction known</span>
+          <span><i className="lg-undir lg-sensor-undir" />direction not recorded</span>
+          <span><i className="lg-box" />explored area</span>
+        </div>
+      </main>
+      ) : (
       <main className="stage">
         <MapView
           cameras={tab === "population" ? cameras : runCameras}
@@ -430,6 +492,7 @@ export default function Home() {
         </div>
         <div className="mode-stamp">{mode === "saw" ? "RECORDED" : "GROUND TRUTH"}</div>
       </main>
+      )}
     </div>
   );
 }

@@ -25,8 +25,13 @@ stored server-side. The Edison and New Brunswick study stays as the
       edit). No region file needed.
 - [x] Include configured file sensors (region `camera_sources` of type `file`)
       that fall in the box, credited by source name.
-- [ ] Frontend "Explore" view: map + area summary card from `GET /area`, area
-      in the URL (`?bbox=...`), good empty and error states.
+- [x] Frontend "Explore" view: map + area summary card from `GET /area`, area
+      in the URL (`?bbox=...`), good empty and error states. "Explore an area"
+      tab with its own map (`AreaMap`): explore the current view (shrunk around
+      its centre if over the size limit), the snapped box goes in the URL, and
+      a `?bbox=` link opens straight into it. Clicking a sensor shows source,
+      direction and last OSM edit. The default tab is still "One driver"
+      until the check-up becomes the home page (section 5).
 - [ ] Place search: geocode a town or address to a box (Nominatim, with
       attribution and rate limit, cached server-side by query text only).
 - [ ] Draw a box on the map to explore it.

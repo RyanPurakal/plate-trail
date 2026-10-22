@@ -138,6 +138,7 @@ Rerun the data steps in that order: reloading cameras clears their snaps, so `ru
 
 ## Using it
 
+- **Explore an area:** move the map anywhere and load the fixed sensors recorded there in public map data (OpenStreetMap, plus any configured sensor files). The summary card lists the count, density, how many have a known direction, and each source with its fetch date. Click a sensor for details. The area is kept in the address (`?bbox=west,south,east,north`), so the page can be bookmarked or shared; it holds only map coordinates.
 - **One driver:** pick or simulate a driver, then switch between what the cameras saw and what actually happened. Step through the reveal: reads, then the inferred home and work areas, then the regular schedule, then the anomalies.
 - **Population & policy:** pick a stored population to see unicity curves (share of drivers singled out by *p* sightings, for several crowd sizes). Compare policies by unicity and by how many homes the engine still places within 1 km (as a share of all drivers). Click a bar for detail, or switch to the table view.
 - **Your week:** place your home (and work) on the map, describe your week, and see what this network could read and infer. Nothing is stored.
