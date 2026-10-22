@@ -27,7 +27,7 @@ flowchart LR
 
     %% ---------- app ----------
     FE["Frontend<br/>Next.js + MapLibre"]
-    API["FastAPI<br/>/region · /area · /geocode · /cameras · /simulate · /runs · /jobs<br/>/populations · /yourweek"]
+    API["FastAPI<br/>/region · /area · /geocode · /cameras · /simulate · /runs · /jobs<br/>/populations · /yourweek · /route/check"]
     LOCAL["LocalRunner (in-process)<br/>routines → routing → matching<br/>→ sensor noise → store"]
     REDIS[("Redis<br/>broker · route cache · run cache<br/>unicity + policy results")]
     QUEUE["Celery queue<br/>(progress reporting)"]
@@ -80,6 +80,7 @@ flowchart LR
 | Inference engine (stays, HDBSCAN anchors, regular passes, anomalies) | `backend/platetrail/inference/engine.py` | Built |
 | Policy comparison | `backend/platetrail/analysis/policies.py` | Built |
 | "Your week" (session-only, nothing stored) | `backend/platetrail/yourweek.py` | Built |
+| Route check for "My routes" (compute-only, nothing stored) | `backend/platetrail/routecheck.py` | Built (study region's roads) |
 | Real-data validation (Google Timeline importer, local only) | `backend/platetrail/realdata/` | Built; not yet run on a real file |
 
 ## Data flow for one simulation

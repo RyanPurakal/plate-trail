@@ -4,6 +4,7 @@
     GET  /region           active study area: id, name, town labels, initial map view
     GET  /area             public fixed sensors and a summary for any bbox (no region file needed)
     POST /geocode          place search (Nominatim) -> boxes to explore; the text is never stored or logged
+    POST /route/check      sensors one route passes and where reads would happen; compute-only, never stored
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -30,7 +31,7 @@ from platetrail.api.queries import (
     population_policies,
     population_unicity_rows,
 )
-from platetrail.api.schemas import GeocodeBody, PopulationRequestBody, SimulateRequest, YourWeekBody
+from platetrail.api.schemas import GeocodeBody, PopulationRequestBody, RouteCheckBody, SimulateRequest, YourWeekBody
 from platetrail.area import AreaError, load_area, parse_bbox
 from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
@@ -107,6 +108,22 @@ def geocode(body: GeocodeBody) -> dict:
     except httpx.HTTPError as e:
         raise HTTPException(status_code=503, detail="place search is busy; try again shortly") from e
     return {"results": results, "attribution": ATTRIBUTION}
+
+
+@app.post("/route/check")
+def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_runner)) -> dict:
+    """Sensors a route passes (both ways by default) on the study region's roads. Session-only: nothing is
+    stored, cached or logged."""
+    from platetrail.routecheck import check_route
+
+    r = get_region()
+    try:
+        result = check_route(runner.router, runner.cameras, (body.start.lon, body.start.lat),
+                             (body.end.lon, body.end.lat), body.both_ways)
+    except (AnchorTooFar, NoRoute) as e:
+        raise HTTPException(status_code=422, detail=f"route checks currently cover the {r.name} road network; "
+                            "this route starts or ends outside it") from e
+    return {"network": {"region": r.id, "name": r.name}, **result}
 
 
 @app.get("/cameras")

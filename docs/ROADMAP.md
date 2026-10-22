@@ -70,8 +70,20 @@ stored server-side. The Edison and New Brunswick study stays as the
       the Explore map in placing mode (crosshair, Esc cancels); the two points
       and a dotted straight line are drawn until routing lands. Clicking a
       saved route shows it and fits the map if it is off screen.
-- [ ] `POST /route/check`: route + sensors passed + read timeline for one route;
+- [x] `POST /route/check`: route + sensors passed + read timeline for one route;
       compute-only, never stored, cached or logged (same rule as `/yourweek`).
+      Checked both ways by default (a sensor facing one direction of traffic
+      may read the trip there but not the trip back); each step has the
+      offset and distance from the start and whether, and why not, it would
+      record. Uses the study region's road graph and cameras for now; ends
+      more than 500 m from those roads get a 422 saying so.
+- [ ] Routing for any area: build a small drive graph for the route's box
+      from Overpass (held in memory only, since the box follows the route)
+      and match against `GET /area` sensors, so saved routes outside the
+      study region can be checked too.
+- [ ] Frontend: "Check this route" on each saved route calls
+      `/route/check` and draws the driven route; friendly message for routes
+      outside the covered network.
 - [ ] Route timeline: where reads would happen along the drive; click a step
       to show it on the map.
 - [ ] What a 7-day / 30-day / 1-year read history could suggest for a route

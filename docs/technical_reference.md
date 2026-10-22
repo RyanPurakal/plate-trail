@@ -427,6 +427,7 @@ FastAPI on `:8000` (interactive docs at `/docs`):
 | `GET /populations/{id}` | one population: config, summary, per-persona counts |
 | `GET /populations/{id}/unicity?p=1,2,4&size=100,1000&resolution=60` | unicity rows {size, p, eligible_share, unique_share}; cached in Redis |
 | `GET /populations/{id}/policies` | policy comparison rows (retention, rounding, windows, aggregate-only); cached in Redis |
+| `POST /route/check` | one saved route for "My routes": body `{"start": {"lon", "lat"}, "end": {"lon", "lat"}, "both_ways": true}`. Drives it on the study region's road network with the default direction-aware matching, out and back unless `both_ways` is false. Each leg has the route `geometry`, `length_m`, `duration_s`, `sensors_passed`, `reads` and `steps` in driving order (sensor id, label, position, `offset_s` and `distance_m` from the start, road name, travel bearing, `read` and `reason`, e.g. `wrong_direction`). Compute-only like `/yourweek`: nothing is written to the database or the route cache, and the points are not logged. 422 if either end is more than 500 m from the region's roads (routing for any area is a later step) |
 | `POST /yourweek` | "your week" simulation (home/work points, workdays, leave times, errands, weeks). Returns a run-shaped result with `stored: false`. Nothing is written to the database or the route cache. |
 
 `/simulate` runs synchronously in the API process. `/jobs/simulate` runs on

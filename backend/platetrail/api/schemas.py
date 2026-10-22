@@ -92,9 +92,22 @@ class LonLat(BaseModel):
     lat: float = Field(ge=40.0, le=41.0)
 
 
+class AnyLonLat(BaseModel):
+    """A point anywhere; the endpoint decides whether it is covered."""
+    lon: float = Field(ge=-180.0, le=180.0)
+    lat: float = Field(ge=-90.0, le=90.0)
+
+
 class GeocodeBody(BaseModel):
     """Place search text; in the body so it never appears in access logs. Never stored."""
     q: str = Field(..., min_length=1, max_length=200)
+
+
+class RouteCheckBody(BaseModel):
+    """One saved route's end points, from the visitor's browser. Session-only; never stored."""
+    start: AnyLonLat
+    end: AnyLonLat
+    both_ways: bool = True
 
 
 class YourWeekBody(BaseModel):
