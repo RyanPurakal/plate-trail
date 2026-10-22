@@ -6,6 +6,7 @@ import type { GeoJSONSource, LngLat, Map as MLMap, MapLayerMouseEvent, MapMouseE
 import { useEffect, useRef, useState } from "react";
 import type { AreaResult, MapDefaults } from "@/lib/api";
 import { cornersToBBox, type BBox } from "@/lib/area";
+import type { Pt } from "@/lib/routes";
 
 type Props = {
   area: AreaResult | null;
@@ -15,6 +16,9 @@ type Props = {
   onDraw?: (box: BBox | null) => void; // drawn box, or null when drawing is cancelled
   selectedId?: string | null; // sensor shown in the sidebar's detail card
   onSelect?: (id: string) => void; // a sensor was clicked
+  placing?: boolean; // clicks place a route point instead of selecting sensors
+  onPlace?: (pt: Pt | null) => void; // placed point, or null when placing is cancelled
+  routeMarks?: { start: Pt | null; end: Pt | null } | null; // route being added or shown
 };
 
 const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
@@ -28,12 +32,12 @@ const boxPolygon = ([w, s, e, n]: BBox): Feature => ({
 });
 
 /** Map for the Explore view: the explored box and the public sensors inside it. */
-export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect }: Props) {
+export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect, placing = false, onPlace, routeMarks = null }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
-  const latest = useRef({ area, onView, drawing, onDraw, onSelect });
-  latest.current = { area, onView, drawing, onDraw, onSelect };
+  const latest = useRef({ area, onView, drawing, onDraw, onSelect, placing, onPlace });
+  latest.current = { area, onView, drawing, onDraw, onSelect, placing, onPlace };
 
   useEffect(() => {
     if (!el.current) return;
@@ -78,6 +82,20 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
           "circle-stroke-width": 2,
         },
       });
+      m.addSource("route-marks", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "route-line", type: "line", source: "route-marks", filter: ["==", ["geometry-type"], "LineString"],
+        paint: { "line-color": "#e8e2d4", "line-width": 1.5, "line-dasharray": [1, 2], "line-opacity": 0.8 },
+      });
+      m.addLayer({
+        id: "route-points", type: "circle", source: "route-marks", filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 6,
+          "circle-color": ["case", ["==", ["get", "end"], "start"], "#e8e2d4", "#0b0d0e"],
+          "circle-stroke-color": "#e8e2d4",
+          "circle-stroke-width": 2,
+        },
+      });
       m.addLayer({ id: "draw-box-fill", type: "fill", source: "draw-box", paint: { "fill-color": "#f2a541", "fill-opacity": 0.08 } });
       m.addLayer({ id: "draw-box-line", type: "line", source: "draw-box", paint: { "line-color": "#f2a541", "line-width": 1.5 } });
 
@@ -111,12 +129,16 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
       m.on("mouseup", finish);
       m.on("touchend", finish);
 
+      const busy = () => latest.current.drawing || latest.current.placing;
+      m.on("click", (e: MapMouseEvent) => {
+        if (latest.current.placing) latest.current.onPlace?.(e.lngLat.toArray() as Pt);
+      });
       m.on("click", "area-sensors", (e: MapLayerMouseEvent) => {
         const id = e.features?.[0]?.properties?.id;
-        if (typeof id === "string" && !latest.current.drawing) latest.current.onSelect?.(id);
+        if (typeof id === "string" && !busy()) latest.current.onSelect?.(id);
       });
-      m.on("mouseenter", "area-sensors", () => { if (!latest.current.drawing) m.getCanvas().style.cursor = "pointer"; });
-      m.on("mouseleave", "area-sensors", () => { if (!latest.current.drawing) m.getCanvas().style.cursor = ""; });
+      m.on("mouseenter", "area-sensors", () => { if (!busy()) m.getCanvas().style.cursor = "pointer"; });
+      m.on("mouseleave", "area-sensors", () => { if (!busy()) m.getCanvas().style.cursor = ""; });
       setReady(true);
       report();
     });
@@ -148,6 +170,39 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ready, drawing]);
+
+  // Placing route points: crosshair cursor; Escape cancels.
+  useEffect(() => {
+    const m = map.current;
+    if (!ready || !m || !placing) return;
+    m.getCanvas().style.cursor = "crosshair";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") latest.current.onPlace?.(null); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      m.getCanvas().style.cursor = "";
+    };
+  }, [ready, placing]);
+
+  // Start/end points of the route being added or shown, joined by a straight dotted line.
+  const start = routeMarks?.start ?? null;
+  const end = routeMarks?.end ?? null;
+  const marksKey = JSON.stringify([start, end]);
+  useEffect(() => {
+    if (!ready) return;
+    const m = map.current!;
+    const pts = [start, end].filter((p): p is Pt => !!p);
+    const features: Feature[] = pts.map((p, i) => ({
+      type: "Feature", properties: { end: i === 0 ? "start" : "end" }, geometry: { type: "Point", coordinates: p },
+    }));
+    if (pts.length === 2) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: pts } });
+    (m.getSource("route-marks") as GeoJSONSource).setData({ ...EMPTY, features });
+    if (pts.length === 2 && !pts.every((p) => m.getBounds().contains(p))) {
+      const b = cornersToBBox(pts[0], pts[1]);
+      m.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 14, duration: 600 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, marksKey]);
 
   // Region's starting view, only while no area is shown.
   useEffect(() => {

@@ -60,8 +60,16 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ### 2. My routes, kept on your device
 
-- [ ] Route storage in localStorage only (name, start, end); add/rename/delete.
-- [ ] Add a route by clicking start and end on the map.
+- [x] Route storage in localStorage only (name, start, end); add/rename/delete.
+      `lib/routes.ts` keeps up to 20 routes under `platetrail.routes.v1`,
+      points rounded to 4 decimals (about 10 m), malformed entries dropped on
+      load; edits in another tab are picked up via the `storage` event. "My
+      routes" card in the Explore sidebar with rename, two-step delete and
+      "Remove all from this device"; a note says routes never leave the browser.
+- [x] Add a route by clicking start and end on the map. "Add a route" puts
+      the Explore map in placing mode (crosshair, Esc cancels); the two points
+      and a dotted straight line are drawn until routing lands. Clicking a
+      saved route shows it and fits the map if it is off screen.
 - [ ] `POST /route/check`: route + sensors passed + read timeline for one route;
       compute-only, never stored, cached or logged (same rule as `/yourweek`).
 - [ ] Route timeline: where reads would happen along the drive; click a step
@@ -190,3 +198,7 @@ stored server-side. The Edison and New Brunswick study stays as the
 - 2026-10-22: sensor detail card landed (frontend only; `lib/area.ts` gained
   `compassWord`, `osmUrl`, `parseDirections`). Checked by typecheck and build,
   not yet clicked through in a browser against live Overpass data.
+- 2026-10-22: My routes (local storage, add by clicking start and end) landed.
+  Frontend only, no API calls yet. The storage helpers were checked with a
+  throwaway Node script and the page with typecheck and build; there is no
+  frontend test runner yet, and it has not been clicked through in a browser.

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
+import MyRoutes, { type RouteDraft } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
 import YourWeek from "@/components/YourWeek";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/api";
 import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
+import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
@@ -161,6 +163,10 @@ export default function Home() {
   const [areaShrunk, setAreaShrunk] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [sensorId, setSensorId] = useState<string | null>(null);
+  const [routes, setRoutes] = useState<SavedRoute[]>([]);
+  const [routesSaved, setRoutesSaved] = useState(true);
+  const [routeDraft, setRouteDraft] = useState<RouteDraft | null>(null);
+  const [shownRoute, setShownRoute] = useState<string | null>(null);
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
@@ -192,6 +198,36 @@ export default function Home() {
     setAreaShrunk(shrunk);
     loadArea(bbox);
   }
+
+  // Saved routes live only in this browser; follow edits made in other tabs too.
+  useEffect(() => {
+    setRoutes(loadRoutes());
+    const onStorage = (e: StorageEvent) => { if (e.key === STORAGE_KEY) setRoutes(loadRoutes()); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  function updateRoutes(next: SavedRoute[]) {
+    setRoutes(next);
+    setRoutesSaved(saveRoutes(next));
+    if (shownRoute && !next.some((r) => r.id === shownRoute)) setShownRoute(null);
+  }
+
+  function placeRoutePoint(pt: Pt | null) {
+    if (!pt) return setRouteDraft(null);
+    setRouteDraft((d) => (!d ? d : !d.start ? { start: pt, end: null } : !d.end ? { ...d, end: pt } : d));
+  }
+
+  function saveDraft(name: string) {
+    if (!routeDraft?.start || !routeDraft.end) return;
+    const next = addRoute(routes, name, routeDraft.start, routeDraft.end);
+    updateRoutes(next);
+    setRouteDraft(null);
+    setShownRoute(next[next.length - 1]?.id ?? null);
+  }
+
+  const shown = routes.find((r) => r.id === shownRoute);
+  const routeMarks = routeDraft ?? (shown ? { start: shown.start, end: shown.end } : null);
 
   useEffect(() => {
     // An area link (?bbox=w,s,e,n) opens straight into the Explore view.
@@ -228,6 +264,7 @@ export default function Home() {
     setTab(t);
     setPickMode(null);
     setDrawing(false);
+    setRouteDraft(null);
     setAreaUrl(t === "explore" ? area?.bbox ?? null : null);
     if (t === "driver" && detail?.stored === false && runId != null) {
       setDetail(null);
@@ -319,8 +356,15 @@ export default function Home() {
 
         {tab === "explore" && (
           <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
-            drawing={drawing} onDrawToggle={() => setDrawing(!drawing)} selectedId={sensorId} onSelect={setSensorId}
+            drawing={drawing} onDrawToggle={() => { setRouteDraft(null); setDrawing(!drawing); }} selectedId={sensorId} onSelect={setSensorId}
             onPick={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
+        )}
+        {tab === "explore" && (
+          <MyRoutes routes={routes} storageOk={routesSaved} draft={routeDraft}
+            onAdd={() => { setDrawing(false); setShownRoute(null); setRouteDraft({ start: null, end: null }); }}
+            onCancel={() => setRouteDraft(null)} onSave={saveDraft} shownId={shownRoute} onShow={setShownRoute}
+            onRename={(id, name) => updateRoutes(renameRoute(routes, id, name))}
+            onDelete={(id) => updateRoutes(removeRoute(routes, id))} onClearAll={() => updateRoutes([])} />
         )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
         {tab === "yourweek" && (
@@ -456,12 +500,17 @@ export default function Home() {
       {tab === "explore" ? (
       <main className="stage">
         <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }}
-          drawing={drawing} onDraw={exploreDrawn} selectedId={sensorId} onSelect={setSensorId} />
+          drawing={drawing} onDraw={exploreDrawn} selectedId={sensorId} onSelect={setSensorId}
+          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} />
         {drawing && <div className="draw-hint" role="status">Drag on the map to draw a box · Esc to cancel</div>}
+        {routeDraft && !routeDraft.end && (
+          <div className="draw-hint" role="status">Click the route&apos;s {routeDraft.start ? "end" : "start"} point · Esc to cancel</div>
+        )}
         <div className="legend">
           <span><i className="lg-sensor" />sensor, direction known</span>
           <span><i className="lg-undir lg-sensor-undir" />direction not recorded</span>
           <span><i className="lg-box" />explored area</span>
+          {routeMarks && <span><i className="lg-route" />route start (filled) and end, straight line</span>}
         </div>
       </main>
       ) : (
