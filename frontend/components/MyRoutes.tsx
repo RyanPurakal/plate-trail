@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { RouteCheck, RouteLeg } from "@/lib/api";
 import { MAX_NAME, MAX_ROUTES, nextRouteName, straightKm, type Pt, type SavedRoute } from "@/lib/routes";
 
 export type RouteDraft = { start: Pt | null; end: Pt | null };
+export type RouteCheckState = { loading: boolean; result: RouteCheck | null; error: string | null };
 
 type Props = {
   routes: SavedRoute[];
@@ -14,15 +16,57 @@ type Props = {
   onSave: (name: string) => void;
   shownId: string | null; // route drawn on the map
   onShow: (id: string | null) => void;
+  checks: Record<string, RouteCheckState>; // route check results, kept in page memory only
+  onCheck: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
 };
 
 const km = (r: { start: Pt; end: Pt }) => `${straightKm(r.start, r.end).toFixed(1)} km apart`;
+const minutes = (s: number) => `${Math.max(1, Math.round(s / 60))} min`;
+
+function LegSummary({ leg }: { leg: RouteLeg }) {
+  return (
+    <div className="mr-leg">
+      <div className="mr-leg-head">{leg.direction === "outbound" ? "Start to end" : "Way back"}</div>
+      <div className="ex-row"><span>By road</span><span>{(leg.length_m / 1000).toFixed(1)} km · {minutes(leg.duration_s)}</span></div>
+      <div className="ex-row"><span>Sensors passed</span><span>{leg.sensors_passed}</span></div>
+      <div className="ex-row">
+        <span>Passes that would record it</span>
+        <span>{leg.reads} of {leg.steps.length}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Result of checking one route: both directions, or why it couldn't be checked. */
+function CheckResult({ state }: { state: RouteCheckState }) {
+  if (state.loading) {
+    return (
+      <div className="nb-note" role="status">
+        Working out the route by road… For a place outside the example study area, the first check downloads its
+        roads from OpenStreetMap and can take a minute.
+      </div>
+    );
+  }
+  if (state.error) return <div className="error" role="alert">{state.error}</div>;
+  const r = state.result;
+  if (!r) return null;
+  return (
+    <div aria-live="polite">
+      {r.legs.map((leg) => <LegSummary key={leg.direction} leg={leg} />)}
+      <div className="nb-note">
+        Fastest route by road on {r.network.kind === "region" ? `the ${r.network.name} study roads` : "OpenStreetMap roads around this route"},
+        using mapped sensors only. A sensor with a known direction is counted for trips travelling the way it faces;
+        one with no recorded direction is counted both ways. This check was worked out on the server and not stored there.
+      </div>
+    </div>
+  );
+}
 
 /** Sidebar list of the routes saved in this browser, with add / rename / delete. */
-export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, onSave, shownId, onShow, onRename, onDelete, onClearAll }: Props) {
+export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, onSave, shownId, onShow, checks, onCheck, onRename, onDelete, onClearAll }: Props) {
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null); // route id, or "all"
@@ -91,6 +135,16 @@ export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, on
                       <button className="ex-share" aria-label={`Delete ${r.name}`} onClick={() => setConfirm(r.id)}>Delete</button>
                     </span>
                   )}
+                  {shownId === r.id && (
+                    <div className="mr-check">
+                      {!checks[r.id]?.loading && (
+                        <button className="ex-share" onClick={() => onCheck(r.id)}>
+                          {checks[r.id]?.result || checks[r.id]?.error ? "Check again" : "Check this route"}
+                        </button>
+                      )}
+                      {checks[r.id] && <CheckResult state={checks[r.id]} />}
+                    </div>
+                  )}
                 </>
               )}
             </li>
@@ -111,7 +165,7 @@ export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, on
             </form>
           )}
           {draft.start && draft.end && (
-            <div className="nb-note">The line on the map joins the two points; the roads the route takes are worked out in a later step.</div>
+            <div className="nb-note">The line on the map joins the two points. Save the route, then use &ldquo;Check this route&rdquo; to see it by road.</div>
           )}
           <button className="ex-share" onClick={onCancel}>Cancel</button>
         </div>

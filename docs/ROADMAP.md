@@ -88,9 +88,16 @@ stored server-side. The Edison and New Brunswick study stays as the
       for a route box. Networks are kept in memory (4, for an hour) so the
       return leg and re-checks are quick. A first check of a new area can
       take a while (the road download); the frontend should say so.
-- [ ] Frontend: "Check this route" on each saved route calls
+- [x] Frontend: "Check this route" on each saved route calls
       `/route/check` and draws the driven route; friendly message for routes
-      outside the covered network.
+      outside the covered network. The shown route gets a "Check this route"
+      button; results (per direction: km and minutes by road, sensors passed,
+      passes that would record the trip) are held in page memory only, keyed
+      by route id, and dropped on reload or delete. The map draws the drive
+      there (solid) and back (fainter) in place of the straight line, rings
+      each sensor passed (amber if it would record either way, grey if not)
+      and fits to the route. A loading note says a first check outside the
+      study area downloads roads; 422s read "This route can't be checked: ...".
 - [ ] Route timeline: where reads would happen along the drive; click a step
       to show it on the map.
 - [ ] What a 7-day / 30-day / 1-year read history could suggest for a route
@@ -221,3 +228,8 @@ stored server-side. The Edison and New Brunswick study stays as the
   Frontend only, no API calls yet. The storage helpers were checked with a
   throwaway Node script and the page with typecheck and build; there is no
   frontend test runner yet, and it has not been clicked through in a browser.
+- 2026-10-23: route check in the Explore sidebar and map landed (frontend
+  only). Checked by typecheck, build and backend tests; not yet clicked
+  through in a browser against a live API. The build warns that the
+  installed Next.js version has a published security advisory; upgrading it
+  is left for a separate change.

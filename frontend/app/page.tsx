@@ -3,12 +3,13 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
-import MyRoutes, { type RouteDraft } from "@/components/MyRoutes";
+import MyRoutes, { type RouteCheckState, type RouteDraft } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
 import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
+  checkRoute,
   EXAMPLE_REGION_ID,
   FALLBACK_REGION_NAME,
   FALLBACK_SCENARIO_TOWN,
@@ -167,6 +168,7 @@ export default function Home() {
   const [routesSaved, setRoutesSaved] = useState(true);
   const [routeDraft, setRouteDraft] = useState<RouteDraft | null>(null);
   const [shownRoute, setShownRoute] = useState<string | null>(null);
+  const [routeChecks, setRouteChecks] = useState<Record<string, RouteCheckState>>({}); // by route id, this page only
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
@@ -211,6 +213,20 @@ export default function Home() {
     setRoutes(next);
     setRoutesSaved(saveRoutes(next));
     if (shownRoute && !next.some((r) => r.id === shownRoute)) setShownRoute(null);
+    setRouteChecks((c) => Object.fromEntries(Object.entries(c).filter(([id]) => next.some((r) => r.id === id))));
+  }
+
+  // Results stay in page memory only; reloading the page or deleting the route drops them.
+  async function runRouteCheck(id: string) {
+    const r = routes.find((x) => x.id === id);
+    if (!r) return;
+    setRouteChecks((c) => ({ ...c, [id]: { loading: true, result: null, error: null } }));
+    try {
+      const result = await checkRoute(r.start, r.end);
+      setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null } }));
+    } catch (e) {
+      setRouteChecks((c) => ({ ...c, [id]: { loading: false, result: null, error: (e as Error).message } }));
+    }
   }
 
   function placeRoutePoint(pt: Pt | null) {
@@ -228,6 +244,7 @@ export default function Home() {
 
   const shown = routes.find((r) => r.id === shownRoute);
   const routeMarks = routeDraft ?? (shown ? { start: shown.start, end: shown.end } : null);
+  const routeLegs = !routeDraft && shown ? routeChecks[shown.id]?.result?.legs ?? null : null;
 
   useEffect(() => {
     // An area link (?bbox=w,s,e,n) opens straight into the Explore view.
@@ -363,6 +380,7 @@ export default function Home() {
           <MyRoutes routes={routes} storageOk={routesSaved} draft={routeDraft}
             onAdd={() => { setDrawing(false); setShownRoute(null); setRouteDraft({ start: null, end: null }); }}
             onCancel={() => setRouteDraft(null)} onSave={saveDraft} shownId={shownRoute} onShow={setShownRoute}
+            checks={routeChecks} onCheck={runRouteCheck}
             onRename={(id, name) => updateRoutes(renameRoute(routes, id, name))}
             onDelete={(id) => updateRoutes(removeRoute(routes, id))} onClearAll={() => updateRoutes([])} />
         )}
@@ -501,7 +519,7 @@ export default function Home() {
       <main className="stage">
         <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }}
           drawing={drawing} onDraw={exploreDrawn} selectedId={sensorId} onSelect={setSensorId}
-          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} />
+          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} routeLegs={routeLegs} />
         {drawing && <div className="draw-hint" role="status">Drag on the map to draw a box · Esc to cancel</div>}
         {routeDraft && !routeDraft.end && (
           <div className="draw-hint" role="status">Click the route&apos;s {routeDraft.start ? "end" : "start"} point · Esc to cancel</div>
@@ -510,7 +528,9 @@ export default function Home() {
           <span><i className="lg-sensor" />sensor, direction known</span>
           <span><i className="lg-undir lg-sensor-undir" />direction not recorded</span>
           <span><i className="lg-box" />explored area</span>
-          {routeMarks && <span><i className="lg-route" />route start (filled) and end, straight line</span>}
+          {routeMarks && !routeLegs && <span><i className="lg-route" />route start (filled) and end, straight line</span>}
+          {routeLegs && <span><i className="lg-drive" />route by road (way back fainter)</span>}
+          {routeLegs && <span><i className="lg-pass" />sensor passed: ringed if it would read the trip</span>}
         </div>
       </main>
       ) : (

@@ -4,7 +4,7 @@ import type { Feature } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLat, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import type { AreaResult, MapDefaults } from "@/lib/api";
+import type { AreaResult, MapDefaults, RouteLeg } from "@/lib/api";
 import { cornersToBBox, type BBox } from "@/lib/area";
 import type { Pt } from "@/lib/routes";
 
@@ -19,6 +19,7 @@ type Props = {
   placing?: boolean; // clicks place a route point instead of selecting sensors
   onPlace?: (pt: Pt | null) => void; // placed point, or null when placing is cancelled
   routeMarks?: { start: Pt | null; end: Pt | null } | null; // route being added or shown
+  routeLegs?: RouteLeg[] | null; // checked route by road, replacing the straight line
 };
 
 const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
@@ -32,7 +33,7 @@ const boxPolygon = ([w, s, e, n]: BBox): Feature => ({
 });
 
 /** Map for the Explore view: the explored box and the public sensors inside it. */
-export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect, placing = false, onPlace, routeMarks = null }: Props) {
+export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect, placing = false, onPlace, routeMarks = null, routeLegs = null }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -79,6 +80,25 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 15, 13],
           "circle-color": "transparent",
           "circle-stroke-color": "#e8e2d4",
+          "circle-stroke-width": 2,
+        },
+      });
+      m.addSource("route-drive", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "route-drive", type: "line", source: "route-drive", filter: ["==", ["geometry-type"], "LineString"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#7fd1c7",
+          "line-width": ["case", ["==", ["get", "direction"], "outbound"], 3, 2],
+          "line-opacity": ["case", ["==", ["get", "direction"], "outbound"], 0.9, 0.35],
+        },
+      });
+      m.addLayer({
+        id: "route-passes", type: "circle", source: "route-drive", filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 7, 15, 12],
+          "circle-color": "transparent",
+          "circle-stroke-color": ["case", ["get", "read"], "#f2a541", "#8a8f94"],
           "circle-stroke-width": 2,
         },
       });
@@ -195,14 +215,41 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
     const features: Feature[] = pts.map((p, i) => ({
       type: "Feature", properties: { end: i === 0 ? "start" : "end" }, geometry: { type: "Point", coordinates: p },
     }));
-    if (pts.length === 2) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: pts } });
+    if (pts.length === 2 && !routeLegs) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: pts } });
     (m.getSource("route-marks") as GeoJSONSource).setData({ ...EMPTY, features });
-    if (pts.length === 2 && !pts.every((p) => m.getBounds().contains(p))) {
+    if (pts.length === 2 && !routeLegs && !pts.every((p) => m.getBounds().contains(p))) {
       const b = cornersToBBox(pts[0], pts[1]);
       m.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 14, duration: 600 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, marksKey]);
+  }, [ready, marksKey, routeLegs]);
+
+  // Checked route: the drive there (solid) and back (fainter), and each sensor it passes,
+  // ringed amber if it would record the trip one way or the other, grey if not.
+  useEffect(() => {
+    if (!ready) return;
+    const m = map.current!;
+    const features: Feature[] = [];
+    const read = new Map<string, { at: Pt; read: boolean }>();
+    for (const leg of routeLegs ?? []) {
+      features.push({ type: "Feature", properties: { direction: leg.direction }, geometry: leg.geometry });
+      for (const st of leg.steps) {
+        if (st.lon == null || st.lat == null) continue;
+        const prev = read.get(st.camera_id);
+        read.set(st.camera_id, { at: [st.lon, st.lat], read: !!prev?.read || st.read });
+      }
+    }
+    for (const [id, p] of read) {
+      features.push({ type: "Feature", properties: { id, read: p.read }, geometry: { type: "Point", coordinates: p.at } });
+    }
+    (m.getSource("route-drive") as GeoJSONSource).setData({ ...EMPTY, features });
+    const coords = (routeLegs ?? []).flatMap((l) => l.geometry.coordinates);
+    if (!coords.length) return;
+    const lons = coords.map((c) => c[0]);
+    const lats = coords.map((c) => c[1]);
+    const b: BBox = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+    m.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 15, duration: 600 });
+  }, [ready, routeLegs]);
 
   // Region's starting view, only while no area is shown.
   useEffect(() => {

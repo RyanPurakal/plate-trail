@@ -330,3 +330,54 @@ export async function searchPlaces(q: string): Promise<{ results: PlaceMatch[]; 
   }
   return resp.json();
 }
+
+/** POST /route/check: one step per sensor the drive passes, in order along the route. */
+export type RouteStep = {
+  camera_id: string;
+  label: string | null;
+  lon: number | null;
+  lat: number | null;
+  event: string;
+  offset_s: number;
+  distance_m: number;
+  road_name: string | null;
+  travel_bearing_deg: number | null;
+  read: boolean;
+  reason: string;
+};
+
+export type RouteLeg = {
+  direction: "outbound" | "return";
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  length_m: number;
+  duration_s: number;
+  sensors_passed: number;
+  reads: number;
+  steps: RouteStep[];
+};
+
+export type RouteCheck = {
+  network: { kind: "region" | "area"; region: string | null; name: string; sensors_mapped?: number };
+  legs: RouteLeg[];
+  stored: false;
+};
+
+/** Start and end go in the request body; the API computes the answer and keeps nothing. */
+export async function checkRoute(start: [number, number], end: [number, number]): Promise<RouteCheck> {
+  let resp: Response;
+  try {
+    resp = await fetch(`${API_URL}/route/check`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ start: { lon: start[0], lat: start[1] }, end: { lon: end[0], lat: end[1] } }),
+    });
+  } catch {
+    throw new Error("Can't reach the Plate Trail API.");
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    const detail = typeof body?.detail === "string" ? body.detail : `check failed (${resp.status})`;
+    throw new Error(resp.status === 422 ? `This route can't be checked: ${detail}.` : detail);
+  }
+  return resp.json();
+}
