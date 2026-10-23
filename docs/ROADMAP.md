@@ -98,8 +98,13 @@ stored server-side. The Edison and New Brunswick study stays as the
       each sensor passed (amber if it would record either way, grey if not)
       and fits to the route. A loading note says a first check outside the
       study area downloads roads; 422s read "This route can't be checked: ...".
-- [ ] Route timeline: where reads would happen along the drive; click a step
-      to show it on the map.
+- [x] Route timeline: where reads would happen along the drive; click a step
+      to show it on the map. Each checked direction lists Leave, every sensor
+      passed (minutes:seconds from leaving, road, km in, "Would record" or
+      "Passes, not recorded" with the reason in plain words) and Arrive.
+      Clicking a step rings that sensor on the map and eases to it (zoom 14 or
+      closer); clicking again clears it. Focus lives in page memory and resets
+      when the route or its check changes.
 - [ ] What a 7-day / 30-day / 1-year read history could suggest for a route
       (reuse the simulator and inference engine), in plain language.
 

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
-import MyRoutes, { type RouteCheckState, type RouteDraft } from "@/components/MyRoutes";
+import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
 import YourWeek from "@/components/YourWeek";
@@ -169,6 +169,7 @@ export default function Home() {
   const [routeDraft, setRouteDraft] = useState<RouteDraft | null>(null);
   const [shownRoute, setShownRoute] = useState<string | null>(null);
   const [routeChecks, setRouteChecks] = useState<Record<string, RouteCheckState>>({}); // by route id, this page only
+  const [stepFocus, setStepFocus] = useState<StepFocus | null>(null); // timeline step shown on the map
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
@@ -245,6 +246,7 @@ export default function Home() {
   const shown = routes.find((r) => r.id === shownRoute);
   const routeMarks = routeDraft ?? (shown ? { start: shown.start, end: shown.end } : null);
   const routeLegs = !routeDraft && shown ? routeChecks[shown.id]?.result?.legs ?? null : null;
+  useEffect(() => setStepFocus(null), [routeLegs]);
 
   useEffect(() => {
     // An area link (?bbox=w,s,e,n) opens straight into the Explore view.
@@ -380,7 +382,7 @@ export default function Home() {
           <MyRoutes routes={routes} storageOk={routesSaved} draft={routeDraft}
             onAdd={() => { setDrawing(false); setShownRoute(null); setRouteDraft({ start: null, end: null }); }}
             onCancel={() => setRouteDraft(null)} onSave={saveDraft} shownId={shownRoute} onShow={setShownRoute}
-            checks={routeChecks} onCheck={runRouteCheck}
+            checks={routeChecks} onCheck={runRouteCheck} focus={stepFocus} onFocus={setStepFocus}
             onRename={(id, name) => updateRoutes(renameRoute(routes, id, name))}
             onDelete={(id) => updateRoutes(removeRoute(routes, id))} onClearAll={() => updateRoutes([])} />
         )}
@@ -519,7 +521,8 @@ export default function Home() {
       <main className="stage">
         <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }}
           drawing={drawing} onDraw={exploreDrawn} selectedId={sensorId} onSelect={setSensorId}
-          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} routeLegs={routeLegs} />
+          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} routeLegs={routeLegs}
+          stepFocus={routeLegs ? stepFocus : null} />
         {drawing && <div className="draw-hint" role="status">Drag on the map to draw a box · Esc to cancel</div>}
         {routeDraft && !routeDraft.end && (
           <div className="draw-hint" role="status">Click the route&apos;s {routeDraft.start ? "end" : "start"} point · Esc to cancel</div>

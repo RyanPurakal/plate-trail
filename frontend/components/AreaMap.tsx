@@ -20,6 +20,7 @@ type Props = {
   onPlace?: (pt: Pt | null) => void; // placed point, or null when placing is cancelled
   routeMarks?: { start: Pt | null; end: Pt | null } | null; // route being added or shown
   routeLegs?: RouteLeg[] | null; // checked route by road, replacing the straight line
+  stepFocus?: { at: Pt; cameraId: string } | null; // route timeline step picked in the sidebar
 };
 
 const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
@@ -33,7 +34,7 @@ const boxPolygon = ([w, s, e, n]: BBox): Feature => ({
 });
 
 /** Map for the Explore view: the explored box and the public sensors inside it. */
-export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect, placing = false, onPlace, routeMarks = null, routeLegs = null }: Props) {
+export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect, placing = false, onPlace, routeMarks = null, routeLegs = null, stepFocus = null }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -100,6 +101,16 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
           "circle-color": "transparent",
           "circle-stroke-color": ["case", ["get", "read"], "#f2a541", "#8a8f94"],
           "circle-stroke-width": 2,
+        },
+      });
+      m.addLayer({
+        id: "route-step-focus", type: "circle", source: "route-drive",
+        filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "id"], ""]],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 11, 15, 17],
+          "circle-color": "transparent",
+          "circle-stroke-color": "#e8e2d4",
+          "circle-stroke-width": 2.5,
         },
       });
       m.addSource("route-marks", { type: "geojson", data: EMPTY });
@@ -250,6 +261,19 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
     const b: BBox = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
     m.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 15, duration: 600 });
   }, [ready, routeLegs]);
+
+  // Timeline step picked in the sidebar: ring its sensor and bring it into view, closer in if zoomed out.
+  const focusKey = JSON.stringify(stepFocus);
+  useEffect(() => {
+    if (!ready) return;
+    const m = map.current!;
+    m.setFilter("route-step-focus", ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "id"], stepFocus?.cameraId ?? ""]]);
+    if (!stepFocus) return;
+    if (m.getZoom() < 14 || !m.getBounds().contains(stepFocus.at)) {
+      m.easeTo({ center: stepFocus.at, zoom: Math.max(m.getZoom(), 14), duration: 500 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, focusKey]);
 
   // Region's starting view, only while no area is shown.
   useEffect(() => {
