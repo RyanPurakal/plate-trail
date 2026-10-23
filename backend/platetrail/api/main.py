@@ -4,7 +4,8 @@
     GET  /region           active study area: id, name, town labels, initial map view
     GET  /area             public fixed sensors and a summary for any bbox (no region file needed)
     POST /geocode          place search (Nominatim) -> boxes to explore; the text is never stored or logged
-    POST /route/check      sensors one route passes and where reads would happen; compute-only, never stored
+    POST /route/check      sensors one route passes and where reads would happen, on the study roads or a
+                           network built around the route; compute-only, never stored
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -19,6 +20,8 @@ configured (platetrail.worker, platetrail.jobs), with progress and a run cache.
 from contextlib import asynccontextmanager
 
 import httpx
+import osmnx as ox
+import requests
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -39,6 +42,7 @@ from platetrail.geocode import ATTRIBUTION, GeocodeError, get_geocoder
 from platetrail.etl.export_geojson import cameras_feature_collection
 from platetrail.jobs import job_status, submit_population, submit_simulation
 from platetrail.region import get_region
+from platetrail.routearea import AreaNetworks, get_area_networks
 from platetrail.sim.routing import AnchorTooFar, NoRoute
 from platetrail.sim.runner import SimulationRunner
 from platetrail.sim.service import get_local_runner
@@ -111,19 +115,43 @@ def geocode(body: GeocodeBody) -> dict:
 
 
 @app.post("/route/check")
-def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_runner)) -> dict:
-    """Sensors a route passes (both ways by default) on the study region's roads. Session-only: nothing is
-    stored, cached or logged."""
+def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_runner),
+                networks: AreaNetworks = Depends(get_area_networks)) -> dict:
+    """Sensors a route passes (both ways by default). Routes on the study region's roads use its network;
+    others get a small network built around the route from public map data. Session-only: nothing about the
+    route is stored or logged (an outside-area network is held briefly in memory only)."""
     from platetrail.routecheck import check_route
 
+    start, end = (body.start.lon, body.start.lat), (body.end.lon, body.end.lat)
     r = get_region()
     try:
-        result = check_route(runner.router, runner.cameras, (body.start.lon, body.start.lat),
-                             (body.end.lon, body.end.lat), body.both_ways)
+        result = check_route(runner.router, runner.cameras, start, end, body.both_ways)
+        return {"network": {"kind": "region", "region": r.id, "name": r.name}, **result}
+    except (AnchorTooFar, NoRoute):
+        pass  # not on the study roads: check it on a network built around the route
+
+    try:
+        net = networks.for_route(start, end)
+        result = check_route(net.router, net.cameras, start, end, body.both_ways)
+    except AreaError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except (AnchorTooFar, NoRoute) as e:
-        raise HTTPException(status_code=422, detail=f"route checks currently cover the {r.name} road network; "
-                            "this route starts or ends outside it") from e
-    return {"network": {"region": r.id, "name": r.name}, **result}
+        raise HTTPException(status_code=422, detail="the start or end is more than 500 m from a mapped road, "
+                            "or the two can't be joined by road") from e
+    except (RuntimeError, httpx.HTTPError, requests.RequestException, ox._errors.ResponseStatusCodeError) as e:
+        raise HTTPException(status_code=503, detail="map data is busy; try again shortly") from e
+    return {
+        "network": {
+            "kind": "area",
+            "region": None,
+            "name": "OpenStreetMap roads around this route",
+            "bbox": list(net.bbox),
+            "sensors_mapped": net.sensors_mapped,
+            "sensors_on_roads": net.sensors_on_roads,
+            "sources": net.sources,
+        },
+        **result,
+    }
 
 
 @app.get("/cameras")

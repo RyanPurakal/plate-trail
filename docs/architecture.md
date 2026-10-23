@@ -81,6 +81,7 @@ flowchart LR
 | Policy comparison | `backend/platetrail/analysis/policies.py` | Built |
 | "Your week" (session-only, nothing stored) | `backend/platetrail/yourweek.py` | Built |
 | Route check for "My routes" (compute-only, nothing stored) | `backend/platetrail/routecheck.py` | Built (study region's roads) |
+| Route networks for any area (roads + sensors around one route, memory only) | `backend/platetrail/routearea.py` | Built |
 | Real-data validation (Google Timeline importer, local only) | `backend/platetrail/realdata/` | Built; not yet run on a real file |
 
 ## Data flow for one simulation

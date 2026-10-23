@@ -4,8 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from platetrail.api.main import app, get_runner
+from platetrail.routearea import AreaNetworks, get_area_networks
 from platetrail.routecheck import check_route
-from platetrail.sim.routing import Router
+from platetrail.sim.routing import NoRoute, Router
 from test_trip import pair_on_main_st, toy_graph, xy
 
 START, END = xy(100, 5), xy(900, 5)  # both on Main St A-B, either side of the camera pair at 500 m
@@ -18,7 +19,11 @@ def toy():
 
 @pytest.fixture
 def client(toy):
+    def no_roads(bbox):
+        raise NoRoute("no mapped roads")
+
     app.dependency_overrides[get_runner] = lambda: toy
+    app.dependency_overrides[get_area_networks] = lambda: AreaNetworks(fetch_graph=no_roads)
     # No `with`: the app's lifespan (database migrations) is not needed here.
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -75,7 +80,7 @@ def test_endpoint_is_compute_only(client):
 def test_endpoint_explains_routes_outside_the_network(client):
     resp = client.post("/route/check", json={"start": {"lon": 2.35, "lat": 48.85}, "end": {"lon": 2.36, "lat": 48.86}})
     assert resp.status_code == 422
-    assert "road network" in resp.json()["detail"]
+    assert "mapped road" in resp.json()["detail"]
 
 
 @pytest.mark.parametrize("payload", [

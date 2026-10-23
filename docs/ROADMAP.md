@@ -77,10 +77,17 @@ stored server-side. The Edison and New Brunswick study stays as the
       offset and distance from the start and whether, and why not, it would
       record. Uses the study region's road graph and cameras for now; ends
       more than 500 m from those roads get a 422 saying so.
-- [ ] Routing for any area: build a small drive graph for the route's box
+- [x] Routing for any area: build a small drive graph for the route's box
       from Overpass (held in memory only, since the box follows the route)
       and match against `GET /area` sensors, so saved routes outside the
-      study region can be checked too.
+      study region can be checked too. `platetrail/routearea.py`: routes off
+      the study roads fall back to a box around both ends (2 km padding,
+      0.01 deg grid, at most 0.3 deg a side, about 25 km); roads via OSMnx
+      with its disk cache switched off, sensors snapped with the study
+      snapping rules. A fresh `/area` cache entry is read but never written
+      for a route box. Networks are kept in memory (4, for an hour) so the
+      return leg and re-checks are quick. A first check of a new area can
+      take a while (the road download); the frontend should say so.
 - [ ] Frontend: "Check this route" on each saved route calls
       `/route/check` and draws the driven route; friendly message for routes
       outside the covered network.
