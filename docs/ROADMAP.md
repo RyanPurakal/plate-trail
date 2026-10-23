@@ -115,9 +115,16 @@ stored server-side. The Edison and New Brunswick study stays as the
       overnight / during the day (radius, confidence, distance from the
       route's nearer end) and summary sentences. Compute-only like
       `/route/check` (same network fallback, shared `_checked_route` helper).
-- [ ] Frontend: "What a read history could suggest" for a checked route
+- [x] Frontend: "What a read history could suggest" for a checked route
       (7 days / 30 days / 1 year tabs or cards from `/route/history`, schedule
       inputs, the assumptions list), results in page memory only.
+      `components/RouteHistory.tsx` appears under a successful check: day
+      checkboxes (weekdays by default), leave and back times, then 7 days /
+      30 days / 1 year buttons showing the summary sentences, trips, reads,
+      days and sensors with reads, regular passes and suggested overnight /
+      daytime stays (radius, confidence, distance from the saved start or
+      end), with the assumptions in a collapsible list. Schedule and results
+      reset when the route is hidden or another route is shown.
 
 ### 3. What changed since your last visit
 

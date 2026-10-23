@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { RouteCheck, RouteLeg, RouteStep } from "@/lib/api";
+import RouteHistory from "./RouteHistory";
 import { MAX_NAME, MAX_ROUTES, nextRouteName, straightKm, type Pt, type SavedRoute } from "@/lib/routes";
 
 export type RouteDraft = { start: Pt | null; end: Pt | null };
@@ -186,6 +187,7 @@ export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, on
                         </button>
                       )}
                       {checks[r.id] && <CheckResult state={checks[r.id]} focus={focus} onFocus={onFocus} />}
+                      {checks[r.id]?.result && <RouteHistory key={r.id} start={r.start} end={r.end} />}
                     </div>
                   )}
                 </>
