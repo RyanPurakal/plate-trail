@@ -30,6 +30,7 @@ import {
 } from "@/lib/api";
 import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
+import { areaKey, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -162,6 +163,7 @@ export default function Home() {
   const [areaLoading, setAreaLoading] = useState(false);
   const [areaError, setAreaError] = useState<string | null>(null);
   const [areaShrunk, setAreaShrunk] = useState(false);
+  const [areaChange, setAreaChange] = useState<SnapshotChange | null>(null); // vs this browser's last look at the box
   const [drawing, setDrawing] = useState(false);
   const [sensorId, setSensorId] = useState<string | null>(null);
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
@@ -178,6 +180,10 @@ export default function Home() {
     try {
       const a = await getArea(bbox);
       setArea(a);
+      setAreaChange(recordLook(areaKey(a.bbox), makeSnapshot(
+        a.sensors.features.map((f) => f.properties.id),
+        Object.fromEntries(a.summary.sources.map((src) => [src.id, src.id === "osm" ? src.latest_edit : src.fetched_at])),
+      )));
       setSensorId(null);
       setAreaUrl(a.bbox);
     } catch (e) {
@@ -215,6 +221,7 @@ export default function Home() {
     setRoutesSaved(saveRoutes(next));
     if (shownRoute && !next.some((r) => r.id === shownRoute)) setShownRoute(null);
     setRouteChecks((c) => Object.fromEntries(Object.entries(c).filter(([id]) => next.some((r) => r.id === id))));
+    forgetLooks((k) => k.startsWith("route:") && !next.some((r) => routeKey(r.id) === k));
   }
 
   // Results stay in page memory only; reloading the page or deleting the route drops them.
@@ -224,7 +231,8 @@ export default function Home() {
     setRouteChecks((c) => ({ ...c, [id]: { loading: true, result: null, error: null } }));
     try {
       const result = await checkRoute(r.start, r.end);
-      setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null } }));
+      const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.camera_id))));
+      setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null, change } }));
     } catch (e) {
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result: null, error: (e as Error).message } }));
     }
@@ -376,6 +384,7 @@ export default function Home() {
         {tab === "explore" && (
           <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
             drawing={drawing} onDrawToggle={() => { setRouteDraft(null); setDrawing(!drawing); }} selectedId={sensorId} onSelect={setSensorId}
+            change={areaChange} onForget={() => forgetLooks((k) => k.startsWith("area:"))}
             onPick={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
         )}
         {tab === "explore" && (

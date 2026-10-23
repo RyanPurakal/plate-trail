@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from "react";
 import type { RouteCheck, RouteLeg, RouteStep } from "@/lib/api";
+import type { SnapshotChange } from "@/lib/snapshots";
+import ChangeNote from "./ChangeNote";
 import RouteHistory from "./RouteHistory";
 import { MAX_NAME, MAX_ROUTES, nextRouteName, straightKm, type Pt, type SavedRoute } from "@/lib/routes";
 
 export type RouteDraft = { start: Pt | null; end: Pt | null };
-export type RouteCheckState = { loading: boolean; result: RouteCheck | null; error: string | null };
+export type RouteCheckState = {
+  loading: boolean;
+  result: RouteCheck | null;
+  error: string | null;
+  change?: SnapshotChange | null; // sensors passed vs this browser's last check of the route
+};
 export type StepFocus = { key: string; at: Pt; cameraId: string }; // timeline step shown on the map
 
 type Props = {
@@ -99,6 +106,7 @@ function CheckResult({ state, focus, onFocus }: { state: RouteCheckState } & Omi
   return (
     <div aria-live="polite">
       {r.legs.map((leg) => <LegSummary key={leg.direction} leg={leg} focus={focus} onFocus={onFocus} />)}
+      {state.change !== undefined && <ChangeNote change={state.change} what="along this route" />}
       <div className="nb-note">
         Fastest route by road on {r.network.kind === "region" ? `the ${r.network.name} study roads` : "OpenStreetMap roads around this route"},
         using mapped sensors only. A sensor with a known direction is counted for trips travelling the way it faces;

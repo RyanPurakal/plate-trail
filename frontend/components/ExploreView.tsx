@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { searchPlaces, type AreaResult, type PlaceMatch } from "@/lib/api";
 import { shortDate, type BBox } from "@/lib/area";
+import type { SnapshotChange } from "@/lib/snapshots";
+import ChangeNote from "./ChangeNote";
 import SensorDetail from "./SensorDetail";
 
 type Props = {
@@ -16,18 +18,22 @@ type Props = {
   onDrawToggle: () => void;
   selectedId: string | null; // sensor whose details are shown
   onSelect: (id: string | null) => void;
+  change: SnapshotChange | null; // compared with this browser's last look at the same box; null on a first look
+  onForget: () => void; // remove stored area looks from this browser
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Sidebar for the Explore view: action button plus a plain-language summary of the area. */
-export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick, drawing, onDrawToggle, selectedId, onSelect }: Props) {
+export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick, drawing, onDrawToggle, selectedId, onSelect, change, onForget }: Props) {
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<PlaceMatch[] | null>(null);
   const [credit, setCredit] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [forgot, setForgot] = useState(false);
+  useEffect(() => setForgot(false), [area]);
   const s = area?.summary;
 
   async function search(e: React.FormEvent) {
@@ -170,6 +176,16 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
                   every vehicle there is recorded, since direction and lanes matter.
                 </div>
               )}
+            </>
+          )}
+
+          {forgot ? (
+            <div className="nb-note">Past looks at areas were removed from this browser.</div>
+          ) : (
+            <>
+              <ChangeNote change={change} what="in this area" onPickAdded={onSelect}
+                sourceName={(id) => s.sources.find((src) => src.id === id)?.name ?? id} />
+              <button className="ex-share" onClick={() => { onForget(); setForgot(true); }}>Forget past looks at areas</button>
             </>
           )}
 

@@ -388,6 +388,10 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
 .ex-sources { margin-top: 12px; }
 .ex-k { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
 .ex-src { padding: 4px 0; line-height: 1.45; }
+.ex-change { margin: 10px 0 6px; padding: 8px 10px; border-left: 2px solid var(--rule); line-height: 1.45; }
+.ex-change ul { margin: 4px 0; padding-left: 18px; }
+.ex-change .dim { margin-top: 4px; }
+.ex-change-new { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .ex-src a { color: var(--bone); }
 .ex-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--rule); font-size: 10.5px; }

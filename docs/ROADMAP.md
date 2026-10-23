@@ -128,10 +128,21 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ### 3. What changed since your last visit
 
-- [ ] Local snapshot (localStorage) of sensor ids for saved areas and routes,
-      with the fetch date.
+- [x] Local snapshot (localStorage) of sensor ids for saved areas and routes,
+      with the fetch date. `lib/snapshots.ts` keeps, under
+      `platetrail.snapshots.v1`, the sorted sensor ids, per-source data dates
+      (latest OSM edit, or a file's modified time) and the look time for each
+      explored box (`area:<bbox>`, last 10 boxes) and each checked route
+      (`route:<id>`; no coordinates, dropped when the route is deleted). Each
+      area load or route check compares with the stored look and replaces it;
+      the area card and route result show "Since your last look": sensors
+      newly listed / no longer listed, updated sources, and buttons to show
+      new area sensors. "Forget past looks at areas" clears area entries.
 - [ ] "Since your last visit" panel: new or removed sensors on saved routes or
       areas, and data-update dates.
+      Needs a way to save an area (only the last 10 explored boxes are kept
+      now) and to re-check saved routes and areas on return without a click;
+      removed sensors are counted but not drawn.
 
 ### 4. Compare and drill down
 
@@ -260,3 +271,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   graph; not yet run against the live study network. The schedule is one
   round trip per chosen day; errands and other trips are not modelled, so
   results describe this route on its own.
+- 2026-10-23: local look snapshots landed (frontend only). Checked with
+  typecheck, build and a throwaway Node script over the snapshot helpers; not
+  yet clicked through in a browser. A look is replaced as soon as the change
+  is shown, so reloading shows "no change" rather than the same change again.
