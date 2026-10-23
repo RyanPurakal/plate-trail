@@ -105,8 +105,19 @@ stored server-side. The Edison and New Brunswick study stays as the
       Clicking a step rings that sensor on the map and eases to it (zoom 14 or
       closer); clicking again clears it. Focus lives in page memory and resets
       when the route or its check changes.
-- [ ] What a 7-day / 30-day / 1-year read history could suggest for a route
-      (reuse the simulator and inference engine), in plain language.
+- [x] `POST /route/history`: what a 7-day / 30-day / 1-year read history
+      could suggest for a route, in plain language. `platetrail/routehistory.py`
+      repeats the checked route on a schedule (weekdays, leave 08:00, back
+      17:30 by default, +/-10 min), drops the simulator's default 5% of reads,
+      and runs the inference engine on the reads kept for each period (all cut
+      from one simulated year, so longer periods contain shorter ones). Each
+      period returns reads, days, regular passes, where the car seems to stay
+      overnight / during the day (radius, confidence, distance from the
+      route's nearer end) and summary sentences. Compute-only like
+      `/route/check` (same network fallback, shared `_checked_route` helper).
+- [ ] Frontend: "What a read history could suggest" for a checked route
+      (7 days / 30 days / 1 year tabs or cards from `/route/history`, schedule
+      inputs, the assumptions list), results in page memory only.
 
 ### 3. What changed since your last visit
 
@@ -238,3 +249,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   through in a browser against a live API. The build warns that the
   installed Next.js version has a published security advisory; upgrading it
   is left for a separate change.
+- 2026-10-23: `POST /route/history` landed (backend only). Tested on the toy
+  graph; not yet run against the live study network. The schedule is one
+  round trip per chosen day; errands and other trips are not modelled, so
+  results describe this route on its own.
