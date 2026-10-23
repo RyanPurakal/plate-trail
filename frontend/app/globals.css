@@ -361,7 +361,26 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
 .ex-go { width: 100%; padding: 9px 12px; background: var(--read); color: #1a1206; border: 0; cursor: pointer;
   font-weight: 600; letter-spacing: 0.04em; }
 .ex-go:disabled { opacity: 0.6; cursor: progress; }
+.ex-actions { display: flex; gap: 6px; }
+.ex-actions .ex-go { flex: 1; }
+.ex-draw { white-space: nowrap; }
+.ex-draw[aria-pressed="true"] { border-color: var(--read); color: var(--read); }
+.ex-draw:disabled { opacity: 0.6; cursor: not-allowed; }
+.draw-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2; padding: 6px 12px;
+  background: rgba(11, 13, 14, 0.85); border: 1px solid var(--read); color: var(--bone); font-size: 11px;
+  pointer-events: none; white-space: nowrap; }
 .ex-go:focus-visible, .ex-share:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+.ex-search { margin-bottom: 8px; }
+.ex-search label { display: block; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.ex-search-row { display: flex; gap: 6px; }
+.ex-search-row input { flex: 1; min-width: 0; padding: 6px 8px; background: transparent; color: inherit; border: 1px solid var(--rule); font: inherit; }
+.ex-search-row input:focus-visible, .ex-places button:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+.ex-places ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.ex-places button { width: 100%; text-align: left; padding: 6px 4px; background: transparent; color: inherit; border: 0;
+  border-bottom: 1px dotted var(--rule); cursor: pointer; font: inherit; line-height: 1.4; }
+.ex-places button:hover { color: var(--bone); }
+.ex-credit { font-size: 10px; margin-bottom: 6px; }
+.explore > .picker > .nb-note { margin-bottom: 10px; }
 .ex-count { font-family: var(--display); font-size: 40px; line-height: 1; margin: 4px 0 8px; }
 .ex-count small { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 6px; }
 .ex-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dotted var(--rule); }
@@ -377,3 +396,33 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
 .lg-sensor { width: 9px; height: 9px; border-radius: 50%; background: var(--read); border: 1.5px solid var(--read); }
 .lg-undir.lg-sensor-undir { border-color: var(--read); }
 .lg-box { width: 16px; height: 10px; border: 1.2px dashed var(--bone); }
+.sensor-card { margin-bottom: 12px; }
+.sensor-card .nb-head { align-items: center; }
+.sensor-card .ex-row span:last-child { text-align: right; }
+.sensor-card .ex-foot a { color: var(--bone); }
+.sensor-nav { display: flex; gap: 6px; }
+.ex-step { margin-top: 8px; }
+.ex-share:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+
+/* ---------- my routes ---------- */
+.my-routes { margin-top: 12px; }
+.mr-list { list-style: none; margin: 8px 0; padding: 0; }
+.mr-list li { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;
+  padding: 4px 0; border-bottom: 1px dotted var(--rule); }
+.mr-list li.on .mr-name { color: var(--bone); }
+.mr-name { flex: 1; min-width: 0; text-align: left; background: transparent; color: inherit; border: 0; padding: 4px 0;
+  cursor: pointer; font: inherit; overflow-wrap: anywhere; }
+.mr-name:hover { color: var(--bone); }
+.mr-name:focus-visible, .mr-edit input:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+.mr-tools { display: flex; gap: 4px; }
+.mr-edit { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; width: 100%; margin: 6px 0; }
+.mr-edit label { width: 100%; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+.mr-edit input { flex: 1; min-width: 0; padding: 6px 8px; background: transparent; color: inherit;
+  border: 1px solid var(--rule); font: inherit; }
+.mr-draft { margin: 8px 0; }
+.my-routes .ex-actions { flex-wrap: wrap; margin-top: 8px; }
+.lg-route { width: 16px; height: 0; border-top: 1.5px dotted var(--bone); position: relative; }
+.lg-route::before { content: ""; position: absolute; left: -3px; top: -4.5px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--bone); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0; }

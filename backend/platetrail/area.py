@@ -5,7 +5,7 @@ box is snapped outward to a GRID_DEG grid so nearby requests share one cached
 Overpass response, and a cached response older than MAX_AGE is refetched so
 summaries stay reasonably fresh. Only public map data is involved: the box
 itself is not personal data and nothing about the request is stored besides
-the cached Overpass response.
+the cached Overpass responses (sensors and main roads).
 """
 
 import logging
@@ -30,6 +30,14 @@ MAX_AGE = timedelta(days=7)
 AREA_QUERY_TEMPLATE = """[out:json][timeout:60];
 nwr["man_made"="surveillance"]["surveillance:type"~"^alpr$",i]({s},{w},{n},{e});
 out center meta;"""
+
+# Main roads for the coverage figure: the classes most through traffic uses.
+MAIN_ROAD_CLASSES = ("motorway", "trunk", "primary", "secondary")
+ROADS_QUERY_TEMPLATE = """[out:json][timeout:90];
+way["highway"~"^(motorway|trunk|primary|secondary)$"]({s},{w},{n},{e});
+out skel geom;"""
+COVERAGE_M = 100.0  # a road stretch counts as "near a sensor" within this distance
+STEP_M = 20.0  # roads are measured in pieces of at most this length
 
 OSM_SOURCE = {
     "id": "osm",
@@ -76,6 +84,11 @@ def snap_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, fl
 def build_area_query(bbox: tuple[float, float, float, float]) -> str:
     w, s, e, n = bbox
     return AREA_QUERY_TEMPLATE.format(w=f"{w:.2f}", s=f"{s:.2f}", e=f"{e:.2f}", n=f"{n:.2f}")
+
+
+def build_roads_query(bbox: tuple[float, float, float, float]) -> str:
+    w, s, e, n = bbox
+    return ROADS_QUERY_TEMPLATE.format(w=f"{w:.2f}", s=f"{s:.2f}", e=f"{e:.2f}", n=f"{n:.2f}")
 
 
 def bbox_area_km2(bbox: tuple[float, float, float, float]) -> float:
@@ -159,13 +172,82 @@ def file_area_features(bbox: tuple[float, float, float, float], region: Region) 
     return features, sources
 
 
+def main_road_coverage(
+    bbox: tuple[float, float, float, float],
+    roads_response: dict,
+    features: list[dict],
+    within_m: float = COVERAGE_M,
+) -> dict:
+    """Length of main road inside bbox, and how much of it lies within `within_m` of any sensor.
+
+    Uses a local flat projection around the box centre (fine at <= 0.5 deg).
+    Each road segment is split into pieces of at most STEP_M; a piece counts
+    if its midpoint is inside the box, and as near a sensor if that midpoint
+    is within `within_m` of one. Distance only: a nearby sensor may face the
+    other way or cover other lanes.
+    """
+    w, s, e, n = bbox
+    lat0 = (s + n) / 2
+    kx = 111_320.0 * math.cos(math.radians(lat0))
+    ky = 110_540.0
+
+    def xy(lon: float, lat: float) -> tuple[float, float]:
+        return (lon - w) * kx, (lat - s) * ky
+
+    cell = within_m
+    grid: dict[tuple[int, int], list[tuple[float, float]]] = {}
+    for f in features:
+        x, y = xy(*f["geometry"]["coordinates"])
+        grid.setdefault((int(x // cell), int(y // cell)), []).append((x, y))
+    r2 = within_m * within_m
+
+    def near(x: float, y: float) -> bool:
+        cx, cy = int(x // cell), int(y // cell)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for sx, sy in grid.get((cx + dx, cy + dy), ()):
+                    if (x - sx) ** 2 + (y - sy) ** 2 <= r2:
+                        return True
+        return False
+
+    xmax, ymax = xy(e, n)
+    total = covered = 0.0
+    for el in roads_response.get("elements", []):
+        pts = [xy(p["lon"], p["lat"]) for p in el.get("geometry") or [] if p]
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            length = math.hypot(x2 - x1, y2 - y1)
+            if length == 0:
+                continue
+            pieces = math.ceil(length / STEP_M)
+            piece = length / pieces
+            for i in range(pieces):
+                t = (i + 0.5) / pieces
+                x, y = x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
+                if not (0 <= x <= xmax and 0 <= y <= ymax):
+                    continue
+                total += piece
+                if grid and near(x, y):
+                    covered += piece
+    return {
+        "road_classes": list(MAIN_ROAD_CLASSES),
+        "within_m": within_m,
+        "road_km": round(total / 1000, 1),
+        "near_sensor_km": round(covered / 1000, 1),
+        "share": round(covered / total, 3) if total else None,
+    }
+
+
 def area_summary(
     bbox: tuple[float, float, float, float],
     features: list[dict],
     fetched_at: datetime | None,
     file_sources: list[dict] | tuple = (),
+    main_roads: dict | None = None,
 ) -> dict:
-    """Counts and per-source credits. OSM is listed first, then file sources in config order."""
+    """Counts and per-source credits. OSM is listed first, then file sources in config order.
+
+    `main_roads` is the main_road_coverage() result, or None if roads couldn't be loaded.
+    """
     osm = [f for f in features if f["properties"]["source"] == "osm"]
     edits = [f["properties"]["last_edited"] for f in osm if f["properties"]["last_edited"]]
     area = bbox_area_km2(bbox)
@@ -174,6 +256,7 @@ def area_summary(
         "with_direction": sum(1 for f in features if f["properties"]["directions_deg"]),
         "area_km2": round(area, 2),
         "sensors_per_100km2": round(100 * len(features) / area, 2) if area else None,
+        "main_roads": main_roads,
         "sources": [{
             **OSM_SOURCE,
             "count": len(osm),
@@ -207,28 +290,42 @@ def load_area(
     File sensors come from `region` (default: the active region) and are
     included only where they fall inside the snapped box.
 
+    Main roads (for the coverage figure) are fetched and cached the same way.
     A stale cached response is still used if the refetch fails, so a busy
-    Overpass server only delays updates. Without any cached response the
-    error propagates (RuntimeError or httpx.HTTPError from OverpassClient).
+    Overpass server only delays updates. Without any cached sensor response
+    the error propagates (RuntimeError or httpx.HTTPError from
+    OverpassClient); without roads, `main_roads` in the summary is None.
     """
     snapped = snap_bbox(bbox)
     cache = cache or area_cache()
-    query = build_area_query(snapped)
-    fetched_at = cache.fetched_at(query)
     now = now or datetime.now(timezone.utc)
-    stale = fetched_at is None or now - fetched_at > MAX_AGE
     overpass = client or OverpassClient(attempts_per_url=2, backoff_s=2.0)
-    try:
-        response = cache.get_or_fetch(query, lambda: overpass.fetch(query), refresh=stale)
-    except (RuntimeError, httpx.HTTPError):
-        if fetched_at is None:
-            raise
-        response = cache.get_or_fetch(query, lambda: overpass.fetch(query))
+    query = build_area_query(snapped)
+    response = _cached_fetch(query, cache, overpass, now)
     features = parse_area_response(response)
     file_features, file_sources = file_area_features(snapped, region or get_region())
     features += file_features
+    try:
+        roads = _cached_fetch(build_roads_query(snapped), cache, overpass, now)
+        main_roads = main_road_coverage(snapped, roads, features)
+    except (RuntimeError, httpx.HTTPError) as e:
+        # the sensor list is still useful without the road figure
+        log.warning("main roads unavailable for %s: %s", snapped, e)
+        main_roads = None
     return {
         "bbox": list(snapped),
-        "summary": area_summary(snapped, features, cache.fetched_at(query), file_sources),
+        "summary": area_summary(snapped, features, cache.fetched_at(query), file_sources, main_roads),
         "sensors": {"type": "FeatureCollection", "features": features},
     }
+
+
+def _cached_fetch(query: str, cache: RawCache, overpass: OverpassClient, now: datetime) -> dict:
+    """Cached Overpass response, refetched after MAX_AGE; a stale copy is used if the refetch fails."""
+    fetched_at = cache.fetched_at(query)
+    stale = fetched_at is None or now - fetched_at > MAX_AGE
+    try:
+        return cache.get_or_fetch(query, lambda: overpass.fetch(query), refresh=stale)
+    except (RuntimeError, httpx.HTTPError):
+        if fetched_at is None:
+            raise
+        return cache.get_or_fetch(query, lambda: overpass.fetch(query))

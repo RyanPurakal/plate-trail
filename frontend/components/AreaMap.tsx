@@ -1,45 +1,43 @@
 "use client";
 
-import type { Feature, Point } from "geojson";
+import type { Feature } from "geojson";
 import * as maplibregl from "maplibre-gl";
-import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent } from "maplibre-gl";
+import type { GeoJSONSource, LngLat, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import type { AreaResult, AreaSensorProps, AreaSource, MapDefaults } from "@/lib/api";
-import { shortDate, type BBox } from "@/lib/area";
+import type { AreaResult, MapDefaults } from "@/lib/api";
+import { cornersToBBox, type BBox } from "@/lib/area";
+import type { Pt } from "@/lib/routes";
 
 type Props = {
   area: AreaResult | null;
   initialView?: MapDefaults | null; // region's starting view, used until an area is loaded
   onView: (bounds: BBox) => void; // current visible box, reported after each move
+  drawing?: boolean; // drag on the map draws a box instead of panning
+  onDraw?: (box: BBox | null) => void; // drawn box, or null when drawing is cancelled
+  selectedId?: string | null; // sensor shown in the sidebar's detail card
+  onSelect?: (id: string) => void; // a sensor was clicked
+  placing?: boolean; // clicks place a route point instead of selecting sensors
+  onPlace?: (pt: Pt | null) => void; // placed point, or null when placing is cancelled
+  routeMarks?: { start: Pt | null; end: Pt | null } | null; // route being added or shown
 };
 
 const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
 const BASEMAP = "https://tiles.openfreemap.org/styles/dark";
 const EMPTY = { type: "FeatureCollection" as const, features: [] as Feature[] };
+const MIN_DRAW_DEG = 0.002; // smaller drags (about 200 m) are treated as clicks, not boxes
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-function popupHtml(p: AreaSensorProps, sources: AreaSource[]) {
-  const src = sources.find((s) => s.id === p.source);
-  const dirs: number[] = typeof p.directions_deg === "string" ? JSON.parse(p.directions_deg) : p.directions_deg ?? [];
-  const dir = dirs.length
-    ? `faces ${dirs.map((d) => `${Math.round(d)}°`).join(", ")}`
-    : p.direction_raw ? `direction "${esc(p.direction_raw)}" (not a compass bearing)` : "direction not recorded";
-  const edited = shortDate(p.last_edited);
-  return `<div class="pop-title">Fixed sensor</div>`
-    + `<div class="pop-row">${dir}</div>`
-    + `<div class="pop-sep pop-dim">source: ${esc(src?.name ?? p.source)}</div>`
-    + (edited ? `<div class="pop-dim">last edited in OSM: ${edited}</div>` : "")
-    + `<div class="pop-dim">${esc(p.id)}</div>`;
-}
+const boxPolygon = ([w, s, e, n]: BBox): Feature => ({
+  type: "Feature", properties: {},
+  geometry: { type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
+});
 
 /** Map for the Explore view: the explored box and the public sensors inside it. */
-export default function AreaMap({ area, initialView = null, onView }: Props) {
+export default function AreaMap({ area, initialView = null, onView, drawing = false, onDraw, selectedId = null, onSelect, placing = false, onPlace, routeMarks = null }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
-  const latest = useRef({ area, onView });
-  latest.current = { area, onView };
+  const latest = useRef({ area, onView, drawing, onDraw, onSelect, placing, onPlace });
+  latest.current = { area, onView, drawing, onDraw, onSelect, placing, onPlace };
 
   useEffect(() => {
     if (!el.current) return;
@@ -60,6 +58,7 @@ export default function AreaMap({ area, initialView = null, onView }: Props) {
     m.on("load", () => {
       m.addSource("area-box", { type: "geojson", data: EMPTY });
       m.addSource("area-sensors", { type: "geojson", data: EMPTY });
+      m.addSource("draw-box", { type: "geojson", data: EMPTY });
       m.addLayer({ id: "area-box-fill", type: "fill", source: "area-box", paint: { "fill-color": "#e8e2d4", "fill-opacity": 0.03 } });
       m.addLayer({
         id: "area-box-line", type: "line", source: "area-box",
@@ -74,15 +73,72 @@ export default function AreaMap({ area, initialView = null, onView }: Props) {
           "circle-stroke-width": 1.5,
         },
       });
-      const popup = new maplibregl.Popup({ className: "pt-popup", maxWidth: "260px" });
-      m.on("click", "area-sensors", (e: MapLayerMouseEvent) => {
-        const f = e.features?.[0];
-        if (!f) return;
-        popup.setLngLat((f.geometry as Point).coordinates as [number, number])
-          .setHTML(popupHtml(f.properties as unknown as AreaSensorProps, latest.current.area?.summary.sources ?? [])).addTo(m);
+      m.addLayer({
+        id: "area-sensor-selected", type: "circle", source: "area-sensors", filter: ["==", ["get", "id"], ""],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 15, 13],
+          "circle-color": "transparent",
+          "circle-stroke-color": "#e8e2d4",
+          "circle-stroke-width": 2,
+        },
       });
-      m.on("mouseenter", "area-sensors", () => { m.getCanvas().style.cursor = "pointer"; });
-      m.on("mouseleave", "area-sensors", () => { m.getCanvas().style.cursor = ""; });
+      m.addSource("route-marks", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "route-line", type: "line", source: "route-marks", filter: ["==", ["geometry-type"], "LineString"],
+        paint: { "line-color": "#e8e2d4", "line-width": 1.5, "line-dasharray": [1, 2], "line-opacity": 0.8 },
+      });
+      m.addLayer({
+        id: "route-points", type: "circle", source: "route-marks", filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 6,
+          "circle-color": ["case", ["==", ["get", "end"], "start"], "#e8e2d4", "#0b0d0e"],
+          "circle-stroke-color": "#e8e2d4",
+          "circle-stroke-width": 2,
+        },
+      });
+      m.addLayer({ id: "draw-box-fill", type: "fill", source: "draw-box", paint: { "fill-color": "#f2a541", "fill-opacity": 0.08 } });
+      m.addLayer({ id: "draw-box-line", type: "line", source: "draw-box", paint: { "line-color": "#f2a541", "line-width": 1.5 } });
+
+      // Draw mode: press, drag and release to span a box (mouse or one finger).
+      const drawSrc = m.getSource("draw-box") as GeoJSONSource;
+      let start: LngLat | null = null;
+      let last: LngLat | null = null;
+      const corners = (): BBox => cornersToBBox(start!.toArray() as [number, number], last!.toArray() as [number, number]);
+      const begin = (e: MapMouseEvent | MapTouchEvent) => {
+        if (!latest.current.drawing || ("points" in e && e.points.length > 1)) return;
+        e.preventDefault();
+        start = last = e.lngLat;
+      };
+      const drag = (e: MapMouseEvent | MapTouchEvent) => {
+        if (!start) return;
+        last = e.lngLat;
+        drawSrc.setData(boxPolygon(corners()));
+      };
+      const finish = () => {
+        if (!start) return;
+        const box = corners();
+        start = last = null;
+        drawSrc.setData(EMPTY);
+        if (!latest.current.drawing || (box[2] - box[0] < MIN_DRAW_DEG && box[3] - box[1] < MIN_DRAW_DEG)) return;
+        latest.current.onDraw?.(box);
+      };
+      m.on("mousedown", begin);
+      m.on("touchstart", begin);
+      m.on("mousemove", drag);
+      m.on("touchmove", drag);
+      m.on("mouseup", finish);
+      m.on("touchend", finish);
+
+      const busy = () => latest.current.drawing || latest.current.placing;
+      m.on("click", (e: MapMouseEvent) => {
+        if (latest.current.placing) latest.current.onPlace?.(e.lngLat.toArray() as Pt);
+      });
+      m.on("click", "area-sensors", (e: MapLayerMouseEvent) => {
+        const id = e.features?.[0]?.properties?.id;
+        if (typeof id === "string" && !busy()) latest.current.onSelect?.(id);
+      });
+      m.on("mouseenter", "area-sensors", () => { if (!busy()) m.getCanvas().style.cursor = "pointer"; });
+      m.on("mouseleave", "area-sensors", () => { if (!busy()) m.getCanvas().style.cursor = ""; });
       setReady(true);
       report();
     });
@@ -92,6 +148,61 @@ export default function AreaMap({ area, initialView = null, onView }: Props) {
       map.current = null;
     };
   }, []);
+
+  // Draw mode: drags draw instead of panning; Escape cancels.
+  useEffect(() => {
+    const m = map.current;
+    if (!ready || !m) return;
+    if (!drawing) {
+      m.dragPan.enable();
+      m.boxZoom.enable();
+      m.getCanvas().style.cursor = "";
+      return;
+    }
+    m.dragPan.disable();
+    m.boxZoom.disable();
+    m.getCanvas().style.cursor = "crosshair";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      (m.getSource("draw-box") as GeoJSONSource).setData(EMPTY);
+      latest.current.onDraw?.(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ready, drawing]);
+
+  // Placing route points: crosshair cursor; Escape cancels.
+  useEffect(() => {
+    const m = map.current;
+    if (!ready || !m || !placing) return;
+    m.getCanvas().style.cursor = "crosshair";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") latest.current.onPlace?.(null); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      m.getCanvas().style.cursor = "";
+    };
+  }, [ready, placing]);
+
+  // Start/end points of the route being added or shown, joined by a straight dotted line.
+  const start = routeMarks?.start ?? null;
+  const end = routeMarks?.end ?? null;
+  const marksKey = JSON.stringify([start, end]);
+  useEffect(() => {
+    if (!ready) return;
+    const m = map.current!;
+    const pts = [start, end].filter((p): p is Pt => !!p);
+    const features: Feature[] = pts.map((p, i) => ({
+      type: "Feature", properties: { end: i === 0 ? "start" : "end" }, geometry: { type: "Point", coordinates: p },
+    }));
+    if (pts.length === 2) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: pts } });
+    (m.getSource("route-marks") as GeoJSONSource).setData({ ...EMPTY, features });
+    if (pts.length === 2 && !pts.every((p) => m.getBounds().contains(p))) {
+      const b = cornersToBBox(pts[0], pts[1]);
+      m.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 14, duration: 600 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, marksKey]);
 
   // Region's starting view, only while no area is shown.
   useEffect(() => {
@@ -112,10 +223,7 @@ export default function AreaMap({ area, initialView = null, onView }: Props) {
       return;
     }
     const [w, s, e, n] = area.bbox;
-    box.setData({
-      type: "Feature", properties: {},
-      geometry: { type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
-    });
+    box.setData(boxPolygon(area.bbox));
     sensors.setData({
       ...EMPTY,
       features: area.sensors.features.map((f) => ({
@@ -124,6 +232,17 @@ export default function AreaMap({ area, initialView = null, onView }: Props) {
     });
     m.fitBounds([[w, s], [e, n]], { padding: 40, duration: 600 });
   }, [ready, area]);
+
+  // Ring the selected sensor; bring it into view if it is off screen (e.g. picked with Previous/Next).
+  useEffect(() => {
+    if (!ready) return;
+    const m = map.current!;
+    m.setFilter("area-sensor-selected", ["==", ["get", "id"], selectedId ?? ""]);
+    const f = selectedId ? area?.sensors.features.find((x) => x.properties.id === selectedId) : null;
+    if (!f) return;
+    const at = f.geometry.coordinates as [number, number];
+    if (!m.getBounds().contains(at)) m.easeTo({ center: at, duration: 400 });
+  }, [ready, area, selectedId]);
 
   return <div ref={el} className="map" role="region" aria-label="Map of the explored area" />;
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { AreaResult } from "@/lib/api";
-import { shortDate } from "@/lib/area";
+import { searchPlaces, type AreaResult, type PlaceMatch } from "@/lib/api";
+import { shortDate, type BBox } from "@/lib/area";
+import SensorDetail from "./SensorDetail";
 
 type Props = {
   area: AreaResult | null;
@@ -10,14 +11,46 @@ type Props = {
   error: string | null;
   shrunk: boolean; // the last request was cut down to the API's maximum box size
   onExplore: () => void; // explore the current map view
+  onPick: (bbox: BBox) => void; // explore a place found by search
+  drawing: boolean; // the map is in draw-a-box mode
+  onDrawToggle: () => void;
+  selectedId: string | null; // sensor whose details are shown
+  onSelect: (id: string | null) => void;
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Sidebar for the Explore view: action button plus a plain-language summary of the area. */
-export default function ExploreView({ area, loading, error, shrunk, onExplore }: Props) {
+export default function ExploreView({ area, loading, error, shrunk, onExplore, onPick, drawing, onDrawToggle, selectedId, onSelect }: Props) {
   const [copied, setCopied] = useState(false);
+  const [query, setQuery] = useState("");
+  const [places, setPlaces] = useState<PlaceMatch[] | null>(null);
+  const [credit, setCredit] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const s = area?.summary;
+
+  async function search(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim() || searching) return;
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const r = await searchPlaces(query);
+      setPlaces(r.results);
+      setCredit(r.attribution);
+    } catch (err) {
+      setPlaces(null);
+      setSearchError((err as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function pick(p: PlaceMatch) {
+    setPlaces(null);
+    onPick(p.bbox);
+  }
 
   function share() {
     navigator.clipboard?.writeText(window.location.href).then(() => {
@@ -30,14 +63,52 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore }:
     <div className="explore">
       <section className="picker">
         <p className="ex-lede">
-          Move the map to any area, then load the fixed sensors (such as license-plate readers) recorded there in
-          public map data.
+          Search for a place, move the map to any area or draw a box on it, then load the fixed sensors (such as license-plate
+          readers) recorded there in public map data.
         </p>
-        <button className="ex-go" onClick={onExplore} disabled={loading}>
-          {loading ? "Loading public map data…" : area ? "Explore the current view" : "Explore this view"}
-        </button>
+        <form className="ex-search" role="search" onSubmit={search}>
+          <label htmlFor="ex-q">Find a place</label>
+          <div className="ex-search-row">
+            <input id="ex-q" type="search" value={query} maxLength={200} autoComplete="off"
+              placeholder="Town, landmark or address" onChange={(e) => setQuery(e.target.value)} />
+            <button type="submit" className="ex-share" disabled={searching || !query.trim()}>
+              {searching ? "Searching…" : "Search"}
+            </button>
+          </div>
+        </form>
+        {searchError && <div className="error" role="alert">{searchError}</div>}
+        {places && (
+          <div className="ex-places" aria-live="polite">
+            {places.length === 0 ? (
+              <div className="nb-note">No places matched. Try a town name or add the state.</div>
+            ) : (
+              <ul>
+                {places.map((p, i) => (
+                  <li key={`${p.lat},${p.lon},${i}`}>
+                    <button onClick={() => pick(p)} disabled={loading}>
+                      {p.name}{p.kind && <span className="dim"> · {p.kind}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {credit && <div className="dim ex-credit">{credit}</div>}
+          </div>
+        )}
+        <div className="nb-note">
+          Search text is used only to look up the place and is not saved. The page address keeps just the map box.
+        </div>
+        <div className="ex-actions">
+          <button className="ex-go" onClick={onExplore} disabled={loading || drawing}>
+            {loading ? "Loading public map data…" : area ? "Explore the current view" : "Explore this view"}
+          </button>
+          <button className="ex-share ex-draw" onClick={onDrawToggle} disabled={loading} aria-pressed={drawing}>
+            {drawing ? "Cancel drawing" : "Draw a box"}
+          </button>
+        </div>
+        {drawing && <div className="nb-note">Press and drag on the map to draw the area to explore. Esc cancels.</div>}
         {shrunk && !loading && (
-          <div className="nb-note">The view was larger than the 0.5° limit, so its centre was used. Zoom in to choose the exact area.</div>
+          <div className="nb-note">The area was larger than the 0.5° limit, so its centre was used. Zoom in or draw a smaller box to choose the exact area.</div>
         )}
       </section>
 
@@ -51,6 +122,8 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore }:
           </div>
         </section>
       )}
+
+      {area && selectedId && <SensorDetail area={area} selectedId={selectedId} onSelect={onSelect} />}
 
       {area && s && (
         <section className="naive area-card" aria-live="polite">
@@ -73,10 +146,30 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore }:
               <div className="ex-row">
                 <span>Direction known</span><span>{s.with_direction} of {s.sensor_count}</span>
               </div>
+              {s.main_roads?.share != null && (
+                <div className="ex-row">
+                  <span>Main roads near a sensor</span>
+                  <span>
+                    {Math.round(s.main_roads.share * 100)}% ({s.main_roads.near_sensor_km} of {s.main_roads.road_km} km)
+                  </span>
+                </div>
+              )}
               <div className="nb-note">
                 A sensor with a known direction records vehicles travelling one way past it. Click a sensor on the map
-                for details.
+                for details, or step through them in a list.
               </div>
+              {!selectedId && (
+                <button className="ex-share ex-step" onClick={() => onSelect(area.sensors.features[0]?.properties.id ?? null)}>
+                  Step through sensors
+                </button>
+              )}
+              {s.main_roads?.share != null && (
+                <div className="nb-note">
+                  Main roads are motorways, trunk, primary and secondary roads in OpenStreetMap. A stretch counts as
+                  near a sensor if it is within {s.main_roads.within_m} m of one; being near a sensor does not mean
+                  every vehicle there is recorded, since direction and lanes matter.
+                </div>
+              )}
             </>
           )}
 

@@ -16,6 +16,11 @@ export function parseBBox(raw: string | null): BBox | null {
 
 export const formatBBox = (b: BBox) => b.map((v) => v.toFixed(2)).join(",");
 
+/** Box spanned by two dragged corners, in either order. */
+export function cornersToBBox(a: [number, number], b: [number, number]): BBox {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+}
+
 /** The visible map box, shrunk around its centre if it is larger than the API allows. */
 export function viewToBBox(b: BBox): { bbox: BBox; shrunk: boolean } {
   const [w, s, e, n] = b;
@@ -38,4 +43,30 @@ export function shortDate(iso: string | null): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+
+/** 45 -> "north-east": the nearest of eight compass points for a bearing in degrees. */
+export function compassWord(deg: number): string {
+  return COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+/** "osm:node/123" -> its page on openstreetmap.org; null for file sensors. */
+export function osmUrl(id: string): string | null {
+  const m = /^osm:(node|way|relation)\/(\d+)$/.exec(id);
+  return m ? `https://www.openstreetmap.org/${m[1]}/${m[2]}` : null;
+}
+
+/** Bearings as stored on a map feature: GeoJSON properties may come back as a JSON string. */
+export function parseDirections(v: number[] | string | null | undefined): number[] {
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return v ?? [];
 }

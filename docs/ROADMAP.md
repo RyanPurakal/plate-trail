@@ -32,19 +32,65 @@ stored server-side. The Edison and New Brunswick study stays as the
       a `?bbox=` link opens straight into it. Clicking a sensor shows source,
       direction and last OSM edit. The default tab is still "One driver"
       until the check-up becomes the home page (section 5).
-- [ ] Place search: geocode a town or address to a box (Nominatim, with
-      attribution and rate limit, cached server-side by query text only).
-- [ ] Draw a box on the map to explore it.
-- [ ] Main-road coverage in the summary: share of primary/secondary road length
-      within a short distance of a sensor (needs a road fetch for the box).
-- [ ] Sensor detail panel: source, direction if known, last edited in OSM.
+- [x] Place search: `POST /geocode` sends a town or address to Nominatim
+      (identifying User-Agent, one request per second, attribution shown) and
+      returns up to 5 matches, each with a box sized for `GET /area`. Search box
+      and result list in the Explore sidebar; picking a match loads that area
+      and only the box goes in the URL. Because a query can be a home address,
+      it travels in the POST body (not the logged URL), the httpx request log
+      line is filtered out, and the cache is in memory only (256 entries, 24 h)
+      rather than on disk as first planned.
+- [x] Draw a box on the map to explore it. "Draw a box" in the Explore
+      sidebar switches the map to draw mode (press and drag with mouse or one
+      finger; panning is paused, Esc or the button cancels). Drags under about
+      200 m are ignored as clicks; a box over the size limit is shrunk around
+      its centre, like the view.
+- [x] Main-road coverage in the summary: share of main-road length
+      (motorway, trunk, primary, secondary) within 100 m of a mapped sensor.
+      Roads come from a second Overpass query for the snapped box (`out skel
+      geom`), cached and refreshed like the sensors; measured in 20 m pieces
+      clipped to the box. If roads can't be loaded, `main_roads` is null and
+      the card just leaves the row out.
+- [x] Sensor detail panel: clicking a sensor rings it on the map and opens a
+      sidebar card (replacing the map popup) with direction as a compass word
+      and bearing, location, source and licence, last OSM edit, data fetch or
+      file date, a neutral note on what the direction does and does not say,
+      and a link to the OSM object. Previous/Next and "Step through sensors"
+      reach every sensor from the keyboard; the map eases to off-screen ones.
 
 ### 2. My routes, kept on your device
 
-- [ ] Route storage in localStorage only (name, start, end); add/rename/delete.
-- [ ] Add a route by clicking start and end on the map.
-- [ ] `POST /route/check`: route + sensors passed + read timeline for one route;
+- [x] Route storage in localStorage only (name, start, end); add/rename/delete.
+      `lib/routes.ts` keeps up to 20 routes under `platetrail.routes.v1`,
+      points rounded to 4 decimals (about 10 m), malformed entries dropped on
+      load; edits in another tab are picked up via the `storage` event. "My
+      routes" card in the Explore sidebar with rename, two-step delete and
+      "Remove all from this device"; a note says routes never leave the browser.
+- [x] Add a route by clicking start and end on the map. "Add a route" puts
+      the Explore map in placing mode (crosshair, Esc cancels); the two points
+      and a dotted straight line are drawn until routing lands. Clicking a
+      saved route shows it and fits the map if it is off screen.
+- [x] `POST /route/check`: route + sensors passed + read timeline for one route;
       compute-only, never stored, cached or logged (same rule as `/yourweek`).
+      Checked both ways by default (a sensor facing one direction of traffic
+      may read the trip there but not the trip back); each step has the
+      offset and distance from the start and whether, and why not, it would
+      record. Uses the study region's road graph and cameras for now; ends
+      more than 500 m from those roads get a 422 saying so.
+- [x] Routing for any area: build a small drive graph for the route's box
+      from Overpass (held in memory only, since the box follows the route)
+      and match against `GET /area` sensors, so saved routes outside the
+      study region can be checked too. `platetrail/routearea.py`: routes off
+      the study roads fall back to a box around both ends (2 km padding,
+      0.01 deg grid, at most 0.3 deg a side, about 25 km); roads via OSMnx
+      with its disk cache switched off, sensors snapped with the study
+      snapping rules. A fresh `/area` cache entry is read but never written
+      for a route box. Networks are kept in memory (4, for an hour) so the
+      return leg and re-checks are quick. A first check of a new area can
+      take a while (the road download); the frontend should say so.
+- [ ] Frontend: "Check this route" on each saved route calls
+      `/route/check` and draws the driven route; friendly message for routes
+      outside the covered network.
 - [ ] Route timeline: where reads would happen along the drive; click a step
       to show it on the map.
 - [ ] What a 7-day / 30-day / 1-year read history could suggest for a route
@@ -164,3 +210,14 @@ stored server-side. The Edison and New Brunswick study stays as the
   file (`fetched_at` is the file's modified time, no license/url). Not
   deduplicated against OSM; a missing or malformed file is logged and
   skipped. Extra file columns are not returned.
+- 2026-10-22: `summary.main_roads` landed (road_km, near_sensor_km, share,
+  within_m). Distance only: the card says direction and lanes matter. The
+  live Overpass check timed out during the run, so the road query is covered
+  by mocked tests only; check it against a real box when Overpass is idle.
+- 2026-10-22: sensor detail card landed (frontend only; `lib/area.ts` gained
+  `compassWord`, `osmUrl`, `parseDirections`). Checked by typecheck and build,
+  not yet clicked through in a browser against live Overpass data.
+- 2026-10-22: My routes (local storage, add by clicking start and end) landed.
+  Frontend only, no API calls yet. The storage helpers were checked with a
+  throwaway Node script and the page with typecheck and build; there is no
+  frontend test runner yet, and it has not been clicked through in a browser.

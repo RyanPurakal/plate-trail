@@ -264,6 +264,15 @@ export type AreaSource = {
   latest_edit: string | null;
 };
 
+/** Main-road length in the box and how much of it lies near a mapped sensor (distance only). */
+export type MainRoads = {
+  road_classes: string[];
+  within_m: number;
+  road_km: number;
+  near_sensor_km: number;
+  share: number | null; // null when the box has no main roads
+};
+
 export type AreaResult = {
   bbox: [number, number, number, number]; // west, south, east, north, snapped to a 0.01 deg grid
   summary: {
@@ -271,6 +280,7 @@ export type AreaResult = {
     with_direction: number;
     area_km2: number;
     sensors_per_100km2: number | null;
+    main_roads: MainRoads | null; // null if road data couldn't be loaded
     sources: AreaSource[];
   };
   sensors: { type: "FeatureCollection"; features: PointFeature<AreaSensorProps>[] };
@@ -287,6 +297,35 @@ export async function getArea(bbox: [number, number, number, number]): Promise<A
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
     const detail = typeof body?.detail === "string" ? body.detail : `request failed (${resp.status})`;
+    throw new Error(detail);
+  }
+  return resp.json();
+}
+
+/** POST /geocode: places matching a town or address, each with a box ready for GET /area. */
+export type PlaceMatch = {
+  name: string;
+  kind: string | null;
+  lat: number;
+  lon: number;
+  bbox: [number, number, number, number];
+};
+
+/** Search text goes in the request body and is never stored; only the chosen box reaches the URL. */
+export async function searchPlaces(q: string): Promise<{ results: PlaceMatch[]; attribution: string }> {
+  let resp: Response;
+  try {
+    resp = await fetch(`${API_URL}/geocode`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ q }),
+    });
+  } catch {
+    throw new Error("Can't reach the Plate Trail API.");
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    const detail = typeof body?.detail === "string" ? body.detail : `search failed (${resp.status})`;
     throw new Error(detail);
   }
   return resp.json();
