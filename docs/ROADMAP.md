@@ -163,8 +163,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       area, per 100 km², direction known, main roads near a sensor, latest map
       edit and data fetch date, with an Open button per column. Results are in
       component memory only and do not replace the stored last look.
-- [ ] Compare two checked routes side by side (sensors passed, passes that
+- [x] Compare two checked routes side by side (sensors passed, passes that
       would record, each way), from the page-memory route checks.
+      `components/CompareRoutes.tsx` in the Explore sidebar (under My
+      routes): pick Route A and B from saved routes; "Compare" checks any not
+      yet checked (one at a time, via the same compute-only `/route/check`
+      path as "Check this route", so it also records a last look) and shows
+      km and minutes, sensors passed and passes that would record for each
+      direction, different sensors passed and which roads were used, with a
+      Show button per column. Columns follow the latest check of each route.
 - [ ] Retention-period slider that updates route results live.
 
 ### 5. Learn more panels
@@ -236,6 +243,8 @@ stored server-side. The Edison and New Brunswick study stays as the
 ## App quality
 
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
+- [ ] Upgrade Next.js past the flagged advisory so `next build` stops failing
+      intermittently on its security check.
 - [ ] API: validate `extra_cameras` and other scenario inputs against the
       active region.
 - [ ] Sensor files: optionally assign `town` by point-in-boundary when a
@@ -307,3 +316,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   build and backend tests; not yet clicked through in a browser. Comparing
   deliberately skips `recordLook`, so it never hides a change from the
   "Since your last visit" panel.
+- 2026-10-24: route comparison landed. `next build` sometimes exits 1 from
+  Next.js's security-advisory check (`SecurityFatalError`) after a successful
+  compile and typecheck; it happens with or without the change. Upgrading Next
+  is worth its own item.

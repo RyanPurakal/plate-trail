@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
 import MyAreas from "@/components/MyAreas";
 import CompareAreas from "@/components/CompareAreas";
+import CompareRoutes from "@/components/CompareRoutes";
 import SinceLastVisit from "@/components/SinceLastVisit";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
@@ -424,6 +425,10 @@ export default function Home() {
             checks={routeChecks} onCheck={runRouteCheck} focus={stepFocus} onFocus={setStepFocus}
             onRename={(id, name) => updateRoutes(renameRoute(routes, id, name))}
             onDelete={(id) => updateRoutes(removeRoute(routes, id))} onClearAll={() => updateRoutes([])} />
+        )}
+        {tab === "explore" && (
+          <CompareRoutes routes={routes} checks={routeChecks} onCheck={runRouteCheck}
+            onShow={(id) => { setRouteDraft(null); setShownRoute(id); }} />
         )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
         {tab === "yourweek" && (
