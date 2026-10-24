@@ -157,7 +157,14 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ### 4. Compare and drill down
 
-- [ ] Side-by-side comparison of two areas or two routes.
+- [x] Compare two saved areas side by side. `components/CompareAreas.tsx`
+      in the Explore sidebar (under My areas): pick Area A and B from saved
+      areas, "Compare" fetches both from `GET /area` and shows sensors mapped,
+      area, per 100 km², direction known, main roads near a sensor, latest map
+      edit and data fetch date, with an Open button per column. Results are in
+      component memory only and do not replace the stored last look.
+- [ ] Compare two checked routes side by side (sensors passed, passes that
+      would record, each way), from the page-memory route checks.
 - [ ] Retention-period slider that updates route results live.
 
 ### 5. Learn more panels
@@ -296,3 +303,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   browser. Because a re-check replaces the stored look, opening a changed
   area afterwards shows "no change" in its own card; the panel is where the
   change is shown.
+- 2026-10-24: area comparison landed (frontend only). Checked by typecheck,
+  build and backend tests; not yet clicked through in a browser. Comparing
+  deliberately skips `recordLook`, so it never hides a change from the
+  "Since your last visit" panel.

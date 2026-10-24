@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
 import MyAreas from "@/components/MyAreas";
+import CompareAreas from "@/components/CompareAreas";
 import SinceLastVisit from "@/components/SinceLastVisit";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
@@ -412,6 +413,9 @@ export default function Home() {
             onSave={(name) => area && updateAreas(addArea(savedAreas, name, area.bbox))}
             onRename={(id, name) => updateAreas(renameArea(savedAreas, id, name))}
             onDelete={(id) => updateAreas(removeArea(savedAreas, id))} onClearAll={() => updateAreas([])} />
+        )}
+        {tab === "explore" && (
+          <CompareAreas areas={savedAreas} onOpen={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
         )}
         {tab === "explore" && (
           <MyRoutes routes={routes} storageOk={routesSaved} draft={routeDraft}

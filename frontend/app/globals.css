@@ -477,3 +477,13 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
   white-space: nowrap; border: 0; }
 .visit .ex-k { margin-top: 8px; }
 .visit .mr-list li.on .mr-name { color: var(--bone); }
+
+/* ---------- compare areas ---------- */
+.ca-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.ca-picks label { display: flex; flex-direction: column; min-width: 0; }
+.ca-picks select { width: 100%; min-width: 0; }
+.ca-table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; table-layout: fixed; }
+.ca-table th, .ca-table td { padding: 3px 4px; border-bottom: 1px dotted var(--rule); text-align: right; vertical-align: top; overflow-wrap: anywhere; }
+.ca-table th[scope="row"] { text-align: left; color: var(--dim); font-weight: normal; width: 40%; }
+.ca-table thead th { font-weight: 600; }
+.ca-open { display: block; margin: 3px 0 0 auto; }
