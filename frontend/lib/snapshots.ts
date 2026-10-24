@@ -1,6 +1,7 @@
 // Last-seen sensor lists for explored areas and checked routes, kept only in this browser's localStorage,
 // so a later look can say what changed. Holds sensor ids and data dates; routes are referenced by id only.
 
+import type { AreaResult } from "./api";
 import { formatBBox, type BBox } from "./area";
 
 export type Snapshot = {
@@ -29,6 +30,12 @@ export function makeSnapshot(ids: Iterable<string>, sources: Record<string, stri
   const clean = Object.fromEntries(Object.entries(sources).filter((e): e is [string, string] => typeof e[1] === "string"));
   return { ids: [...new Set(ids)].sort().slice(0, MAX_IDS), sources: clean, seen };
 }
+
+/** The look stored for a `GET /area` result: its sensor ids and each source's data date. */
+export const areaSnapshot = (a: AreaResult) => makeSnapshot(
+  a.sensors.features.map((f) => f.properties.id),
+  Object.fromEntries(a.summary.sources.map((src) => [src.id, src.id === "osm" ? src.latest_edit : src.fetched_at])),
+);
 
 /** Stored JSON -> snapshots by key, dropping anything malformed. */
 export function parseSnapshots(raw: string | null): Record<string, Snapshot> {

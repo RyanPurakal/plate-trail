@@ -144,12 +144,16 @@ stored server-side. The Edison and New Brunswick study stays as the
       open, rename, two-step delete, "Remove all from this device" and the
       date of the last look at each. Saved areas' snapshots are exempt from
       the last-10 area pruning (`putSnapshot`'s `pinned` set).
-- [ ] "Since your last visit" panel: on return, re-check saved areas (and
+- [x] "Since your last visit" panel: on return, re-check saved areas (and
       already-checked routes) without a click and list new or removed sensors
-      and data-update dates in one panel at the top of Explore. Removed
-      sensors are counted but not drawn. Re-checking routes hits the
-      compute-only `/route/check`; consider doing areas only, with routes on
-      a button, to keep the first load light.
+      and data-update dates in one panel at the top of Explore.
+      `components/SinceLastVisit.tsx` re-checks saved areas one at a time when
+      Explore opens (once per page load, after any `?bbox=` area has loaded),
+      skipping areas looked at in the last hour, and lists each with what
+      changed since its last look; clicking one opens it. Routes checked
+      before (they have a stored look) are re-checked only on a button, since
+      that uses the compute-only `/route/check`. Removed sensors are counted,
+      not drawn.
 
 ### 4. Compare and drill down
 
@@ -286,3 +290,9 @@ stored server-side. The Edison and New Brunswick study stays as the
   and a node check of `parseAreas`/`addArea`/pinned pruning; not yet clicked
   through in a browser. `next build` prints a Next.js security advisory
   notice for 16.4.0 (build still succeeds); worth a dependency bump.
+- 2026-10-24: "Since your last visit" panel landed (frontend only; the
+  area snapshot helper moved to `areaSnapshot` in `lib/snapshots.ts`).
+  Checked by typecheck, build and backend tests; not yet clicked through in a
+  browser. Because a re-check replaces the stored look, opening a changed
+  area afterwards shows "no change" in its own card; the panel is where the
+  change is shown.

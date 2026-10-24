@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
 import MyAreas from "@/components/MyAreas";
+import SinceLastVisit from "@/components/SinceLastVisit";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
@@ -31,7 +32,7 @@ import {
 } from "@/lib/api";
 import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
-import { areaKey, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
+import { areaKey, areaSnapshot, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 
@@ -186,10 +187,7 @@ export default function Home() {
       setArea(a);
       // Saved areas' looks are kept however long ago they were; read fresh so another tab's saves count too.
       const pinned = new Set(loadAreas().map((x) => areaKey(x.bbox)));
-      setAreaChange(recordLook(areaKey(a.bbox), makeSnapshot(
-        a.sensors.features.map((f) => f.properties.id),
-        Object.fromEntries(a.summary.sources.map((src) => [src.id, src.id === "osm" ? src.latest_edit : src.fetched_at])),
-      ), pinned));
+      setAreaChange(recordLook(areaKey(a.bbox), areaSnapshot(a), pinned));
       setSensorId(null);
       setAreaUrl(a.bbox);
     } catch (e) {
@@ -396,6 +394,12 @@ export default function Home() {
           ))}
         </nav>
 
+        {tab === "explore" && (
+          <SinceLastVisit areas={savedAreas} routes={routes} ready={!areaLoading} checks={routeChecks}
+            onCheckRoutes={async (ids) => { for (const id of ids) await runRouteCheck(id); }}
+            onOpenArea={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }}
+            onShowRoute={(id) => { setRouteDraft(null); setShownRoute(id); }} />
+        )}
         {tab === "explore" && (
           <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
             drawing={drawing} onDrawToggle={() => { setRouteDraft(null); setDrawing(!drawing); }} selectedId={sensorId} onSelect={setSensorId}
