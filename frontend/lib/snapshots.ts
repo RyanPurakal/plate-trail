@@ -82,10 +82,11 @@ export function diffSnapshot(prev: Snapshot | undefined, now: Snapshot): Snapsho
   };
 }
 
-/** Stores `snap` under `key`, keeping only the most recently seen MAX_AREA_SNAPSHOTS areas. */
-export function putSnapshot(all: Record<string, Snapshot>, key: string, snap: Snapshot): Record<string, Snapshot> {
+/** Stores `snap` under `key`, keeping only the most recently seen MAX_AREA_SNAPSHOTS areas
+ *  besides the `pinned` ones (saved areas, which are kept however long ago they were seen). */
+export function putSnapshot(all: Record<string, Snapshot>, key: string, snap: Snapshot, pinned: ReadonlySet<string> = new Set()): Record<string, Snapshot> {
   const next = { ...all, [key]: snap };
-  const areas = Object.keys(next).filter((k) => k.startsWith("area:")).sort((a, b) => next[b].seen.localeCompare(next[a].seen));
+  const areas = Object.keys(next).filter((k) => k.startsWith("area:") && !pinned.has(k)).sort((a, b) => next[b].seen.localeCompare(next[a].seen));
   for (const k of areas.slice(MAX_AREA_SNAPSHOTS)) delete next[k];
   return next;
 }
@@ -95,10 +96,10 @@ export const dropSnapshots = (all: Record<string, Snapshot>, keep: (key: string)
   Object.fromEntries(Object.entries(all).filter(([k]) => keep(k)));
 
 /** Compare with the stored look for `key`, then store the new one. Returns the change (null on a first look). */
-export function recordLook(key: string, snap: Snapshot): SnapshotChange | null {
+export function recordLook(key: string, snap: Snapshot, pinned?: ReadonlySet<string>): SnapshotChange | null {
   const all = loadSnapshots();
   const change = diffSnapshot(all[key], snap);
-  saveSnapshots(putSnapshot(all, key, snap));
+  saveSnapshots(putSnapshot(all, key, snap, pinned));
   return change;
 }
 

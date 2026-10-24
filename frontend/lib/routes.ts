@@ -76,13 +76,15 @@ export function nextRouteName(routes: SavedRoute[]): string {
   return `Route ${n}`;
 }
 
+/** Random id for an item kept in this browser. */
+export const newId = () => typeof crypto !== "undefined" && "randomUUID" in crypto
+  ? crypto.randomUUID()
+  : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
 export function addRoute(routes: SavedRoute[], name: string, start: Pt, end: Pt): SavedRoute[] {
   if (routes.length >= MAX_ROUTES) return routes;
-  const id = typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return [...routes, {
-    id, name: cleanName(name) || nextRouteName(routes), start: roundPt(start), end: roundPt(end),
+    id: newId(), name: cleanName(name) || nextRouteName(routes), start: roundPt(start), end: roundPt(end),
     created: new Date().toISOString(),
   }];
 }

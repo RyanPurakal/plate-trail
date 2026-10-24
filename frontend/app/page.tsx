@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
+import MyAreas from "@/components/MyAreas";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
@@ -31,6 +32,7 @@ import {
 import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
 import { areaKey, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
+import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -166,6 +168,8 @@ export default function Home() {
   const [areaChange, setAreaChange] = useState<SnapshotChange | null>(null); // vs this browser's last look at the box
   const [drawing, setDrawing] = useState(false);
   const [sensorId, setSensorId] = useState<string | null>(null);
+  const [savedAreas, setSavedAreas] = useState<SavedArea[]>([]);
+  const [areasSaved, setAreasSaved] = useState(true);
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
   const [routesSaved, setRoutesSaved] = useState(true);
   const [routeDraft, setRouteDraft] = useState<RouteDraft | null>(null);
@@ -180,10 +184,12 @@ export default function Home() {
     try {
       const a = await getArea(bbox);
       setArea(a);
+      // Saved areas' looks are kept however long ago they were; read fresh so another tab's saves count too.
+      const pinned = new Set(loadAreas().map((x) => areaKey(x.bbox)));
       setAreaChange(recordLook(areaKey(a.bbox), makeSnapshot(
         a.sensors.features.map((f) => f.properties.id),
         Object.fromEntries(a.summary.sources.map((src) => [src.id, src.id === "osm" ? src.latest_edit : src.fetched_at])),
-      )));
+      ), pinned));
       setSensorId(null);
       setAreaUrl(a.bbox);
     } catch (e) {
@@ -208,13 +214,22 @@ export default function Home() {
     loadArea(bbox);
   }
 
-  // Saved routes live only in this browser; follow edits made in other tabs too.
+  // Saved routes and areas live only in this browser; follow edits made in other tabs too.
   useEffect(() => {
     setRoutes(loadRoutes());
-    const onStorage = (e: StorageEvent) => { if (e.key === STORAGE_KEY) setRoutes(loadRoutes()); };
+    setSavedAreas(loadAreas());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) setRoutes(loadRoutes());
+      if (e.key === AREAS_KEY) setSavedAreas(loadAreas());
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  function updateAreas(next: SavedArea[]) {
+    setSavedAreas(next);
+    setAreasSaved(saveAreas(next));
+  }
 
   function updateRoutes(next: SavedRoute[]) {
     setRoutes(next);
@@ -386,6 +401,13 @@ export default function Home() {
             drawing={drawing} onDrawToggle={() => { setRouteDraft(null); setDrawing(!drawing); }} selectedId={sensorId} onSelect={setSensorId}
             change={areaChange} onForget={() => forgetLooks((k) => k.startsWith("area:"))}
             onPick={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
+        )}
+        {tab === "explore" && (
+          <MyAreas areas={savedAreas} storageOk={areasSaved} current={area?.bbox ?? null} loading={areaLoading}
+            onOpen={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }}
+            onSave={(name) => area && updateAreas(addArea(savedAreas, name, area.bbox))}
+            onRename={(id, name) => updateAreas(renameArea(savedAreas, id, name))}
+            onDelete={(id) => updateAreas(removeArea(savedAreas, id))} onClearAll={() => updateAreas([])} />
         )}
         {tab === "explore" && (
           <MyRoutes routes={routes} storageOk={routesSaved} draft={routeDraft}

@@ -138,11 +138,18 @@ stored server-side. The Edison and New Brunswick study stays as the
       the area card and route result show "Since your last look": sensors
       newly listed / no longer listed, updated sources, and buttons to show
       new area sensors. "Forget past looks at areas" clears area entries.
-- [ ] "Since your last visit" panel: new or removed sensors on saved routes or
-      areas, and data-update dates.
-      Needs a way to save an area (only the last 10 explored boxes are kept
-      now) and to re-check saved routes and areas on return without a click;
-      removed sensors are counted but not drawn.
+- [x] Save an area. `lib/areas.ts` keeps up to 20 named boxes (the snapped
+      `GET /area` box, no search text) under `platetrail.areas.v1`, one per
+      box; "My areas" card in the Explore sidebar with "Save this area",
+      open, rename, two-step delete, "Remove all from this device" and the
+      date of the last look at each. Saved areas' snapshots are exempt from
+      the last-10 area pruning (`putSnapshot`'s `pinned` set).
+- [ ] "Since your last visit" panel: on return, re-check saved areas (and
+      already-checked routes) without a click and list new or removed sensors
+      and data-update dates in one panel at the top of Explore. Removed
+      sensors are counted but not drawn. Re-checking routes hits the
+      compute-only `/route/check`; consider doing areas only, with routes on
+      a button, to keep the first load light.
 
 ### 4. Compare and drill down
 
@@ -275,3 +282,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   typecheck, build and a throwaway Node script over the snapshot helpers; not
   yet clicked through in a browser. A look is replaced as soon as the change
   is shown, so reloading shows "no change" rather than the same change again.
+- 2026-10-23: saved areas landed (frontend only). Checked by typecheck, build
+  and a node check of `parseAreas`/`addArea`/pinned pruning; not yet clicked
+  through in a browser. `next build` prints a Next.js security advisory
+  notice for 16.4.0 (build still succeeds); worth a dependency bump.
