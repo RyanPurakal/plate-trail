@@ -88,20 +88,68 @@ stored server-side. The Edison and New Brunswick study stays as the
       for a route box. Networks are kept in memory (4, for an hour) so the
       return leg and re-checks are quick. A first check of a new area can
       take a while (the road download); the frontend should say so.
-- [ ] Frontend: "Check this route" on each saved route calls
+- [x] Frontend: "Check this route" on each saved route calls
       `/route/check` and draws the driven route; friendly message for routes
-      outside the covered network.
-- [ ] Route timeline: where reads would happen along the drive; click a step
-      to show it on the map.
-- [ ] What a 7-day / 30-day / 1-year read history could suggest for a route
-      (reuse the simulator and inference engine), in plain language.
+      outside the covered network. The shown route gets a "Check this route"
+      button; results (per direction: km and minutes by road, sensors passed,
+      passes that would record the trip) are held in page memory only, keyed
+      by route id, and dropped on reload or delete. The map draws the drive
+      there (solid) and back (fainter) in place of the straight line, rings
+      each sensor passed (amber if it would record either way, grey if not)
+      and fits to the route. A loading note says a first check outside the
+      study area downloads roads; 422s read "This route can't be checked: ...".
+- [x] Route timeline: where reads would happen along the drive; click a step
+      to show it on the map. Each checked direction lists Leave, every sensor
+      passed (minutes:seconds from leaving, road, km in, "Would record" or
+      "Passes, not recorded" with the reason in plain words) and Arrive.
+      Clicking a step rings that sensor on the map and eases to it (zoom 14 or
+      closer); clicking again clears it. Focus lives in page memory and resets
+      when the route or its check changes.
+- [x] `POST /route/history`: what a 7-day / 30-day / 1-year read history
+      could suggest for a route, in plain language. `platetrail/routehistory.py`
+      repeats the checked route on a schedule (weekdays, leave 08:00, back
+      17:30 by default, +/-10 min), drops the simulator's default 5% of reads,
+      and runs the inference engine on the reads kept for each period (all cut
+      from one simulated year, so longer periods contain shorter ones). Each
+      period returns reads, days, regular passes, where the car seems to stay
+      overnight / during the day (radius, confidence, distance from the
+      route's nearer end) and summary sentences. Compute-only like
+      `/route/check` (same network fallback, shared `_checked_route` helper).
+- [x] Frontend: "What a read history could suggest" for a checked route
+      (7 days / 30 days / 1 year tabs or cards from `/route/history`, schedule
+      inputs, the assumptions list), results in page memory only.
+      `components/RouteHistory.tsx` appears under a successful check: day
+      checkboxes (weekdays by default), leave and back times, then 7 days /
+      30 days / 1 year buttons showing the summary sentences, trips, reads,
+      days and sensors with reads, regular passes and suggested overnight /
+      daytime stays (radius, confidence, distance from the saved start or
+      end), with the assumptions in a collapsible list. Schedule and results
+      reset when the route is hidden or another route is shown.
 
 ### 3. What changed since your last visit
 
-- [ ] Local snapshot (localStorage) of sensor ids for saved areas and routes,
-      with the fetch date.
-- [ ] "Since your last visit" panel: new or removed sensors on saved routes or
-      areas, and data-update dates.
+- [x] Local snapshot (localStorage) of sensor ids for saved areas and routes,
+      with the fetch date. `lib/snapshots.ts` keeps, under
+      `platetrail.snapshots.v1`, the sorted sensor ids, per-source data dates
+      (latest OSM edit, or a file's modified time) and the look time for each
+      explored box (`area:<bbox>`, last 10 boxes) and each checked route
+      (`route:<id>`; no coordinates, dropped when the route is deleted). Each
+      area load or route check compares with the stored look and replaces it;
+      the area card and route result show "Since your last look": sensors
+      newly listed / no longer listed, updated sources, and buttons to show
+      new area sensors. "Forget past looks at areas" clears area entries.
+- [x] Save an area. `lib/areas.ts` keeps up to 20 named boxes (the snapped
+      `GET /area` box, no search text) under `platetrail.areas.v1`, one per
+      box; "My areas" card in the Explore sidebar with "Save this area",
+      open, rename, two-step delete, "Remove all from this device" and the
+      date of the last look at each. Saved areas' snapshots are exempt from
+      the last-10 area pruning (`putSnapshot`'s `pinned` set).
+- [ ] "Since your last visit" panel: on return, re-check saved areas (and
+      already-checked routes) without a click and list new or removed sensors
+      and data-update dates in one panel at the top of Explore. Removed
+      sensors are counted but not drawn. Re-checking routes hits the
+      compute-only `/route/check`; consider doing areas only, with routes on
+      a button, to keep the first load light.
 
 ### 4. Compare and drill down
 
@@ -221,3 +269,20 @@ stored server-side. The Edison and New Brunswick study stays as the
   Frontend only, no API calls yet. The storage helpers were checked with a
   throwaway Node script and the page with typecheck and build; there is no
   frontend test runner yet, and it has not been clicked through in a browser.
+- 2026-10-23: route check in the Explore sidebar and map landed (frontend
+  only). Checked by typecheck, build and backend tests; not yet clicked
+  through in a browser against a live API. The build warns that the
+  installed Next.js version has a published security advisory; upgrading it
+  is left for a separate change.
+- 2026-10-23: `POST /route/history` landed (backend only). Tested on the toy
+  graph; not yet run against the live study network. The schedule is one
+  round trip per chosen day; errands and other trips are not modelled, so
+  results describe this route on its own.
+- 2026-10-23: local look snapshots landed (frontend only). Checked with
+  typecheck, build and a throwaway Node script over the snapshot helpers; not
+  yet clicked through in a browser. A look is replaced as soon as the change
+  is shown, so reloading shows "no change" rather than the same change again.
+- 2026-10-23: saved areas landed (frontend only). Checked by typecheck, build
+  and a node check of `parseAreas`/`addArea`/pinned pruning; not yet clicked
+  through in a browser. `next build` prints a Next.js security advisory
+  notice for 16.4.0 (build still succeeds); worth a dependency bump.

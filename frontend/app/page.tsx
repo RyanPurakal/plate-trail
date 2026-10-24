@@ -3,12 +3,14 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ExploreView from "@/components/ExploreView";
-import MyRoutes, { type RouteDraft } from "@/components/MyRoutes";
+import MyAreas from "@/components/MyAreas";
+import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import LogTable from "@/components/LogTable";
 import PopulationView from "@/components/PopulationView";
 import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
+  checkRoute,
   EXAMPLE_REGION_ID,
   FALLBACK_REGION_NAME,
   FALLBACK_SCENARIO_TOWN,
@@ -29,6 +31,8 @@ import {
 } from "@/lib/api";
 import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
+import { areaKey, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
+import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -161,12 +165,17 @@ export default function Home() {
   const [areaLoading, setAreaLoading] = useState(false);
   const [areaError, setAreaError] = useState<string | null>(null);
   const [areaShrunk, setAreaShrunk] = useState(false);
+  const [areaChange, setAreaChange] = useState<SnapshotChange | null>(null); // vs this browser's last look at the box
   const [drawing, setDrawing] = useState(false);
   const [sensorId, setSensorId] = useState<string | null>(null);
+  const [savedAreas, setSavedAreas] = useState<SavedArea[]>([]);
+  const [areasSaved, setAreasSaved] = useState(true);
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
   const [routesSaved, setRoutesSaved] = useState(true);
   const [routeDraft, setRouteDraft] = useState<RouteDraft | null>(null);
   const [shownRoute, setShownRoute] = useState<string | null>(null);
+  const [routeChecks, setRouteChecks] = useState<Record<string, RouteCheckState>>({}); // by route id, this page only
+  const [stepFocus, setStepFocus] = useState<StepFocus | null>(null); // timeline step shown on the map
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
@@ -175,6 +184,12 @@ export default function Home() {
     try {
       const a = await getArea(bbox);
       setArea(a);
+      // Saved areas' looks are kept however long ago they were; read fresh so another tab's saves count too.
+      const pinned = new Set(loadAreas().map((x) => areaKey(x.bbox)));
+      setAreaChange(recordLook(areaKey(a.bbox), makeSnapshot(
+        a.sensors.features.map((f) => f.properties.id),
+        Object.fromEntries(a.summary.sources.map((src) => [src.id, src.id === "osm" ? src.latest_edit : src.fetched_at])),
+      ), pinned));
       setSensorId(null);
       setAreaUrl(a.bbox);
     } catch (e) {
@@ -199,18 +214,43 @@ export default function Home() {
     loadArea(bbox);
   }
 
-  // Saved routes live only in this browser; follow edits made in other tabs too.
+  // Saved routes and areas live only in this browser; follow edits made in other tabs too.
   useEffect(() => {
     setRoutes(loadRoutes());
-    const onStorage = (e: StorageEvent) => { if (e.key === STORAGE_KEY) setRoutes(loadRoutes()); };
+    setSavedAreas(loadAreas());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) setRoutes(loadRoutes());
+      if (e.key === AREAS_KEY) setSavedAreas(loadAreas());
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  function updateAreas(next: SavedArea[]) {
+    setSavedAreas(next);
+    setAreasSaved(saveAreas(next));
+  }
 
   function updateRoutes(next: SavedRoute[]) {
     setRoutes(next);
     setRoutesSaved(saveRoutes(next));
     if (shownRoute && !next.some((r) => r.id === shownRoute)) setShownRoute(null);
+    setRouteChecks((c) => Object.fromEntries(Object.entries(c).filter(([id]) => next.some((r) => r.id === id))));
+    forgetLooks((k) => k.startsWith("route:") && !next.some((r) => routeKey(r.id) === k));
+  }
+
+  // Results stay in page memory only; reloading the page or deleting the route drops them.
+  async function runRouteCheck(id: string) {
+    const r = routes.find((x) => x.id === id);
+    if (!r) return;
+    setRouteChecks((c) => ({ ...c, [id]: { loading: true, result: null, error: null } }));
+    try {
+      const result = await checkRoute(r.start, r.end);
+      const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.camera_id))));
+      setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null, change } }));
+    } catch (e) {
+      setRouteChecks((c) => ({ ...c, [id]: { loading: false, result: null, error: (e as Error).message } }));
+    }
   }
 
   function placeRoutePoint(pt: Pt | null) {
@@ -228,6 +268,8 @@ export default function Home() {
 
   const shown = routes.find((r) => r.id === shownRoute);
   const routeMarks = routeDraft ?? (shown ? { start: shown.start, end: shown.end } : null);
+  const routeLegs = !routeDraft && shown ? routeChecks[shown.id]?.result?.legs ?? null : null;
+  useEffect(() => setStepFocus(null), [routeLegs]);
 
   useEffect(() => {
     // An area link (?bbox=w,s,e,n) opens straight into the Explore view.
@@ -357,12 +399,21 @@ export default function Home() {
         {tab === "explore" && (
           <ExploreView area={area} loading={areaLoading} error={areaError} shrunk={areaShrunk} onExplore={exploreView}
             drawing={drawing} onDrawToggle={() => { setRouteDraft(null); setDrawing(!drawing); }} selectedId={sensorId} onSelect={setSensorId}
+            change={areaChange} onForget={() => forgetLooks((k) => k.startsWith("area:"))}
             onPick={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }} />
+        )}
+        {tab === "explore" && (
+          <MyAreas areas={savedAreas} storageOk={areasSaved} current={area?.bbox ?? null} loading={areaLoading}
+            onOpen={(b) => { setDrawing(false); setAreaShrunk(false); loadArea(b); }}
+            onSave={(name) => area && updateAreas(addArea(savedAreas, name, area.bbox))}
+            onRename={(id, name) => updateAreas(renameArea(savedAreas, id, name))}
+            onDelete={(id) => updateAreas(removeArea(savedAreas, id))} onClearAll={() => updateAreas([])} />
         )}
         {tab === "explore" && (
           <MyRoutes routes={routes} storageOk={routesSaved} draft={routeDraft}
             onAdd={() => { setDrawing(false); setShownRoute(null); setRouteDraft({ start: null, end: null }); }}
             onCancel={() => setRouteDraft(null)} onSave={saveDraft} shownId={shownRoute} onShow={setShownRoute}
+            checks={routeChecks} onCheck={runRouteCheck} focus={stepFocus} onFocus={setStepFocus}
             onRename={(id, name) => updateRoutes(renameRoute(routes, id, name))}
             onDelete={(id) => updateRoutes(removeRoute(routes, id))} onClearAll={() => updateRoutes([])} />
         )}
@@ -501,7 +552,8 @@ export default function Home() {
       <main className="stage">
         <AreaMap area={area} initialView={region?.map ?? null} onView={(b) => { viewBox.current = b; }}
           drawing={drawing} onDraw={exploreDrawn} selectedId={sensorId} onSelect={setSensorId}
-          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} />
+          placing={!!routeDraft && !routeDraft.end} onPlace={placeRoutePoint} routeMarks={routeMarks} routeLegs={routeLegs}
+          stepFocus={routeLegs ? stepFocus : null} />
         {drawing && <div className="draw-hint" role="status">Drag on the map to draw a box · Esc to cancel</div>}
         {routeDraft && !routeDraft.end && (
           <div className="draw-hint" role="status">Click the route&apos;s {routeDraft.start ? "end" : "start"} point · Esc to cancel</div>
@@ -510,7 +562,9 @@ export default function Home() {
           <span><i className="lg-sensor" />sensor, direction known</span>
           <span><i className="lg-undir lg-sensor-undir" />direction not recorded</span>
           <span><i className="lg-box" />explored area</span>
-          {routeMarks && <span><i className="lg-route" />route start (filled) and end, straight line</span>}
+          {routeMarks && !routeLegs && <span><i className="lg-route" />route start (filled) and end, straight line</span>}
+          {routeLegs && <span><i className="lg-drive" />route by road (way back fainter)</span>}
+          {routeLegs && <span><i className="lg-pass" />sensor passed: ringed if it would read the trip</span>}
         </div>
       </main>
       ) : (

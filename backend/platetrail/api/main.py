@@ -6,6 +6,7 @@
     POST /geocode          place search (Nominatim) -> boxes to explore; the text is never stored or logged
     POST /route/check      sensors one route passes and where reads would happen, on the study roads or a
                            network built around the route; compute-only, never stored
+    POST /route/history    what a 7-day / 30-day / 1-year read history of that route could suggest; compute-only
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -34,7 +35,7 @@ from platetrail.api.queries import (
     population_policies,
     population_unicity_rows,
 )
-from platetrail.api.schemas import GeocodeBody, PopulationRequestBody, RouteCheckBody, SimulateRequest, YourWeekBody
+from platetrail.api.schemas import GeocodeBody, PopulationRequestBody, RouteCheckBody, RouteHistoryBody, SimulateRequest, YourWeekBody
 from platetrail.area import AreaError, load_area, parse_bbox
 from platetrail.config import get_settings
 from platetrail.db import apply_migrations, get_engine
@@ -114,25 +115,21 @@ def geocode(body: GeocodeBody) -> dict:
     return {"results": results, "attribution": ATTRIBUTION}
 
 
-@app.post("/route/check")
-def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_runner),
-                networks: AreaNetworks = Depends(get_area_networks)) -> dict:
-    """Sensors a route passes (both ways by default). Routes on the study region's roads use its network;
-    others get a small network built around the route from public map data. Session-only: nothing about the
-    route is stored or logged (an outside-area network is held briefly in memory only)."""
+def _checked_route(start, end, both_ways: bool, runner: SimulationRunner, networks: AreaNetworks) -> tuple[dict, dict]:
+    """(network, check_route result). Routes on the study region's roads use its network; others get a small
+    network built around the route from public map data (held briefly in memory only)."""
     from platetrail.routecheck import check_route
 
-    start, end = (body.start.lon, body.start.lat), (body.end.lon, body.end.lat)
     r = get_region()
     try:
-        result = check_route(runner.router, runner.cameras, start, end, body.both_ways)
-        return {"network": {"kind": "region", "region": r.id, "name": r.name}, **result}
+        result = check_route(runner.router, runner.cameras, start, end, both_ways)
+        return {"kind": "region", "region": r.id, "name": r.name}, result
     except (AnchorTooFar, NoRoute):
         pass  # not on the study roads: check it on a network built around the route
 
     try:
         net = networks.for_route(start, end)
-        result = check_route(net.router, net.cameras, start, end, body.both_ways)
+        result = check_route(net.router, net.cameras, start, end, both_ways)
     except AreaError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except (AnchorTooFar, NoRoute) as e:
@@ -140,18 +137,40 @@ def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_run
                             "or the two can't be joined by road") from e
     except (RuntimeError, httpx.HTTPError, requests.RequestException, ox._errors.ResponseStatusCodeError) as e:
         raise HTTPException(status_code=503, detail="map data is busy; try again shortly") from e
-    return {
-        "network": {
-            "kind": "area",
-            "region": None,
-            "name": "OpenStreetMap roads around this route",
-            "bbox": list(net.bbox),
-            "sensors_mapped": net.sensors_mapped,
-            "sensors_on_roads": net.sensors_on_roads,
-            "sources": net.sources,
-        },
-        **result,
+    network = {
+        "kind": "area",
+        "region": None,
+        "name": "OpenStreetMap roads around this route",
+        "bbox": list(net.bbox),
+        "sensors_mapped": net.sensors_mapped,
+        "sensors_on_roads": net.sensors_on_roads,
+        "sources": net.sources,
     }
+    return network, result
+
+
+@app.post("/route/check")
+def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_runner),
+                networks: AreaNetworks = Depends(get_area_networks)) -> dict:
+    """Sensors a route passes (both ways by default). Session-only: nothing about the route is stored or logged."""
+    start, end = (body.start.lon, body.start.lat), (body.end.lon, body.end.lat)
+    network, result = _checked_route(start, end, body.both_ways, runner, networks)
+    return {"network": network, **result}
+
+
+@app.post("/route/history")
+def route_history(body: RouteHistoryBody, runner: SimulationRunner = Depends(get_runner),
+                  networks: AreaNetworks = Depends(get_area_networks)) -> dict:
+    """What a 7-day / 30-day / 1-year read history of one route, driven on a schedule, could suggest.
+    Session-only, like /route/check."""
+    from platetrail.routehistory import route_history as history
+
+    start, end = (body.start.lon, body.start.lat), (body.end.lon, body.end.lat)
+    network, check = _checked_route(start, end, body.both_ways, runner, networks)
+    mins = lambda s: int(s[:2]) * 60 + int(s[3:])  # noqa: E731
+    result = history(check["legs"], start, end, tuple(body.weekdays), mins(body.leave), mins(body.return_),
+                     tuple(body.retention_days))
+    return {"network": network, **result}
 
 
 @app.get("/cameras")
