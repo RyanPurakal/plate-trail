@@ -172,7 +172,13 @@ stored server-side. The Edison and New Brunswick study stays as the
       km and minutes, sensors passed and passes that would record for each
       direction, different sensors passed and which roads were used, with a
       Show button per column. Columns follow the latest check of each route.
-- [ ] Retention-period slider that updates route results live.
+- [x] Retention-period slider that updates route results live.
+      "What a read history could suggest" now asks `/route/history` for ten
+      periods at once (1, 3, 7, 14, 30, 60, 90, 180, 270, 365 days; the API
+      takes up to 12), so the slider moves between them with no new request;
+      7 days / 30 days / 1 year stay as quick buttons. Summaries say "1 day",
+      "1 read" etc., and a period with none of the chosen days says there
+      were no trips rather than that no sensor would record the route.
 
 ### 5. Learn more panels
 

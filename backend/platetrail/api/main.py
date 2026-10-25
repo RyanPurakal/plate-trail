@@ -6,7 +6,7 @@
     POST /geocode          place search (Nominatim) -> boxes to explore; the text is never stored or logged
     POST /route/check      sensors one route passes and where reads would happen, on the study roads or a
                            network built around the route; compute-only, never stored
-    POST /route/history    what a 7-day / 30-day / 1-year read history of that route could suggest; compute-only
+    POST /route/history    what a 1-day to 1-year read history of that route could suggest; compute-only
     GET  /cameras          camera GeoJSON (kind, directions, lot info; optional direction rays)
     POST /simulate         simulate one synthetic driver for N weeks and store the run (synchronous)
     POST /jobs/simulate    same, as a queued job; GET /jobs/{id} for progress and the run id
@@ -161,7 +161,7 @@ def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_run
 @app.post("/route/history")
 def route_history(body: RouteHistoryBody, runner: SimulationRunner = Depends(get_runner),
                   networks: AreaNetworks = Depends(get_area_networks)) -> dict:
-    """What a 7-day / 30-day / 1-year read history of one route, driven on a schedule, could suggest.
+    """What a read history of one route, driven on a schedule and kept 1 to 365 days, could suggest.
     Session-only, like /route/check."""
     from platetrail.routehistory import route_history as history
 

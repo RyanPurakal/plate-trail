@@ -7,6 +7,10 @@ import type { Pt } from "@/lib/routes";
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+// Retention periods the slider can stop at; all are worked out in one request so moving it needs no new call.
+const STOPS = [1, 3, 7, 14, 30, 60, 90, 180, 270, 365];
+const PRESETS = [7, 30, 365];
+
 const periodName = (days: number) => (days === 365 ? "1 year" : days === 1 ? "1 day" : `${days} days`);
 const dist = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 50) * 50} m`);
 
@@ -57,9 +61,9 @@ export default function RouteHistory({ start, end }: { start: Pt; end: Pt }) {
     e.preventDefault();
     setState({ loading: true, result: null, error: null });
     try {
-      const result = await routeHistory(start, end, { weekdays, leave, return: back });
+      const result = await routeHistory(start, end, { weekdays, leave, return: back }, STOPS);
       setState({ loading: false, result, error: null });
-      setShown((s) => (s != null && result.periods.some((p) => p.days === s) ? s : result.periods[0]?.days ?? null));
+      setShown((s) => (s != null && result.periods.some((p) => p.days === s) ? s : 7));
     } catch (err) {
       setState({ loading: false, result: null, error: err instanceof Error ? err.message : String(err) });
     }
@@ -67,13 +71,14 @@ export default function RouteHistory({ start, end }: { start: Pt; end: Pt }) {
 
   const r = state?.result;
   const period = r?.periods.find((p) => p.days === shown) ?? r?.periods[0];
+  const idx = period ? Math.max(0, r!.periods.indexOf(period)) : 0;
 
   return (
     <div className="rh">
       <div className="mr-leg-head">What a read history could suggest</div>
       <div className="nb-note">
         If this route were driven regularly, sensors that record it would build up a history of reads. Pick a usual
-        schedule to see what 7 days, 30 days or a year of those reads could suggest.
+        schedule, then slide how long reads are kept, from 1 day to a year, to see what they could suggest.
       </div>
       <form className="rh-form" onSubmit={run}>
         <fieldset className="rh-days">
@@ -99,11 +104,23 @@ export default function RouteHistory({ start, end }: { start: Pt; end: Pt }) {
       {state?.error && <div className="error" role="alert">{state.error}</div>}
       {r && period && (
         <div aria-live="polite">
-          <div className="rh-tabs" role="group" aria-label="How long reads are kept">
-            {r.periods.map((p) => (
-              <button key={p.days} className={p.days === period.days ? "on" : ""} aria-pressed={p.days === period.days}
-                onClick={() => setShown(p.days)}>
-                {periodName(p.days)}
+          <div className="rh-retention">
+            <label htmlFor="rh-slider">
+              Reads kept for <strong>{periodName(period.days)}</strong>
+            </label>
+            <input id="rh-slider" type="range" min={0} max={r.periods.length - 1} step={1} value={idx}
+              aria-valuetext={periodName(period.days)}
+              onChange={(e) => setShown(r.periods[Number(e.target.value)]?.days ?? period.days)} />
+            <div className="rh-scale" aria-hidden="true">
+              <span>{periodName(r.periods[0].days)}</span>
+              <span>{periodName(r.periods[r.periods.length - 1].days)}</span>
+            </div>
+          </div>
+          <div className="rh-tabs" role="group" aria-label="Common retention periods">
+            {PRESETS.filter((d) => r.periods.some((p) => p.days === d)).map((d) => (
+              <button key={d} type="button" className={d === period.days ? "on" : ""} aria-pressed={d === period.days}
+                onClick={() => setShown(d)}>
+                {periodName(d)}
               </button>
             ))}
           </div>

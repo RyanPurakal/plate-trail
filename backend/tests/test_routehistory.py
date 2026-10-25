@@ -52,6 +52,17 @@ def test_route_past_no_sensors_has_an_empty_history(toy):
     assert p["reads"] == 0 and p["places"] == {} and "empty" in p["summary"][0]
 
 
+def test_slider_stops_grow_and_read_naturally(legs):
+    stops = (1, 3, 7, 14, 30, 60, 90, 180, 270, 365)
+    out = route_history(legs, START, END, retention_days=stops)
+    assert [p["days"] for p in out["periods"]] == list(stops)
+    reads = [p["reads"] for p in out["periods"]]
+    assert reads == sorted(reads)  # each period is the most recent part of the same year
+    day = out["periods"][0]  # the reference end is a Sunday, so one weekday schedule day has no trips
+    assert day["trips"] == 0 and "no trips" in day["summary"][0] and "1 day," in day["summary"][0]
+    assert not any("1 days" in line for p in out["periods"] for line in p["summary"])
+
+
 def test_weekend_only_schedule(legs):
     out = route_history(legs, START, END, weekdays=(5, 6), retention_days=(7,))
     assert out["periods"][0]["trips"] == 4
@@ -89,7 +100,8 @@ def test_endpoint_is_compute_only(client):
 
 
 @pytest.mark.parametrize("extra", [{"weekdays": []}, {"weekdays": [7]}, {"retention_days": [0]},
-                                   {"retention_days": [400]}, {"leave": "25:00"}])
+                                   {"retention_days": [400]}, {"retention_days": list(range(1, 14))},
+                                   {"leave": "25:00"}])
 def test_endpoint_validation(client, extra):
     payload = {"start": {"lon": START[0], "lat": START[1]}, "end": {"lon": END[0], "lat": END[1]}, **extra}
     assert client.post("/route/history", json=payload).status_code == 422

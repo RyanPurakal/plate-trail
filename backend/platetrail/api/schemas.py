@@ -115,7 +115,7 @@ class RouteHistoryBody(RouteCheckBody):
     weekdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
     leave: str = Field("08:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     return_: str = Field("17:30", alias="return", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
-    retention_days: list[int] = Field(default_factory=lambda: [7, 30, 365], min_length=1, max_length=4)
+    retention_days: list[int] = Field(default_factory=lambda: [7, 30, 365], min_length=1, max_length=12)
 
     @field_validator("weekdays")
     @classmethod
