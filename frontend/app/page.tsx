@@ -35,6 +35,7 @@ import { areaKey, areaSnapshot, forgetLooks, makeSnapshot, recordLook, routeKey,
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 import { onTabListKeyDown, tabStop } from "@/lib/tabs";
+import { areaAnnouncement, nextAnnouncement, routeAnnouncement } from "@/lib/announce";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
@@ -187,17 +188,22 @@ export default function Home() {
   const [shownRoute, setShownRoute] = useState<string | null>(null);
   const [routeChecks, setRouteChecks] = useState<Record<string, RouteCheckState>>({}); // by route id, this page only
   const [stepFocus, setStepFocus] = useState<StepFocus | null>(null); // timeline step shown on the map
+  const [announcement, setAnnouncement] = useState(""); // read by screen readers when an area loads or a route is checked
+  const announce = (text: string) => setAnnouncement((prev) => nextAnnouncement(prev, text));
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
     setAreaLoading(true);
     setAreaError(null);
+    announce("Loading public map data for this area…");
     try {
       const a = await getArea(bbox);
       setArea(a);
       // Saved areas' looks are kept however long ago they were; read fresh so another tab's saves count too.
       const pinned = new Set(loadAreas().map((x) => areaKey(x.bbox)));
-      setAreaChange(recordLook(areaKey(a.bbox), areaSnapshot(a), pinned));
+      const change = recordLook(areaKey(a.bbox), areaSnapshot(a), pinned);
+      setAreaChange(change);
+      announce(areaAnnouncement(a, change));
       setSensorId(null);
       setPageUrl("explore", a.bbox);
     } catch (e) {
@@ -252,10 +258,12 @@ export default function Home() {
     const r = routes.find((x) => x.id === id);
     if (!r) return;
     setRouteChecks((c) => ({ ...c, [id]: { loading: true, result: null, error: null } }));
+    announce(`Checking ${r.name}…`);
     try {
       const result = await checkRoute(r.start, r.end);
       const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.camera_id))));
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null, change } }));
+      announce(routeAnnouncement(r.name, result, change));
     } catch (e) {
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result: null, error: (e as Error).message } }));
     }
@@ -398,6 +406,7 @@ export default function Home() {
 
   return (
     <div className={`shell mode-${mode}`}>
+      <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
       <aside className="dossier">
         <header className="masthead">
           <div className="kicker">Plate Trail · location-privacy check-up</div>

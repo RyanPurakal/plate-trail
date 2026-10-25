@@ -218,8 +218,19 @@ stored server-side. The Edison and New Brunswick study stays as the
             Tab stop (`lib/tabs.ts`).
       - [ ] Mobile pass over the Explore sidebar cards (compare tables, route
             timeline, read-history slider) at phone width.
-      - [ ] Screen-reader pass: live-region announcements for area loads and
+      - [x] Screen-reader pass: live-region announcements for area loads and
             route checks; map focus handling when a sensor or step is chosen.
+            One hidden `role="status"` region on the page reads a short line
+            (`lib/announce.ts`) when an area starts and finishes loading
+            (sensor count, main-road share, changes since the last look) and
+            when a route check starts and finishes (sensors passed and passes
+            that would record, per direction). The area card, sensor card and
+            route result are no longer live regions, so a load is not read as
+            the whole card. Picking a sensor on the map or with "Step through
+            sensors" moves focus to the sensor card (labelled "Selected
+            sensor, n of m"); Previous/Next keep focus; closing the card puts
+            focus back on "Step through sensors". Timeline steps keep focus on
+            the step button, which reports its state with `aria-pressed`.
 - [x] Fast loading: lazy-load the example study (the page still fetches
       cameras and runs on load, even on Explore); skeletons for the area card.
       Cameras and runs are fetched the first time a study tab opens (retried

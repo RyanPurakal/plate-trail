@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { searchPlaces, type AreaResult, type PlaceMatch } from "@/lib/api";
 import { shortDate, type BBox } from "@/lib/area";
 import type { SnapshotChange } from "@/lib/snapshots";
@@ -35,6 +35,15 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
   const [searchError, setSearchError] = useState<string | null>(null);
   const [forgot, setForgot] = useState(false);
   useEffect(() => setForgot(false), [area]);
+  // Closing the sensor card removes the focused button with it; put focus back on "Step through sensors".
+  const stepBtn = useRef<HTMLButtonElement>(null);
+  const hadSelection = useRef(false);
+  useEffect(() => {
+    if (hadSelection.current && !selectedId && (document.activeElement === document.body || !document.activeElement)) {
+      stepBtn.current?.focus();
+    }
+    hadSelection.current = !!selectedId;
+  }, [selectedId]);
   const s = area?.summary;
 
   async function search(e: React.FormEvent) {
@@ -143,7 +152,7 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
       {area && selectedId && <SensorDetail area={area} selectedId={selectedId} onSelect={onSelect} />}
 
       {area && s && (
-        <section className="naive area-card" aria-live="polite">
+        <section className="naive area-card" aria-label="Area summary">
           <div className="nb-head">
             <span>Area summary</span>
             <span className="nb-badge">public data</span>
@@ -177,7 +186,7 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
               </div>
               <LearnMore topic="sensors" />
               {!selectedId && (
-                <button className="ex-share ex-step" onClick={() => onSelect(area.sensors.features[0]?.properties.id ?? null)}>
+                <button ref={stepBtn} className="ex-share ex-step" onClick={() => onSelect(area.sensors.features[0]?.properties.id ?? null)}>
                   Step through sensors
                 </button>
               )}

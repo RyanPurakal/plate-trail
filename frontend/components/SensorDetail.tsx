@@ -17,8 +17,13 @@ export default function SensorDetail({ area, selectedId, onSelect }: Props) {
   const features = area.sensors.features;
   const index = features.findIndex((f) => f.properties.id === selectedId);
 
+  // A sensor picked on the map (or with "Step through sensors", which then disappears) moves focus to this card
+  // so keyboard and screen-reader users land on its details; Previous/Next keep focus where it is.
   useEffect(() => {
-    card.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const el = card.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!el.contains(document.activeElement)) el.focus({ preventScroll: true });
   }, [selectedId]);
 
   if (index < 0) return null;
@@ -33,7 +38,7 @@ export default function SensorDetail({ area, selectedId, onSelect }: Props) {
   const step = (d: number) => onSelect(features[(index + d + features.length) % features.length].properties.id);
 
   return (
-    <section ref={card} className="naive sensor-card" aria-live="polite" aria-label="Selected sensor">
+    <section ref={card} className="naive sensor-card" tabIndex={-1} aria-label={`Selected sensor, ${index + 1} of ${features.length}`}>
       <div className="nb-head">
         <span>Sensor {index + 1} of {features.length}</span>
         <button className="ex-share" onClick={() => onSelect(null)} aria-label="Close sensor details">Close</button>
