@@ -296,6 +296,9 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
   font-size: 11px; letter-spacing: 0.06em; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs button.on { color: var(--bone); border-bottom-color: var(--bone); }
 .tabs button:hover { color: var(--bone); }
+.tabs .tabs-group { align-self: center; margin-left: auto; padding: 0 4px 0 10px; border-left: 1px solid var(--rule);
+  color: var(--dim); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; }
+@media (max-width: 520px) { .tabs { flex-wrap: wrap; } .tabs .tabs-group { margin-left: 0; border-left: 0; flex-basis: 100%; padding: 6px 0 0; } }
 
 /* ---------- reveal ---------- */
 .reveal .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 6px 0 8px; }

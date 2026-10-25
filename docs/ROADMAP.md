@@ -190,17 +190,22 @@ stored server-side. The Edison and New Brunswick study stays as the
       summary and sensor detail cards (sensors), under route read-history
       results (retention, unicity) and under the example study's unicity
       chart. Unicity figures quote docs/findings.md F5.
-- [ ] Move the NJ study (map run, log table, population view, your week) to an
-      "Example study" section; the check-up becomes the home page.
-- [ ] Wording pass across README, docs and UI: describe the project as a
-      location-privacy check-up, with the NJ ALPR study as the example. The
-      masthead kicker still says "ALPR privacy audit". Keep data-source
-      credits factual.
+- [x] Move the NJ study (map run, log table, population view, your week) to an
+      "Example study" section; the check-up becomes the home page. The page
+      now opens on Explore (tab "Check-up"); One driver, Population & policy
+      and Your week sit after an "Example study" label in the tab bar, with
+      their own heading and lede. `?study=driver|population|yourweek` links
+      straight to a study section (it replaces `?bbox=` while one is open);
+      the masthead kicker reads "location-privacy check-up".
+- [ ] Wording pass across README and docs: describe the project as a
+      location-privacy check-up, with the NJ ALPR study as the example. Keep
+      data-source credits factual. (UI masthead done with the home-page move.)
 
 ### 6. Polish
 
 - [ ] Mobile layout, keyboard and screen-reader access for the new views.
-- [ ] Fast loading: lazy-load the example study; skeletons for the area card.
+- [ ] Fast loading: lazy-load the example study (the page still fetches
+      cameras and runs on load, even on Explore); skeletons for the area card.
 - [ ] Docker setup still works with the new views (data dir for the area
       cache mounted).
 
