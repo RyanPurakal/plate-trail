@@ -144,17 +144,41 @@ stored server-side. The Edison and New Brunswick study stays as the
       open, rename, two-step delete, "Remove all from this device" and the
       date of the last look at each. Saved areas' snapshots are exempt from
       the last-10 area pruning (`putSnapshot`'s `pinned` set).
-- [ ] "Since your last visit" panel: on return, re-check saved areas (and
+- [x] "Since your last visit" panel: on return, re-check saved areas (and
       already-checked routes) without a click and list new or removed sensors
-      and data-update dates in one panel at the top of Explore. Removed
-      sensors are counted but not drawn. Re-checking routes hits the
-      compute-only `/route/check`; consider doing areas only, with routes on
-      a button, to keep the first load light.
+      and data-update dates in one panel at the top of Explore.
+      `components/SinceLastVisit.tsx` re-checks saved areas one at a time when
+      Explore opens (once per page load, after any `?bbox=` area has loaded),
+      skipping areas looked at in the last hour, and lists each with what
+      changed since its last look; clicking one opens it. Routes checked
+      before (they have a stored look) are re-checked only on a button, since
+      that uses the compute-only `/route/check`. Removed sensors are counted,
+      not drawn.
 
 ### 4. Compare and drill down
 
-- [ ] Side-by-side comparison of two areas or two routes.
-- [ ] Retention-period slider that updates route results live.
+- [x] Compare two saved areas side by side. `components/CompareAreas.tsx`
+      in the Explore sidebar (under My areas): pick Area A and B from saved
+      areas, "Compare" fetches both from `GET /area` and shows sensors mapped,
+      area, per 100 km², direction known, main roads near a sensor, latest map
+      edit and data fetch date, with an Open button per column. Results are in
+      component memory only and do not replace the stored last look.
+- [x] Compare two checked routes side by side (sensors passed, passes that
+      would record, each way), from the page-memory route checks.
+      `components/CompareRoutes.tsx` in the Explore sidebar (under My
+      routes): pick Route A and B from saved routes; "Compare" checks any not
+      yet checked (one at a time, via the same compute-only `/route/check`
+      path as "Check this route", so it also records a last look) and shows
+      km and minutes, sensors passed and passes that would record for each
+      direction, different sensors passed and which roads were used, with a
+      Show button per column. Columns follow the latest check of each route.
+- [x] Retention-period slider that updates route results live.
+      "What a read history could suggest" now asks `/route/history` for ten
+      periods at once (1, 3, 7, 14, 30, 60, 90, 180, 270, 365 days; the API
+      takes up to 12), so the slider moves between them with no new request;
+      7 days / 30 days / 1 year stay as quick buttons. Summaries say "1 day",
+      "1 read" etc., and a period with none of the chosen days says there
+      were no trips rather than that no sensor would record the route.
 
 ### 5. Learn more panels
 
@@ -225,6 +249,8 @@ stored server-side. The Edison and New Brunswick study stays as the
 ## App quality
 
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
+- [ ] Upgrade Next.js past the flagged advisory so `next build` stops failing
+      intermittently on its security check.
 - [ ] API: validate `extra_cameras` and other scenario inputs against the
       active region.
 - [ ] Sensor files: optionally assign `town` by point-in-boundary when a
@@ -286,3 +312,17 @@ stored server-side. The Edison and New Brunswick study stays as the
   and a node check of `parseAreas`/`addArea`/pinned pruning; not yet clicked
   through in a browser. `next build` prints a Next.js security advisory
   notice for 16.4.0 (build still succeeds); worth a dependency bump.
+- 2026-10-24: "Since your last visit" panel landed (frontend only; the
+  area snapshot helper moved to `areaSnapshot` in `lib/snapshots.ts`).
+  Checked by typecheck, build and backend tests; not yet clicked through in a
+  browser. Because a re-check replaces the stored look, opening a changed
+  area afterwards shows "no change" in its own card; the panel is where the
+  change is shown.
+- 2026-10-24: area comparison landed (frontend only). Checked by typecheck,
+  build and backend tests; not yet clicked through in a browser. Comparing
+  deliberately skips `recordLook`, so it never hides a change from the
+  "Since your last visit" panel.
+- 2026-10-24: route comparison landed. `next build` sometimes exits 1 from
+  Next.js's security-advisory check (`SecurityFatalError`) after a successful
+  compile and typecheck; it happens with or without the change. Upgrading Next
+  is worth its own item.

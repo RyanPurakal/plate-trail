@@ -417,13 +417,17 @@ export type RouteHistory = {
 export type HistorySchedule = { weekdays: number[]; leave: string; return: string };
 
 /** Like checkRoute: the route and schedule go in the request body and nothing is kept. */
-export async function routeHistory(start: [number, number], end: [number, number], schedule: HistorySchedule): Promise<RouteHistory> {
+export async function routeHistory(start: [number, number], end: [number, number], schedule: HistorySchedule,
+  retentionDays?: number[]): Promise<RouteHistory> {
   let resp: Response;
   try {
     resp = await fetch(`${API_URL}/route/history`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start: { lon: start[0], lat: start[1] }, end: { lon: end[0], lat: end[1] }, ...schedule }),
+      body: JSON.stringify({
+        start: { lon: start[0], lat: start[1] }, end: { lon: end[0], lat: end[1] }, ...schedule,
+        ...(retentionDays ? { retention_days: retentionDays } : {}),
+      }),
     });
   } catch {
     throw new Error("Can't reach the Plate Trail API.");

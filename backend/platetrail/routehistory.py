@@ -1,4 +1,4 @@
-"""Route history: what a 7-day / 30-day / 1-year read history of one saved route could suggest.
+"""Route history: what a read history of one saved route, kept for 1 day up to a year, could suggest.
 
 Takes a route check (platetrail.routecheck) and repeats the drive on a
 simple schedule: there at a usual leave time and back at a usual return
@@ -65,14 +65,21 @@ def _km(m: float) -> str:
     return f"{m / 1000:.1f} km" if m >= 1000 else f"{round(m / 50) * 50:.0f} m"
 
 
+def _n(n: int, word: str) -> str:
+    return f"{n} {word}{'s' if n != 1 else ''}"
+
+
 def _summary(days: int, trips: int, reads: list[EngineRead], inf, places: dict) -> list[str]:
-    kept = f"{days} days" if days != 365 else "a year"
-    if not reads:
-        return [f"Over {kept} ({trips} trips), no sensor on this route would record it, so the history would be "
+    kept = "a year" if days == 365 else _n(days, "day")
+    if not trips:
+        return [f"Over {kept}, none of the chosen days come up, so there are no trips and the history would be "
                 "empty."]
+    if not reads:
+        return [f"Over {kept} ({_n(trips, 'trip')}), no sensor on this route would record it, so the history "
+                "would be empty."]
     cams = len({r.camera_label for r in reads})
-    lines = [f"Over {kept} ({trips} trips): {len(reads)} reads on {inf.days_with_reads} days at "
-             f"{cams} sensor{'s' if cams != 1 else ''}."]
+    lines = [f"Over {kept} ({_n(trips, 'trip')}): {_n(len(reads), 'read')} on {_n(inf.days_with_reads, 'day')} at "
+             f"{_n(cams, 'sensor')}."]
     if inf.regular:
         p = inf.regular[0]
         more = f", plus {len(inf.regular) - 1} more" if len(inf.regular) > 1 else ""
