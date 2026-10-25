@@ -197,9 +197,17 @@ stored server-side. The Edison and New Brunswick study stays as the
       their own heading and lede. `?study=driver|population|yourweek` links
       straight to a study section (it replaces `?bbox=` while one is open);
       the masthead kicker reads "location-privacy check-up".
-- [ ] Wording pass across README and docs: describe the project as a
+- [x] Wording pass across README and docs: describe the project as a
       location-privacy check-up, with the NJ ALPR study as the example. Keep
       data-source credits factual. (UI masthead done with the home-page move.)
+      README opens with the check-up (explore, my routes, since your last
+      visit, compare), "Why this exists" is reworded neutrally, results and
+      the old feature list sit under "Example study", "Using it" covers the
+      Check-up tab, and Ethics notes on-device storage and no avoidance
+      routing. architecture.md and findings.md say how the study relates to
+      the check-up; the proposal carries a note that it is kept for reference.
+      Camera-count tables still name the manufacturer where it is the OSM tag
+      or a source's own count.
 
 ### 6. Polish
 
