@@ -34,6 +34,7 @@ import { dayKey, km, parts, templateName } from "@/lib/format";
 import { areaKey, areaSnapshot, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
+import { onTabListKeyDown, tabStop } from "@/lib/tabs";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
@@ -69,9 +70,9 @@ function RevealCard({ inference, reveal, setReveal, mode }: {
         <span>What an analyst can infer</span>
         <span className="nb-badge engine-badge" title={inference.method}>inference engine</span>
       </div>
-      <div className="steps" role="tablist" aria-label="reveal step">
+      <div className="steps" role="tablist" aria-label="reveal step" onKeyDown={onTabListKeyDown}>
         {REVEAL_STEPS.map((label, i) => (
-          <button key={label} role="tab" aria-selected={reveal === i} className={reveal >= i ? "on" : ""} onClick={() => setReveal(i)}>
+          <button key={label} role="tab" aria-selected={reveal === i} tabIndex={tabStop(reveal === i)} className={reveal >= i ? "on" : ""} onClick={() => setReveal(i)}>
             <span>{i + 1}</span>{label}
           </button>
         ))}
@@ -419,11 +420,11 @@ export default function Home() {
           )}
         </header>
 
-        <nav className="tabs" role="tablist" aria-label="section">
-          <button role="tab" aria-selected={tab === "explore"} className={tab === "explore" ? "on" : ""} onClick={() => switchTab("explore")}>Check-up</button>
+        <nav className="tabs" role="tablist" aria-label="section" onKeyDown={onTabListKeyDown}>
+          <button role="tab" aria-selected={tab === "explore"} tabIndex={tabStop(tab === "explore")} className={tab === "explore" ? "on" : ""} onClick={() => switchTab("explore")}>Check-up</button>
           <span className="tabs-group" aria-hidden="true">Example study</span>
           {STUDY_TABS.map(([k, label]) => (
-            <button key={k} role="tab" aria-selected={tab === k} aria-label={`Example study: ${label}`} className={tab === k ? "on" : ""} onClick={() => switchTab(k)}>{label}</button>
+            <button key={k} role="tab" aria-selected={tab === k} tabIndex={tabStop(tab === k)} aria-label={`Example study: ${label}`} className={tab === k ? "on" : ""} onClick={() => switchTab(k)}>{label}</button>
           ))}
         </nav>
 
@@ -534,12 +535,12 @@ export default function Home() {
           </section>
         )}
 
-        <section className="switch" role="tablist" aria-label="view">
-          <button role="tab" aria-selected={mode === "saw"} className={mode === "saw" ? "on" : ""} onClick={() => setMode("saw")}>
+        <section className="switch" role="tablist" aria-label="view" onKeyDown={onTabListKeyDown}>
+          <button role="tab" aria-selected={mode === "saw"} tabIndex={tabStop(mode === "saw")} className={mode === "saw" ? "on" : ""} onClick={() => setMode("saw")}>
             <span className="sw-k">What the cameras saw</span>
             <span className="sw-v">{view.reads.length}<small> reads · {cameraCount} cam{cameraCount === 1 ? "" : "s"}</small></span>
           </button>
-          <button role="tab" aria-selected={mode === "happened"} className={mode === "happened" ? "on" : ""} onClick={() => setMode("happened")}>
+          <button role="tab" aria-selected={mode === "happened"} tabIndex={tabStop(mode === "happened")} className={mode === "happened" ? "on" : ""} onClick={() => setMode("happened")}>
             <span className="sw-k">What actually happened</span>
             <span className="sw-v">{truth.trips}<small> trips · {km(truth.km * 1)}</small></span>
           </button>

@@ -212,6 +212,14 @@ stored server-side. The Edison and New Brunswick study stays as the
 ### 6. Polish
 
 - [ ] Mobile layout, keyboard and screen-reader access for the new views.
+      - [x] Tab bars (section tabs, the study's reveal steps and saw/happened
+            switch) follow the WAI-ARIA tabs pattern: arrow keys, Home and End
+            move between tabs and select them, and only the selected tab is a
+            Tab stop (`lib/tabs.ts`).
+      - [ ] Mobile pass over the Explore sidebar cards (compare tables, route
+            timeline, read-history slider) at phone width.
+      - [ ] Screen-reader pass: live-region announcements for area loads and
+            route checks; map focus handling when a sensor or step is chosen.
 - [x] Fast loading: lazy-load the example study (the page still fetches
       cameras and runs on load, even on Explore); skeletons for the area card.
       Cameras and runs are fetched the first time a study tab opens (retried
