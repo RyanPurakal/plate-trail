@@ -5,6 +5,7 @@ import { searchPlaces, type AreaResult, type PlaceMatch } from "@/lib/api";
 import { shortDate, type BBox } from "@/lib/area";
 import type { SnapshotChange } from "@/lib/snapshots";
 import ChangeNote from "./ChangeNote";
+import LearnMore from "./LearnMore";
 import SensorDetail from "./SensorDetail";
 
 type Props = {
@@ -164,6 +165,7 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
                 A sensor with a known direction records vehicles travelling one way past it. Click a sensor on the map
                 for details, or step through them in a list.
               </div>
+              <LearnMore topic="sensors" />
               {!selectedId && (
                 <button className="ex-share ex-step" onClick={() => onSelect(area.sensors.features[0]?.properties.id ?? null)}>
                   Step through sensors

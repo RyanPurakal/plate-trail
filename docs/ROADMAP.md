@@ -182,9 +182,14 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ### 5. Learn more panels
 
-- [ ] Short neutral explainers: what fixed sensors record, how retention
+- [x] Short neutral explainers: what fixed sensors record, how retention
       length changes what can be inferred, the unicity finding. Link them from
-      where they are relevant.
+      where they are relevant. `components/LearnMore.tsx` holds the three
+      texts and renders each as a "Learn more: ..." disclosure (native
+      `<details>`, keyboard and screen-reader friendly). Linked from the area
+      summary and sensor detail cards (sensors), under route read-history
+      results (retention, unicity) and under the example study's unicity
+      chart. Unicity figures quote docs/findings.md F5.
 - [ ] Move the NJ study (map run, log table, population view, your week) to an
       "Example study" section; the check-up becomes the home page.
 - [ ] Wording pass across README, docs and UI: describe the project as a

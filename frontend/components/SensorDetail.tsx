@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { AreaResult } from "@/lib/api";
 import { compassWord, osmUrl, parseDirections, shortDate } from "@/lib/area";
+import LearnMore from "./LearnMore";
 
 type Props = {
   area: AreaResult;
@@ -62,6 +63,7 @@ export default function SensorDetail({ area, selectedId, onSelect }: Props) {
             : "No direction is recorded, so this sensor may record traffic in either direction."}
         {p.source === "osm" && " Positions in OpenStreetMap are added by volunteers and may be approximate or out of date."}
       </div>
+      <LearnMore topic="sensors" />
       <div className="ex-foot">
         <span className="sensor-nav">
           <button className="ex-share" onClick={() => step(-1)} disabled={features.length < 2}>Previous</button>

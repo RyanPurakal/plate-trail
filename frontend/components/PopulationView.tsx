@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_URL } from "@/lib/api";
 import { BarChart, LineChart } from "./Charts";
+import LearnMore from "./LearnMore";
 
 type PopulationItem = {
   id: number;
@@ -140,6 +141,7 @@ export default function PopulationView({ scenarioTown, exampleRegion }: Props) {
             <>A real network sees far more cars than any simulated crowd, so these shares are upper bounds.</>
           )}
         </div>
+        <LearnMore topic="unicity" />
       </section>
 
       <section className="charts">
