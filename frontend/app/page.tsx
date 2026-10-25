@@ -8,9 +8,6 @@ import CompareAreas from "@/components/CompareAreas";
 import CompareRoutes from "@/components/CompareRoutes";
 import SinceLastVisit from "@/components/SinceLastVisit";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
-import LogTable from "@/components/LogTable";
-import PopulationView from "@/components/PopulationView";
-import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
   checkRoute,
@@ -40,6 +37,10 @@ import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
+// Example study views load only when a study tab is opened, so the check-up stays light.
+const LogTable = dynamic(() => import("@/components/LogTable"));
+const PopulationView = dynamic(() => import("@/components/PopulationView"));
+const YourWeek = dynamic(() => import("@/components/YourWeek"));
 
 type Tab = "explore" | "driver" | "population" | "yourweek";
 type StudyTab = Exclude<Tab, "explore">;
@@ -289,6 +290,13 @@ export default function Home() {
   useEffect(() => {
     // Optional: without it the map keeps its built-in default view.
     getRegion().then(setRegion).catch(() => {});
+  }, []);
+
+  // The example study's cameras and runs are fetched the first time a study tab opens, not on the check-up.
+  const studyOpened = useRef(false);
+  useEffect(() => {
+    if (tab === "explore" || studyOpened.current) return;
+    studyOpened.current = true;
     Promise.all([getCameras(), getRuns()])
       .then(([c, r]) => {
         setCameras(c);
@@ -296,8 +304,11 @@ export default function Home() {
         const fresh = r.find((x) => !x.stale) ?? r[0];
         if (fresh) setRunId(fresh.id);
       })
-      .catch((e: Error) => setError(`API unreachable: ${e.message}`));
-  }, []);
+      .catch((e: Error) => {
+        studyOpened.current = false; // try again on the next study tab switch
+        setError(`API unreachable: ${e.message}`);
+      });
+  }, [tab]);
 
   useEffect(() => {
     if (runId == null) return;

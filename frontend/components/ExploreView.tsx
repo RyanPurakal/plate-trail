@@ -130,6 +130,16 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
         </section>
       )}
 
+      {loading && !area && (
+        <section className="naive area-card ex-skeleton" aria-busy="true" aria-label="Loading area summary">
+          <div className="nb-head"><span>Area summary</span></div>
+          <div className="sk-line sk-big" />
+          <div className="sk-line" />
+          <div className="sk-line" />
+          <div className="sk-line sk-short" />
+        </section>
+      )}
+
       {area && selectedId && <SensorDetail area={area} selectedId={selectedId} onSelect={onSelect} />}
 
       {area && s && (

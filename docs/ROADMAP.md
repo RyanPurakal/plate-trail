@@ -212,10 +212,17 @@ stored server-side. The Edison and New Brunswick study stays as the
 ### 6. Polish
 
 - [ ] Mobile layout, keyboard and screen-reader access for the new views.
-- [ ] Fast loading: lazy-load the example study (the page still fetches
+- [x] Fast loading: lazy-load the example study (the page still fetches
       cameras and runs on load, even on Explore); skeletons for the area card.
+      Cameras and runs are fetched the first time a study tab opens (retried
+      on the next study tab if the API was unreachable); `PopulationView`,
+      `YourWeek` and `LogTable` load as separate chunks via `next/dynamic`.
+      Only `GET /region` runs on load. The area card shows a pulsing
+      placeholder while the first area loads.
 - [ ] Docker setup still works with the new views (data dir for the area
-      cache mounted).
+      cache mounted). The compose file already mounts `./data:/data` and the
+      area cache lives under `PLATETRAIL_DATA_DIR/raw/overpass_areas`; still
+      needs a `docker compose up` run through Explore and a route check.
 
 ## Reusability (configurable region and sensors)
 
