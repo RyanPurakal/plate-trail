@@ -245,10 +245,16 @@ stored server-side. The Edison and New Brunswick study stays as the
       `YourWeek` and `LogTable` load as separate chunks via `next/dynamic`.
       Only `GET /region` runs on load. The area card shows a pulsing
       placeholder while the first area loads.
-- [ ] Docker setup still works with the new views (data dir for the area
-      cache mounted). The compose file already mounts `./data:/data` and the
-      area cache lives under `PLATETRAIL_DATA_DIR/raw/overpass_areas`; still
-      needs a `docker compose up` run through Explore and a route check.
+- [x] Docker setup still works with the new views (data dir for the area
+      cache mounted). Checked 2026-10-26 with a fresh `docker compose up
+      --build` (separate project name and ports): `/region`, a cached and an
+      uncached `/area` (about 2 minutes for Overpass; sensor and road cache
+      files land in `data/raw/overpass_areas/` on the host), `/route/check`
+      on the study graph and on roads fetched around a route outside it,
+      `/route/history`, and the web image opening a `?bbox=` link and
+      checking a saved route in the browser. Route checks wrote nothing to
+      `data/` and the API log shows only paths. README has a short
+      "Check-up in Docker" note.
 
 ## Reusability (configurable region and sensors)
 

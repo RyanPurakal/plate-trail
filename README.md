@@ -147,6 +147,8 @@ open http://localhost:3000
 
 Rerun the data steps in that order: reloading cameras clears their snaps, so `run_roads` must follow `run_etl`.
 
+**Check-up in Docker.** Exploring an area needs only step 1. Sensors and main roads for each explored box are fetched from OpenStreetMap on demand and cached under `data/raw/overpass_areas/` (mounted at `/data`, refetched after 7 days), so the first look at a new area can take a minute or two while Overpass answers. Route checks use the study road graph from step 2 when a route lies on it; other routes get roads downloaded around them and held in memory only. Nothing about a route is written to `data/` or to the API log.
+
 **Study area.** The towns covered by the data steps come from a region file in `backend/platetrail/regions/`. The default, `nj_edison_new_brunswick`, is the NJ study. Set `PLATETRAIL_REGION` to another bundled id or to the path of a JSON file with the same fields (towns with their OSM boundary relation ids, the parent ISO 3166-2 code, and a buffer in meters) to build cameras, the road graph and places for a different area. Some parts of the simulation, such as the student routine and the density scenario, still name the NJ towns; [docs/ROADMAP.md](docs/ROADMAP.md) tracks that work.
 
 ## Using it
