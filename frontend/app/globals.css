@@ -506,3 +506,47 @@ tbody tr.focused td { background: rgba(255,255,255,0.07); }
 .ca-table th[scope="row"] { text-align: left; color: var(--dim); font-weight: normal; width: 40%; }
 .ca-table thead th { font-weight: 600; }
 .ca-open { display: block; margin: 3px 0 0 auto; }
+/* compare tables are plain data tables: undo the study log's sticky, no-wrap, clickable-row styles */
+.ca-table thead th { position: static; background: transparent; color: var(--bone); font-size: inherit;
+  letter-spacing: 0; text-transform: none; border-bottom: 1px solid var(--rule); }
+.ca-table th, .ca-table td { white-space: normal; }
+.ca-table tbody tr { cursor: default; animation: none; }
+.ca-table tbody tr:hover td { background: transparent; }
+.ex-row { gap: 10px; }
+.ex-row span:last-child { text-align: right; }
+
+/* ---------- phones ---------- */
+@media (max-width: 520px) {
+  .dossier > section, .popview > section, .masthead, .explore > .picker { padding-left: 16px; padding-right: 16px; }
+  .tabs, .switch { margin-left: 16px; margin-right: 16px; }
+  .naive { margin: 12px 16px; }
+  .error { margin: 0 16px 10px; }
+  th:first-child, td:first-child { padding-left: 16px; }
+  th:last-child, td:last-child { padding-right: 16px; }
+  .log-caption { padding-left: 16px; padding-right: 16px; }
+  /* 16px text in fields stops mobile browsers zooming the page on focus */
+  input, select { font-size: 16px; }
+  .rh-times input { font-size: 16px; }
+  .draw-hint { white-space: normal; max-width: calc(100% - 24px); text-align: center; }
+  .ca-picks { grid-template-columns: 1fr; }
+  .ca-table th[scope="row"] { width: 36%; }
+  .ca-table th, .ca-table td { padding: 5px 3px; }
+}
+
+/* touch screens: larger tap targets for buttons, steps, day toggles and the slider */
+@media (pointer: coarse) {
+  .ex-share, .ex-go, .ex-places button, .rh-tabs button { min-height: 40px; }
+  .ex-share { padding: 8px 12px; }
+  .mr-name { min-height: 40px; padding: 8px 0; }
+  .mr-step { padding: 8px 0; }
+  .mr-steps li::before { top: 14px; }
+  .mr-steps .mr-step-end { padding: 8px 0; }
+  .mr-tools { gap: 6px; }
+  .ex-actions, .ex-change-new, .sensor-nav { gap: 8px; }
+  .rh-days { gap: 6px; }
+  .rh-days label { min-height: 40px; padding: 0 7px; border: 1px solid var(--rule); }
+  .rh-days input { width: 18px; height: 18px; }
+  .rh-retention input[type="range"] { height: 36px; }
+  .learn summary, .rh-assume summary { padding: 8px 0; }
+  .ca-open { margin-top: 6px; }
+}

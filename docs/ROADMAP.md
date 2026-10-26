@@ -211,7 +211,7 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ### 6. Polish
 
-- [ ] Mobile layout, keyboard and screen-reader access for the new views.
+- [x] Mobile layout, keyboard and screen-reader access for the new views.
       - [x] Tab bars (section tabs, the study's reveal steps and saw/happened
             switch) follow the WAI-ARIA tabs pattern: arrow keys, Home and End
             move between tabs and select them, and only the selected tab is a
