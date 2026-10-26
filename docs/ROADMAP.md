@@ -216,8 +216,15 @@ stored server-side. The Edison and New Brunswick study stays as the
             switch) follow the WAI-ARIA tabs pattern: arrow keys, Home and End
             move between tabs and select them, and only the selected tab is a
             Tab stop (`lib/tabs.ts`).
-      - [ ] Mobile pass over the Explore sidebar cards (compare tables, route
-            timeline, read-history slider) at phone width.
+      - [x] Mobile pass over the Explore sidebar cards (compare tables, route
+            timeline, read-history slider) at phone width. Compare tables no
+            longer pick up the study log's sticky, no-wrap, clickable-row
+            styles, so long route names and road lists wrap. Under 520 px the
+            side gutters drop from 26 to 16 px, the compare pickers stack,
+            fields use 16 px text (no zoom on focus in mobile browsers) and
+            the draw hint wraps. On touch screens buttons, timeline steps,
+            day toggles, disclosures and the retention slider get about 40 px
+            tap targets. Checked at 375 px with no sideways scroll.
       - [x] Screen-reader pass: live-region announcements for area loads and
             route checks; map focus handling when a sensor or step is chosen.
             One hidden `role="status"` region on the page reads a short line
