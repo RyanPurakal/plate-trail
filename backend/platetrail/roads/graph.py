@@ -1,7 +1,7 @@
 """Download, cache, and store the drive network for the study area.
 
-The study area is the union of the configured region's town boundaries
-(platetrail.region; the default is Edison and New Brunswick, NJ), buffered so
+The study area is the union of the configured region's town boundaries or
+boxes (platetrail.region; the default is Edison and New Brunswick, NJ), buffered so
 routes that briefly leave town (in the default region: Route 1, the Turnpike,
 I-287) stay on the graph.
 
@@ -18,13 +18,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import geopandas as gpd
 import networkx as nx
 import osmnx as ox
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import MultiPolygon, Polygon, box
 from sqlalchemy import Engine, text
 
 from platetrail.config import get_settings
-from platetrail.region import DEFAULT_REGION, get_region
+from platetrail.region import DEFAULT_REGION, Region, get_region
 
 NETWORK_TYPE = "drive_service"  # label for the cache file; the actual filter is CUSTOM_FILTER
 # OSMnx's drive_service filter, additionally excluding parking aisles and drive-throughs.
@@ -53,10 +54,21 @@ def graph_path(data_dir: Path, region_id: str | None = None) -> Path:
     return data_dir / "graphs" / f"study_area_{NETWORK_TYPE}{suffix}.graphml"
 
 
+def town_polygons(region: Region | None = None) -> dict[str, Polygon | MultiPolygon]:
+    """Town label -> lon/lat outline: its OSM boundary relation, or its box. In region order."""
+    region = region or get_region()
+    shapes = {label: box(*bbox) for label, bbox in region.bboxes.items()}
+    relations = region.relations
+    if relations:
+        gdf = ox.geocode_to_gdf([f"R{rid}" for rid in relations.values()], by_osmid=True)
+        shapes.update(zip(relations, gdf.geometry))
+    return {t.label: shapes[t.label] for t in region.towns}
+
+
 def study_area_polygon(buffer_m: float | None = None) -> Polygon | MultiPolygon:
     region = get_region()
     buffer_m = region.buffer_m if buffer_m is None else buffer_m
-    gdf = ox.geocode_to_gdf([f"R{rid}" for rid in region.relations.values()], by_osmid=True)
+    gdf = gpd.GeoDataFrame(geometry=list(town_polygons(region).values()), crs="EPSG:4326")
     utm = gdf.to_crs(gdf.estimate_utm_crs())
     area = utm.union_all().buffer(buffer_m)
     return utm.__class__(geometry=[area], crs=utm.crs).to_crs("EPSG:4326").geometry.iloc[0]
@@ -81,6 +93,7 @@ def load_or_build_graph(refresh: bool = False, data_dir: Path | None = None) -> 
                 "built_at": datetime.now(timezone.utc).isoformat(),
                 "region": get_region().id,
                 "relations": get_region().relations,
+                **({"bboxes": get_region().bboxes} if get_region().bboxes else {}),
                 "buffer_m": get_region().buffer_m,
                 "network_type": NETWORK_TYPE,
                 "custom_filter": CUSTOM_FILTER,

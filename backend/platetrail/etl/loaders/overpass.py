@@ -1,8 +1,9 @@
 """ALPR cameras from OpenStreetMap via the Overpass API.
 
 One query per town of the configured region (platetrail.region). Each query
-also returns the town's boundary relation so a misspelled or missing boundary
-fails loudly instead of looking like a town with zero cameras.
+for a boundary-relation town also returns the relation so a misspelled or
+missing boundary fails loudly instead of looking like a town with zero
+cameras. A town given as a plain box is queried by that box.
 """
 
 import time
@@ -32,6 +33,11 @@ nwr(area.town)["man_made"="surveillance"]["surveillance:type"~"^alpr$",i];
 out center tags;"""
 
 
+BBOX_QUERY_TEMPLATE = """[out:json][timeout:90];
+nwr({south},{west},{north},{east})["man_made"="surveillance"]["surveillance:type"~"^alpr$",i];
+out center tags;"""
+
+
 class BoundaryNotFound(RuntimeError):
     pass
 
@@ -42,14 +48,28 @@ def build_query(osm_name: str, parent_iso3166_2: str = "US-NJ", admin_level: int
     return QUERY_TEMPLATE.format(name=osm_name, parent=parent_iso3166_2, admin_level=admin_level)
 
 
+def build_bbox_query(bbox: tuple[float, float, float, float]) -> str:
+    west, south, east, north = bbox
+    return BBOX_QUERY_TEMPLATE.format(west=west, south=south, east=east, north=north)
+
+
 def towns_for(region: Region) -> dict[str, tuple[str, int]]:
-    """Town label -> (OSM boundary name, admin_level)."""
-    return {t.label: (t.osm_name, t.admin_level) for t in region.towns}
+    """Town label -> (OSM boundary name, admin_level), for towns defined by a relation."""
+    return {t.label: (t.osm_name, t.admin_level) for t in region.towns if t.osm_relation is not None}
 
 
-def parse_response(town: str, response: dict) -> list[CameraRecord]:
+def town_queries(region: Region) -> dict[str, tuple[str, bool]]:
+    """Town label -> (Overpass query, whether the response must hold a boundary relation). In region order."""
+    return {
+        t.label: (build_bbox_query(t.bbox), False) if t.bbox is not None
+        else (build_query(t.osm_name, region.parent_iso3166_2, t.admin_level), True)
+        for t in region.towns
+    }
+
+
+def parse_response(town: str, response: dict, expect_boundary: bool = True) -> list[CameraRecord]:
     elements = response.get("elements", [])
-    if not any(e.get("type") == "relation" and e.get("tags", {}).get("boundary") == "administrative" for e in elements):
+    if expect_boundary and not any(e.get("type") == "relation" and e.get("tags", {}).get("boundary") == "administrative" for e in elements):
         raise BoundaryNotFound(f"Overpass returned no boundary relation for {town!r}; check the OSM name")
 
     records = []
@@ -149,8 +169,7 @@ class OverpassLoader(CameraLoader):
 
     def load(self, refresh: bool = False) -> list[CameraRecord]:
         records: list[CameraRecord] = []
-        for town, (osm_name, admin_level) in towns_for(self.region).items():
-            query = build_query(osm_name, self.region.parent_iso3166_2, admin_level)
+        for town, (query, expect_boundary) in town_queries(self.region).items():
             response = self.cache.get_or_fetch(query, lambda q=query: self.overpass.fetch(q), refresh=refresh)
-            records.extend(parse_response(town, response))
+            records.extend(parse_response(town, response, expect_boundary))
         return records

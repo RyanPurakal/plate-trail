@@ -293,8 +293,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       with a generic upper-bound sentence when `read_volume` is missing. The
       NJ figures now live in `nj_edison_new_brunswick.json`; the frontend no
       longer checks the region id.
-- [ ] Region bounding box option: allow a plain bbox instead of OSM boundary
-      relations for areas without clean municipal boundaries.
+- [x] Region bounding box option: allow a plain bbox instead of OSM boundary
+      relations for areas without clean municipal boundaries. A town may be
+      `{"label": ..., "bbox": [west, south, east, north]}` (at most 0.5 deg a
+      side, like `GET /area`) instead of an OSM relation; the two kinds mix
+      in one region. Box towns query cameras and places by the box (no
+      boundary check), feed the study-area polygon as plain rectangles
+      (`roads.graph.town_polygons`) and are stored in `towns` with an
+      `osm_id` of `bbox/w,s,e,n`. The default region's Overpass query texts
+      are unchanged, so existing caches stay valid.
 - [ ] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
       small worked example region file.
 - [ ] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors

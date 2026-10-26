@@ -28,6 +28,12 @@ Without it, students' homes and schools are drawn from the whole region.
 scenario_town is where the density scenario adds synthetic sensors; it
 defaults to the first town.
 
+A town is either an OSM boundary relation ("osm_name", "osm_relation",
+optional "admin_level") or, for areas without clean municipal boundaries, a
+plain box: {"label": "Downtown", "bbox": [west, south, east, north]} in
+degrees, at most MAX_TOWN_BBOX_DEG a side. Box towns are queried and clipped
+by that box instead of a boundary; the two kinds can be mixed in one region.
+
 camera_sources (optional) lists where the fixed sensors come from, in source
 priority order for deduplication: {"type": "osm"} queries OpenStreetMap per
 town; {"type": "file", "path": ..., "source": ...} reads a GeoJSON or CSV
@@ -63,9 +69,10 @@ class RegionConfigError(ValueError):
 @dataclass(frozen=True)
 class Town:
     label: str  # name used in the database and UI
-    osm_name: str  # boundary relation's name tag in OSM
-    osm_relation: int
+    osm_name: str | None = None  # boundary relation's name tag in OSM
+    osm_relation: int | None = None
     admin_level: int = 8
+    bbox: tuple[float, float, float, float] | None = None  # (west, south, east, north), instead of a relation
 
 
 @dataclass(frozen=True)
@@ -76,6 +83,7 @@ class CameraSource:
 
 
 SOURCE_TYPES = ("osm", "file")
+MAX_TOWN_BBOX_DEG = 0.5  # same limit as GET /area
 NOTE_KEYS = ("unlisted_sensors", "read_volume")
 
 
@@ -116,8 +124,13 @@ class Region:
 
     @property
     def relations(self) -> dict[str, int]:
-        """Town label -> OSM boundary relation id."""
-        return {t.label: t.osm_relation for t in self.towns}
+        """Town label -> OSM boundary relation id, for towns defined by a relation."""
+        return {t.label: t.osm_relation for t in self.towns if t.osm_relation is not None}
+
+    @property
+    def bboxes(self) -> dict[str, tuple[float, float, float, float]]:
+        """Town label -> (west, south, east, north), for towns defined by a box."""
+        return {t.label: t.bbox for t in self.towns if t.bbox is not None}
 
 
 def _parse_sources(raw: list | None, base_dir: Path | None) -> tuple[CameraSource, ...]:
@@ -169,6 +182,23 @@ def _parse_map(raw: dict | None) -> MapDefaults:
     return view
 
 
+def _parse_town(raw: dict) -> Town:
+    label = str(raw["label"])
+    if raw.get("bbox") is None:
+        return Town(label, str(raw["osm_name"]), int(raw["osm_relation"]), int(raw.get("admin_level", 8)))
+    if any(k in raw for k in ("osm_name", "osm_relation", "admin_level")):
+        raise ValueError(f"town {label!r}: use either bbox or an OSM relation, not both")
+    bbox = raw["bbox"]
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        raise ValueError(f"town {label!r}: bbox must be [west, south, east, north]")
+    w, s, e, n = (float(v) for v in bbox)
+    if not (_valid_lonlat(w, s) and _valid_lonlat(e, n) and w < e and s < n):
+        raise ValueError(f"town {label!r}: bbox needs west < east and south < north, in range")
+    if e - w > MAX_TOWN_BBOX_DEG or n - s > MAX_TOWN_BBOX_DEG:
+        raise ValueError(f"town {label!r}: bbox is over {MAX_TOWN_BBOX_DEG} deg a side")
+    return Town(label, bbox=(w, s, e, n))
+
+
 def _parse_notes(raw: dict | None) -> tuple[tuple[str, str], ...]:
     if raw is None:
         return ()
@@ -186,10 +216,7 @@ def _parse_notes(raw: dict | None) -> tuple[tuple[str, str], ...]:
 
 def parse_region(data: dict, base_dir: Path | None = None) -> Region:
     try:
-        towns = tuple(
-            Town(str(t["label"]), str(t["osm_name"]), int(t["osm_relation"]), int(t.get("admin_level", 8)))
-            for t in data["towns"]
-        )
+        towns = tuple(_parse_town(t) for t in data["towns"])
         region = Region(
             id=str(data["id"]),
             name=str(data["name"]),

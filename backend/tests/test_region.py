@@ -121,3 +121,53 @@ def test_notes_are_optional_and_parsed():
 def test_invalid_notes_are_rejected(bad):
     with pytest.raises(RegionConfigError):
         parse_region({**BASE, "notes": bad})
+
+
+def _box_region(**town):
+    return parse_region({"id": "b", "name": "B", "parent_iso3166_2": "US-PA",
+                         "towns": [{"label": "Downtown", **town},
+                                   {"label": "A", "osm_name": "A", "osm_relation": 7}]})
+
+
+def test_town_can_be_a_plain_bbox():
+    r = _box_region(bbox=[-75.2, 39.9, -75.1, 40.0])
+    assert r.towns[0].bbox == (-75.2, 39.9, -75.1, 40.0)
+    assert r.towns[0].osm_relation is None
+    assert r.bboxes == {"Downtown": (-75.2, 39.9, -75.1, 40.0)}
+    assert r.relations == {"A": 7}
+    assert r.labels == ("Downtown", "A")
+
+
+@pytest.mark.parametrize("town", [
+    {"bbox": [-75.1, 39.9, -75.2, 40.0]},  # west > east
+    {"bbox": [-75.2, 39.9, -75.1]},
+    {"bbox": [-75.2, 39.9, -74.5, 40.0]},  # over the size limit
+    {"bbox": [-75.2, 39.9, -75.1, 95.0]},
+    {"bbox": [-75.2, 39.9, -75.1, 40.0], "osm_relation": 1, "osm_name": "X"},
+    {},  # neither a box nor a relation
+])
+def test_invalid_bbox_towns_are_rejected(town):
+    with pytest.raises(RegionConfigError):
+        _box_region(**town)
+
+
+def test_town_polygons_use_boxes_without_network():
+    from platetrail.roads.graph import town_polygons
+
+    r = parse_region({"id": "b", "name": "B", "parent_iso3166_2": "US-PA",
+                      "towns": [{"label": "Downtown", "bbox": [-75.2, 39.9, -75.1, 40.0]}]})
+    shapes = town_polygons(r)
+    assert list(shapes) == ["Downtown"]
+    assert shapes["Downtown"].bounds == (-75.2, 39.9, -75.1, 40.0)
+
+
+def test_places_query_covers_bbox_towns(monkeypatch):
+    from platetrail.routines import places
+
+    r = _box_region(bbox=[-75.2, 39.9, -75.1, 40.0])
+    monkeypatch.setattr(places, "get_region", lambda: r)
+    q = places.build_query()
+    assert "area(id:3600000007)->.a;" in q
+    assert 'nwr(area.a)["shop"];' in q
+    assert 'nwr(39.9,-75.2,40.0,-75.1)["shop"];' in q  # south,west,north,east
+    assert q.endswith(");\nout center tags;")
