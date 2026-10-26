@@ -1,9 +1,10 @@
 # Findings
 
-Results recorded as the project is built, with the configuration that
-produced them. All drivers are synthetic.
+Results of the example study (Edison and New Brunswick, NJ), recorded as the
+project is built, with the configuration that produced them. All drivers are
+synthetic. The check-up tool's "Learn more" panels quote F5.
 
-**About the 92-camera network.** Edison approved 92 more Flock cameras, but their locations are not public. Every "+92" result in this project uses a **hypothetical, simulated placement**: 92 synthetic cameras on Edison arterials (trunk, primary, secondary and tertiary roads), chosen with probability proportional to road length, at least 300 m from every real and other synthetic camera, each reading one travel direction, and drawn anew for each seed (`sim/scenarios.py`). Real locations would change these results.
+**About the 92-camera network.** Edison approved 92 additional cameras, but their locations are not public. Every "+92" result in this project uses a **hypothetical, simulated placement**: 92 synthetic cameras on Edison arterials (trunk, primary, secondary and tertiary roads), chosen with probability proportional to road length, at least 300 m from every real and other synthetic camera, each reading one travel direction, and drawn anew for each seed (`sim/scenarios.py`). Real locations would change these results.
 
 ## F1. Coverage is sparse: one commuter's week is about 11 reads, 10 of 12 captures from one camera
 

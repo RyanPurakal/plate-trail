@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { routeHistory, type HistoryPeriod, type HistoryPlace, type RouteHistory as History } from "@/lib/api";
 import type { Pt } from "@/lib/routes";
+import LearnMore from "./LearnMore";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -133,6 +134,8 @@ export default function RouteHistory({ start, end }: { start: Pt; end: Pt }) {
             Each period is the most recent part of one simulated year, so a longer period includes the shorter ones.
             Distances are from the saved start or end point. This was worked out on the server and not stored there.
           </div>
+          <LearnMore topic="retention" />
+          <LearnMore topic="unicity" />
         </div>
       )}
     </div>

@@ -182,22 +182,73 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ### 5. Learn more panels
 
-- [ ] Short neutral explainers: what fixed sensors record, how retention
+- [x] Short neutral explainers: what fixed sensors record, how retention
       length changes what can be inferred, the unicity finding. Link them from
-      where they are relevant.
-- [ ] Move the NJ study (map run, log table, population view, your week) to an
-      "Example study" section; the check-up becomes the home page.
-- [ ] Wording pass across README, docs and UI: describe the project as a
-      location-privacy check-up, with the NJ ALPR study as the example. The
-      masthead kicker still says "ALPR privacy audit". Keep data-source
-      credits factual.
+      where they are relevant. `components/LearnMore.tsx` holds the three
+      texts and renders each as a "Learn more: ..." disclosure (native
+      `<details>`, keyboard and screen-reader friendly). Linked from the area
+      summary and sensor detail cards (sensors), under route read-history
+      results (retention, unicity) and under the example study's unicity
+      chart. Unicity figures quote docs/findings.md F5.
+- [x] Move the NJ study (map run, log table, population view, your week) to an
+      "Example study" section; the check-up becomes the home page. The page
+      now opens on Explore (tab "Check-up"); One driver, Population & policy
+      and Your week sit after an "Example study" label in the tab bar, with
+      their own heading and lede. `?study=driver|population|yourweek` links
+      straight to a study section (it replaces `?bbox=` while one is open);
+      the masthead kicker reads "location-privacy check-up".
+- [x] Wording pass across README and docs: describe the project as a
+      location-privacy check-up, with the NJ ALPR study as the example. Keep
+      data-source credits factual. (UI masthead done with the home-page move.)
+      README opens with the check-up (explore, my routes, since your last
+      visit, compare), "Why this exists" is reworded neutrally, results and
+      the old feature list sit under "Example study", "Using it" covers the
+      Check-up tab, and Ethics notes on-device storage and no avoidance
+      routing. architecture.md and findings.md say how the study relates to
+      the check-up; the proposal carries a note that it is kept for reference.
+      Camera-count tables still name the manufacturer where it is the OSM tag
+      or a source's own count.
 
 ### 6. Polish
 
-- [ ] Mobile layout, keyboard and screen-reader access for the new views.
-- [ ] Fast loading: lazy-load the example study; skeletons for the area card.
+- [x] Mobile layout, keyboard and screen-reader access for the new views.
+      - [x] Tab bars (section tabs, the study's reveal steps and saw/happened
+            switch) follow the WAI-ARIA tabs pattern: arrow keys, Home and End
+            move between tabs and select them, and only the selected tab is a
+            Tab stop (`lib/tabs.ts`).
+      - [x] Mobile pass over the Explore sidebar cards (compare tables, route
+            timeline, read-history slider) at phone width. Compare tables no
+            longer pick up the study log's sticky, no-wrap, clickable-row
+            styles, so long route names and road lists wrap. Under 520 px the
+            side gutters drop from 26 to 16 px, the compare pickers stack,
+            fields use 16 px text (no zoom on focus in mobile browsers) and
+            the draw hint wraps. On touch screens buttons, timeline steps,
+            day toggles, disclosures and the retention slider get about 40 px
+            tap targets. Checked at 375 px with no sideways scroll.
+      - [x] Screen-reader pass: live-region announcements for area loads and
+            route checks; map focus handling when a sensor or step is chosen.
+            One hidden `role="status"` region on the page reads a short line
+            (`lib/announce.ts`) when an area starts and finishes loading
+            (sensor count, main-road share, changes since the last look) and
+            when a route check starts and finishes (sensors passed and passes
+            that would record, per direction). The area card, sensor card and
+            route result are no longer live regions, so a load is not read as
+            the whole card. Picking a sensor on the map or with "Step through
+            sensors" moves focus to the sensor card (labelled "Selected
+            sensor, n of m"); Previous/Next keep focus; closing the card puts
+            focus back on "Step through sensors". Timeline steps keep focus on
+            the step button, which reports its state with `aria-pressed`.
+- [x] Fast loading: lazy-load the example study (the page still fetches
+      cameras and runs on load, even on Explore); skeletons for the area card.
+      Cameras and runs are fetched the first time a study tab opens (retried
+      on the next study tab if the API was unreachable); `PopulationView`,
+      `YourWeek` and `LogTable` load as separate chunks via `next/dynamic`.
+      Only `GET /region` runs on load. The area card shows a pulsing
+      placeholder while the first area loads.
 - [ ] Docker setup still works with the new views (data dir for the area
-      cache mounted).
+      cache mounted). The compose file already mounts `./data:/data` and the
+      area cache lives under `PLATETRAIL_DATA_DIR/raw/overpass_areas`; still
+      needs a `docker compose up` run through Explore and a route check.
 
 ## Reusability (configurable region and sensors)
 

@@ -8,9 +8,6 @@ import CompareAreas from "@/components/CompareAreas";
 import CompareRoutes from "@/components/CompareRoutes";
 import SinceLastVisit from "@/components/SinceLastVisit";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
-import LogTable from "@/components/LogTable";
-import PopulationView from "@/components/PopulationView";
-import YourWeek from "@/components/YourWeek";
 import type { Layers, Mode } from "@/components/MapView";
 import {
   checkRoute,
@@ -37,16 +34,28 @@ import { dayKey, km, parts, templateName } from "@/lib/format";
 import { areaKey, areaSnapshot, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
+import { onTabListKeyDown, tabStop } from "@/lib/tabs";
+import { areaAnnouncement, nextAnnouncement, routeAnnouncement } from "@/lib/announce";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
+// Example study views load only when a study tab is opened, so the check-up stays light.
+const LogTable = dynamic(() => import("@/components/LogTable"));
+const PopulationView = dynamic(() => import("@/components/PopulationView"));
+const YourWeek = dynamic(() => import("@/components/YourWeek"));
 
 type Tab = "explore" | "driver" | "population" | "yourweek";
+type StudyTab = Exclude<Tab, "explore">;
 
-/** Keep the explored box (and nothing else) in the address bar so the area page can be shared. */
-function setAreaUrl(bbox: BBox | null) {
-  const url = bbox ? `${window.location.pathname}?bbox=${formatBBox(bbox)}` : window.location.pathname;
-  window.history.replaceState(null, "", url);
+const STUDY_TABS: readonly (readonly [StudyTab, string])[] = [
+  ["driver", "One driver"], ["population", "Population & policy"], ["yourweek", "Your week"],
+];
+const isStudyTab = (s: string | null): s is StudyTab => STUDY_TABS.some(([k]) => k === s);
+
+/** Keep the explored box or the example-study section (and nothing else) in the address bar so the page can be shared. */
+function setPageUrl(tab: Tab, bbox: BBox | null) {
+  const q = tab !== "explore" ? `?study=${tab}` : bbox ? `?bbox=${formatBBox(bbox)}` : "";
+  window.history.replaceState(null, "", window.location.pathname + q);
 }
 
 const REVEAL_STEPS = ["Reads", "Places", "Schedule", "Anomalies"];
@@ -62,9 +71,9 @@ function RevealCard({ inference, reveal, setReveal, mode }: {
         <span>What an analyst can infer</span>
         <span className="nb-badge engine-badge" title={inference.method}>inference engine</span>
       </div>
-      <div className="steps" role="tablist" aria-label="reveal step">
+      <div className="steps" role="tablist" aria-label="reveal step" onKeyDown={onTabListKeyDown}>
         {REVEAL_STEPS.map((label, i) => (
-          <button key={label} role="tab" aria-selected={reveal === i} className={reveal >= i ? "on" : ""} onClick={() => setReveal(i)}>
+          <button key={label} role="tab" aria-selected={reveal === i} tabIndex={tabStop(reveal === i)} className={reveal >= i ? "on" : ""} onClick={() => setReveal(i)}>
             <span>{i + 1}</span>{label}
           </button>
         ))}
@@ -158,7 +167,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
-  const [tab, setTab] = useState<Tab>("driver");
+  const [tab, setTab] = useState<Tab>("explore");
   const [reveal, setReveal] = useState(0);
   const [pickMode, setPickMode] = useState<"home" | "work" | null>(null);
   const [pins, setPins] = useState<{ home: [number, number] | null; work: [number, number] | null }>({ home: null, work: null });
@@ -179,19 +188,24 @@ export default function Home() {
   const [shownRoute, setShownRoute] = useState<string | null>(null);
   const [routeChecks, setRouteChecks] = useState<Record<string, RouteCheckState>>({}); // by route id, this page only
   const [stepFocus, setStepFocus] = useState<StepFocus | null>(null); // timeline step shown on the map
+  const [announcement, setAnnouncement] = useState(""); // read by screen readers when an area loads or a route is checked
+  const announce = (text: string) => setAnnouncement((prev) => nextAnnouncement(prev, text));
   const viewBox = useRef<BBox | null>(null);
 
   async function loadArea(bbox: BBox) {
     setAreaLoading(true);
     setAreaError(null);
+    announce("Loading public map data for this area…");
     try {
       const a = await getArea(bbox);
       setArea(a);
       // Saved areas' looks are kept however long ago they were; read fresh so another tab's saves count too.
       const pinned = new Set(loadAreas().map((x) => areaKey(x.bbox)));
-      setAreaChange(recordLook(areaKey(a.bbox), areaSnapshot(a), pinned));
+      const change = recordLook(areaKey(a.bbox), areaSnapshot(a), pinned);
+      setAreaChange(change);
+      announce(areaAnnouncement(a, change));
       setSensorId(null);
-      setAreaUrl(a.bbox);
+      setPageUrl("explore", a.bbox);
     } catch (e) {
       setAreaError((e as Error).message);
     } finally {
@@ -244,10 +258,12 @@ export default function Home() {
     const r = routes.find((x) => x.id === id);
     if (!r) return;
     setRouteChecks((c) => ({ ...c, [id]: { loading: true, result: null, error: null } }));
+    announce(`Checking ${r.name}…`);
     try {
       const result = await checkRoute(r.start, r.end);
       const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.camera_id))));
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null, change } }));
+      announce(routeAnnouncement(r.name, result, change));
     } catch (e) {
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result: null, error: (e as Error).message } }));
     }
@@ -272,17 +288,24 @@ export default function Home() {
   useEffect(() => setStepFocus(null), [routeLegs]);
 
   useEffect(() => {
-    // An area link (?bbox=w,s,e,n) opens straight into the Explore view.
-    const bbox = parseBBox(new URLSearchParams(window.location.search).get("bbox"));
-    if (bbox) {
-      setTab("explore");
-      loadArea(bbox);
-    }
+    // Explore is the home page; an area link (?bbox=w,s,e,n) loads that area, ?study=<section> opens the example study.
+    const params = new URLSearchParams(window.location.search);
+    const study = params.get("study");
+    const bbox = parseBBox(params.get("bbox"));
+    if (isStudyTab(study)) setTab(study);
+    else if (bbox) loadArea(bbox);
   }, []);
 
   useEffect(() => {
     // Optional: without it the map keeps its built-in default view.
     getRegion().then(setRegion).catch(() => {});
+  }, []);
+
+  // The example study's cameras and runs are fetched the first time a study tab opens, not on the check-up.
+  const studyOpened = useRef(false);
+  useEffect(() => {
+    if (tab === "explore" || studyOpened.current) return;
+    studyOpened.current = true;
     Promise.all([getCameras(), getRuns()])
       .then(([c, r]) => {
         setCameras(c);
@@ -290,8 +313,11 @@ export default function Home() {
         const fresh = r.find((x) => !x.stale) ?? r[0];
         if (fresh) setRunId(fresh.id);
       })
-      .catch((e: Error) => setError(`API unreachable: ${e.message}`));
-  }, []);
+      .catch((e: Error) => {
+        studyOpened.current = false; // try again on the next study tab switch
+        setError(`API unreachable: ${e.message}`);
+      });
+  }, [tab]);
 
   useEffect(() => {
     if (runId == null) return;
@@ -307,7 +333,7 @@ export default function Home() {
     setPickMode(null);
     setDrawing(false);
     setRouteDraft(null);
-    setAreaUrl(t === "explore" ? area?.bbox ?? null : null);
+    setPageUrl(t, area?.bbox ?? null);
     if (t === "driver" && detail?.stored === false && runId != null) {
       setDetail(null);
       getRun(runId).then(setDetail).catch((e: Error) => setError(e.message));
@@ -380,19 +406,34 @@ export default function Home() {
 
   return (
     <div className={`shell mode-${mode}`}>
+      <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
       <aside className="dossier">
         <header className="masthead">
-          <div className="kicker">Plate Trail · ALPR privacy audit</div>
-          <h1>What the cameras saw</h1>
-          <p className="lede">
-            One synthetic driver, real camera positions in {regionName}. Compare the read log an
-            agency would hold with the week the driver actually drove.
-          </p>
+          <div className="kicker">Plate Trail · location-privacy check-up</div>
+          {tab === "explore" ? (
+            <>
+              <h1>Sensors on your map</h1>
+              <p className="lede">
+                Look up public fixed-sensor locations for any area, check the routes you drive, and see
+                what changed since your last visit. Your routes stay in this browser.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1>Example study: what the cameras saw</h1>
+              <p className="lede">
+                One synthetic driver, real camera positions in {regionName}. Compare the read log an
+                agency would hold with the week the driver actually drove.
+              </p>
+            </>
+          )}
         </header>
 
-        <nav className="tabs" role="tablist" aria-label="section">
-          {([["explore", "Explore an area"], ["driver", "One driver"], ["population", "Population & policy"], ["yourweek", "Your week"]] as const).map(([k, label]) => (
-            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => switchTab(k)}>{label}</button>
+        <nav className="tabs" role="tablist" aria-label="section" onKeyDown={onTabListKeyDown}>
+          <button role="tab" aria-selected={tab === "explore"} tabIndex={tabStop(tab === "explore")} className={tab === "explore" ? "on" : ""} onClick={() => switchTab("explore")}>Check-up</button>
+          <span className="tabs-group" aria-hidden="true">Example study</span>
+          {STUDY_TABS.map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={tab === k} tabIndex={tabStop(tab === k)} aria-label={`Example study: ${label}`} className={tab === k ? "on" : ""} onClick={() => switchTab(k)}>{label}</button>
           ))}
         </nav>
 
@@ -503,12 +544,12 @@ export default function Home() {
           </section>
         )}
 
-        <section className="switch" role="tablist" aria-label="view">
-          <button role="tab" aria-selected={mode === "saw"} className={mode === "saw" ? "on" : ""} onClick={() => setMode("saw")}>
+        <section className="switch" role="tablist" aria-label="view" onKeyDown={onTabListKeyDown}>
+          <button role="tab" aria-selected={mode === "saw"} tabIndex={tabStop(mode === "saw")} className={mode === "saw" ? "on" : ""} onClick={() => setMode("saw")}>
             <span className="sw-k">What the cameras saw</span>
             <span className="sw-v">{view.reads.length}<small> reads · {cameraCount} cam{cameraCount === 1 ? "" : "s"}</small></span>
           </button>
-          <button role="tab" aria-selected={mode === "happened"} className={mode === "happened" ? "on" : ""} onClick={() => setMode("happened")}>
+          <button role="tab" aria-selected={mode === "happened"} tabIndex={tabStop(mode === "happened")} className={mode === "happened" ? "on" : ""} onClick={() => setMode("happened")}>
             <span className="sw-k">What actually happened</span>
             <span className="sw-v">{truth.trips}<small> trips · {km(truth.km * 1)}</small></span>
           </button>

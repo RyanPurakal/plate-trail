@@ -1,37 +1,36 @@
 # Plate Trail
 
-**What license plate cameras can reconstruct about your week.**
+**A location-privacy check-up for any area and your own routes.**
 
-Plate Trail measures what a history of automated license plate reader (ALPR) reads can reveal about a driver. It combines:
-- the real camera locations in Edison and New Brunswick, NJ;
-- realistic travel behaviour from the 2022 National Household Travel Survey (NHTS);
-- a population-scale analysis of how quickly drivers become uniquely identifiable.
+Plate Trail shows where fixed license plate reader (ALPR) and similar sensors are recorded in public map data, and explains in plain language what a history of their reads could suggest about a regular drive. It is a tool to come back to:
+- **Explore any area.** Search a town or address, or draw a box, and see the mapped sensors with a summary of how many there are, how much of the main road network they sit near, and where the data comes from and how fresh it is.
+- **Check your own routes, kept on your device.** Add the drives you make (a commute, a school run) by clicking start and end. Routes are saved only in your browser; the server computes a check and keeps nothing. Each route shows the sensors passed, a timeline of where reads would happen, and what a few days to a year of read history could suggest.
+- **See what changed since your last visit.** Saved areas and checked routes keep a local snapshot, so on return the app lists sensors newly mapped or no longer listed, and data updates.
+- **Compare and drill down.** Two areas or two routes side by side, sensor details, a retention-period slider, and short "Learn more" explainers.
 
-It then compares the policies an agency could adopt by how much each one reduces what the data reveals.
+The **example study** behind it measures, for Edison and New Brunswick, NJ, what a read history can reveal about synthetic drivers. It combines the mapped camera locations, travel behaviour from the 2022 National Household Travel Survey (NHTS), and a population-scale analysis of how quickly drivers become uniquely identifiable, then compares retention and access policies by how much each reduces what the data reveals.
 
-No real plate reads are used. Every driver is synthetic, and every plate carries the made-up state code `ZZ`.
+No real plate reads are used. Every driver in the study is synthetic, and every plate carries the made-up state code `ZZ`. The app does not suggest routes around sensors and has no information about any real vehicle.
 
 | What the cameras saw | What actually happened |
 |---|---|
 | ![Read log as recorded: reads, the implied sequence, and the naive HOME?/WORK? guess](docs/figures/demo_run8_saw.jpg) | ![Ground truth: true routes, every camera pass, true home and work, and the guess's error](docs/figures/demo_run8_happened.jpg) |
 
-*Demo run #8: a 4-week commuter, plate `ZZ F33PQR`. These screenshots are also the presentation fallback if the live demo fails.*
+*Example study, demo run #8: a 4-week commuter, plate `ZZ F33PQR`. These screenshots are also the presentation fallback if the live demo fails.*
 
 ---
 
 ## Why this exists
 
-ALPR networks are expanding fast, and Edison recently approved 92 more Flock cameras. The public debate is stuck between two positions:
-- "the cameras only log a plate at a few fixed points";
-- "enough reads reveal a person's whole routine".
+Fixed sensors that read license plates are common on public roads, and their locations are often recorded in public map data. What is harder to picture is what a history of reads adds up to: a single read places a car at one point, while many reads over weeks can show a routine. How much they show depends on where the sensors are, which way they face, and how long reads are kept.
 
-Neither side usually backs its claim with real camera positions and measured numbers. Courts increasingly ask how complete a picture location data paints (the "mosaic" argument in *Carpenter v. United States*). Plate Trail answers that question with measurements for this specific camera network. It also shows how the answer changes with camera density, retention and policy.
+Plate Trail makes that concrete for the places a person actually lives and drives, using only public sensor locations and simulated reads. The example study adds measured numbers for one network, including how the answer changes with sensor density, retention and access policy. The question of how complete a picture location data paints also comes up in courts (the "mosaic" argument in *Carpenter v. United States*); the project reports measurements rather than taking a side.
 
-## Headline results
+## Example study: headline results
 
-All results come from synthetic drivers on the real camera network. Details and caveats are in [docs/findings.md](docs/findings.md).
+All results come from synthetic drivers on the mapped camera network in Edison and New Brunswick, NJ. Details and caveats are in [docs/findings.md](docs/findings.md).
 
-**About the 92-camera network.** Edison approved 92 more Flock cameras, but their locations are not public. Every "+92" result in this project uses a **hypothetical, simulated placement**: 92 synthetic cameras on Edison arterials (trunk, primary, secondary and tertiary roads), chosen with probability proportional to road length, at least 300 m from every real and other synthetic camera, each reading one travel direction, and drawn anew for each seed (`sim/scenarios.py`). Real locations would change these results.
+**About the 92-camera network.** Edison approved 92 additional cameras, but their locations are not public. Every "+92" result in this project uses a **hypothetical, simulated placement**: 92 synthetic cameras on Edison arterials (trunk, primary, secondary and tertiary roads), chosen with probability proportional to road length, at least 300 m from every real and other synthetic camera, each reading one travel direction, and drawn anew for each seed (`sim/scenarios.py`). Real locations would change these results.
 
 - **Coverage is sparse today.** A typical driver is read 5 times a week (interquartile range 3–9). About 59% of a driver's reads come from a single camera, and 7% of drivers are never read in a week.
 - **Even so, a few sightings identify a car.** In a crowd of 1,000, two (camera, hour) sightings single out 78% of the drivers who have two (3 seeds: 78–79%), and four single out 99.8% of those with four. With four weeks of history, 99% of all drivers are unique at four sightings (3 seeds: 98–99%).
@@ -42,6 +41,16 @@ All results come from synthetic drivers on the real camera network. Details and 
   - One week of the hypothetical 92-camera network reveals more than four weeks of today's.
 
 ## What it does
+
+### Check-up
+
+1. **Loads public sensor locations for any box** (`GET /area`): OpenStreetMap nodes tagged `surveillance:type=ALPR`, plus any sensor files configured for the region, cached on disk and refreshed after 7 days. No region file is needed for an ad-hoc area. Place search goes through Nominatim (`POST /geocode`), with the query sent in the request body and not logged or stored.
+2. **Summarizes the area:** sensor count and density, how many have a known facing direction, the share of main-road length within 100 m of a sensor, and each data source with its fetch date and latest map edit.
+3. **Checks a route** (`POST /route/check`): routes the drive both ways on the study road network, or on a road network built around the route elsewhere, and lists each sensor passed with whether its direction would record the trip. Compute-only: nothing is stored, cached or logged.
+4. **Says what a read history could suggest** (`POST /route/history`): repeats the route on a weekly schedule, applies the sensor noise model and runs the study's inference engine on 1 day to 1 year of reads, then reports regular passes and suggested overnight and daytime areas in plain sentences. Also compute-only.
+5. **Keeps everything personal in the browser:** saved routes, saved areas and the last-look snapshots behind "Since your last visit" live in `localStorage`. Area links hold only map coordinates.
+
+### Example study
 
 1. **Builds the camera network.** It loads ALPR cameras from OpenStreetMap, which is also where DeFlock stores its crowdsourced map, and deduplicates them. It cross-checks the counts against agency transparency figures, then snaps each camera to the road it watches, with its facing direction.
 2. **Simulates realistic weeks.** Weekly routines are assembled from NHTS one-day trip diaries and placed at real Edison / New Brunswick places, then routed on the real road network. A hand-written template generator is kept as a fallback.
@@ -62,6 +71,10 @@ All results come from synthetic drivers on the real camera network. Details and 
 
 | Component | Status |
 |---|---|
+| Check-up: explore any area (search, draw a box, summary card, sensor details) | ✅ |
+| Check-up: my routes on this device (route check, read timeline, read-history periods with retention slider) | ✅ |
+| Check-up: since your last visit, compare areas and routes, Learn more explainers | ✅ |
+| Check-up: mobile and accessibility polish, lazy-loaded example study | in progress ([roadmap](docs/ROADMAP.md)) |
 | Camera ETL (OSM / DeFlock), dedupe, agency count cross-check, hypothetical density scenario | ✅ |
 | Road network, direction-aware snapping, lot / service-road cameras | ✅ |
 | NHTS-based routine generator (template generator kept as a fallback) | ✅ |
@@ -71,7 +84,7 @@ All results come from synthetic drivers on the real camera network. Details and 
 | Population simulation (1,000 drivers) + unicity analysis | ✅ |
 | Policy comparison | ✅ |
 | Celery queue with progress reporting; Redis route / run / analysis cache | ✅ |
-| Frontend: map, read log, step-by-step reveal, unicity and policy charts, "your week" | ✅ |
+| Example study frontend: map, read log, step-by-step reveal, unicity and policy charts, "your week" | ✅ |
 | Real-data validation (Google Timeline importer) | ✅ built and tested on synthetic exports; **not yet run on a real file** ([open questions](docs/OPEN_QUESTIONS.md)) |
 
 ## Architecture
@@ -138,7 +151,16 @@ Rerun the data steps in that order: reloading cameras clears their snaps, so `ru
 
 ## Using it
 
-- **Explore an area:** move the map anywhere and load the fixed sensors recorded there in public map data (OpenStreetMap, plus any configured sensor files). The summary card lists the count, density, how many have a known direction, and each source with its fetch date. Click a sensor for details. The area is kept in the address (`?bbox=west,south,east,north`), so the page can be bookmarked or shared; it holds only map coordinates.
+The page opens on the **Check-up** tab. The example study's sections follow an "Example study" label in the tab bar.
+
+- **Explore an area:** search a town or address, draw a box, or explore the current map view, and load the fixed sensors recorded there in public map data (OpenStreetMap, plus any configured sensor files). The summary card lists the count, density, how many have a known direction, main-road coverage, and each source with its fetch date. Click a sensor for details, or step through them from the keyboard. Save an area to open it again later. The area is kept in the address (`?bbox=west,south,east,north`), so the page can be bookmarked or shared; it holds only map coordinates.
+- **My routes:** "Add a route", then click start and end on the map. "Check this route" draws the drive both ways, rings the sensors passed and lists a read timeline; click a step to see it on the map. Below it, pick the days and times you usually drive and move the retention slider to see what 1 day to 1 year of reads could suggest. Routes stay in this browser; "Remove all from this device" clears them.
+- **Since your last visit:** when you come back, saved areas are re-checked and any newly listed or no longer listed sensors and data updates are shown at the top. Routes you checked before can be re-checked with one button.
+- **Compare:** pick two saved areas or two saved routes to see them side by side.
+- **Learn more:** short explainers on what fixed sensors record, how retention length changes what can be inferred, and the study's unicity finding, linked from the cards they explain.
+
+Example study (`?study=driver|population|yourweek` links straight to a section):
+
 - **One driver:** pick or simulate a driver, then switch between what the cameras saw and what actually happened. Step through the reveal: reads, then the inferred home and work areas, then the regular schedule, then the anomalies.
 - **Population & policy:** pick a stored population to see unicity curves (share of drivers singled out by *p* sightings, for several crowd sizes). Compare policies by unicity and by how many homes the engine still places within 1 km (as a share of all drivers). Click a bar for detail, or switch to the table view.
 - **Your week:** place your home (and work) on the map, describe your week, and see what this network could read and infer. Nothing is stored.
@@ -244,7 +266,8 @@ Open items and suggested follow-ups are in [docs/OPEN_QUESTIONS.md](docs/OPEN_QU
 
 - **No real plate reads are used.** All plates are synthetic, with state `ZZ`, so they cannot match a real registration.
 - **Only public camera data is used.**
-- **Real location data comes only from the person it describes.** It is processed locally and never stored. "Your week" inputs are session-only: no database writes, no route cache, no logging.
+- **Real location data comes only from the person it describes.** It is processed locally and never stored. Saved routes and areas live only in the browser. Route checks, read-history requests and "Your week" inputs are compute-only: no database writes, no route cache, no logging. Place searches are not logged or written to disk.
+- **No avoidance routing and nothing about real vehicles.** The app explains what sensors could record; it does not plan routes around them or look up plates.
 - **The project measures what the data can and cannot reveal rather than advocating a side.** Assumptions are labelled, and results are reported across their ranges.
 
 ## Development
@@ -271,16 +294,16 @@ python scripts/validate_synthetic_timeline.py --drivers 60 --weeks 4            
 
 | Document | Contents |
 |---|---|
-| [docs/findings.md](docs/findings.md) | F1–F8, each with setup, results and caveats |
+| [docs/findings.md](docs/findings.md) | example study F1–F8, each with setup, results and caveats |
 | [docs/assumptions.md](docs/assumptions.md) | every modelling assumption, where it lives, how it was tested |
 | [docs/architecture.md](docs/architecture.md) | system diagram, module map, data flow |
 | [docs/technical_reference.md](docs/technical_reference.md) | ETL, snapping, matching, generators, noise, API, frontend |
 | [docs/camera_sources.md](docs/camera_sources.md) | sources, count cross-check, hypothetical density scenario |
 | [docs/real_data_validation.md](docs/real_data_validation.md) | exporting and validating your own Timeline |
 | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) | open decisions and follow-ups |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | prioritized plan: correctness, reusability, neutral framing |
-| [Plate-Trail-Proposal.md](Plate-Trail-Proposal.md) | the original proposal |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | prioritized plan: the check-up tool, reusability, neutral wording |
+| [Plate-Trail-Proposal.md](Plate-Trail-Proposal.md) | the original capstone proposal (the example study) |
 
 ## Credits
 
-Capstone project (Computer Science / ITI). Camera data © OpenStreetMap contributors (including DeFlock mappers); road data via OSMnx; travel behaviour from the 2022 NHTS (FHWA / ORNL). Basemap © OpenFreeMap / OpenMapTiles. Unicity method after de Montjoye et al., *Unique in the Crowd* (2013).
+Capstone project (Computer Science / ITI). Camera data © OpenStreetMap contributors (including DeFlock mappers); place search by Nominatim (OpenStreetMap data); road data via OSMnx; travel behaviour from the 2022 NHTS (FHWA / ORNL). Basemap © OpenFreeMap / OpenMapTiles. Unicity method after de Montjoye et al., *Unique in the Crowd* (2013).

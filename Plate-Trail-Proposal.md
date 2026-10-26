@@ -1,3 +1,5 @@
+*The original capstone proposal, kept for reference. It describes what is now the project's example study; Plate Trail has since grown into a location-privacy check-up for any area and your own routes (see the [README](README.md)).*
+
 **Project Title:** Plate Trail: What License Plate Cameras Can Reconstruct About Your Week  
 **Problem Being Addressed**  
 Automated license plate reader (ALPR) networks led by Flock Safety are expanding fast; Edison, NJ recently approved 92 additional Flock cameras. The public debate is stuck: supporters say cameras only log a plate at a few fixed points, while critics say enough reads reveal a person's whole routine. Neither side usually backs its claim with real camera positions and measured numbers. This affects every driver in a covered area, plus the residents, council members, and journalists deciding on deployment and retention; New Jersey allows plate data to be kept for years. It matters because courts increasingly ask how complete a picture location data paints (the "mosaic" argument in *Carpenter v. United States*), and that question is usually answered by intuition.  

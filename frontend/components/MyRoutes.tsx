@@ -104,7 +104,7 @@ function CheckResult({ state, focus, onFocus }: { state: RouteCheckState } & Omi
   const r = state.result;
   if (!r) return null;
   return (
-    <div aria-live="polite">
+    <div>
       {r.legs.map((leg) => <LegSummary key={leg.direction} leg={leg} focus={focus} onFocus={onFocus} />)}
       {state.change !== undefined && <ChangeNote change={state.change} what="along this route" />}
       <div className="nb-note">
