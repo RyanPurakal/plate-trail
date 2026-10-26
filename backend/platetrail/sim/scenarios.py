@@ -1,20 +1,21 @@
 """Camera-density scenarios: add synthetic cameras where real locations are unknown.
 
-Edison approved 92 additional Flock cameras whose locations are not public.
-A density scenario adds N synthetic cameras at simulation time. They are
-never written to the cameras table; they are stored with the run that used
-them.
+Some areas have more fixed cameras planned or installed than are publicly
+mapped (in the example study, additional cameras in the scenario town whose
+locations are not public). A density scenario adds N synthetic cameras at
+simulation time. They are never written to the cameras table; they are
+stored with the run that used them.
 
-Placement (ASSUMPTION; not based on the real deployment plan):
+Placement (ASSUMPTION; not based on any actual placement plan):
 
 * Candidate roads: public edges of the given highway types (default: trunk,
-  primary, secondary, tertiary, the arterials where Flock cameras are
-  usually mounted) whose midpoint lies inside the town polygon.
+  primary, secondary, tertiary, the arterials where fixed plate-reader
+  cameras are usually mounted) whose midpoint lies inside the town polygon.
 * Each camera picks a road with probability proportional to length and a
   uniform point along it, at least MIN_SPACING_M from every real and every
   other synthetic camera (rejection sampling).
 * Each camera faces one travel direction (random on two-way roads, the
-  road's direction on one-way roads), like most real cameras here. It is
+  road's direction on one-way roads), like most mapped cameras here. It is
   snapped to both directed edges of a two-way road, like real cameras, and
   the matcher decides captures.
 * Synthetic cameras get negative ids and labels "scenario/<seed>/<i>".

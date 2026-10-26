@@ -268,7 +268,7 @@ stored server-side. The Edison and New Brunswick study stays as the
       region keys used by both routine generators and the density scenario.
       Default-region routines are byte-identical to before (checked by hashing
       template and NHTS fixture routines over many seeds).
-- [ ] `sim/scenarios.py` module docstring still describes the NJ camera
+- [x] `sim/scenarios.py` module docstring still describes the NJ camera
       approval; reword neutrally (covered by the vendor-wording item below).
 - [x] Camera list from a file: `FileCameraLoader` reads GeoJSON Points or CSV
       (lon, lat, optional id/town/direction). The region's optional
@@ -298,8 +298,12 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ## Neutral wording in code
 
-- [ ] Rename vendor-specific wording in core code comments (e.g. in
-      `sim/scenarios.py`) to neutral terms ("additional cameras").
+- [x] Rename vendor-specific wording in core code comments (e.g. in
+      `sim/scenarios.py`) to neutral terms ("additional cameras"). The
+      scenario docstring now speaks of additional cameras without public
+      locations and "fixed plate-reader cameras" on arterials. Manufacturer
+      names left in `etl/cross_check.py` and `etl/directions.py` are OSM tag
+      values and source credits (DeFlock), so they stay.
 - [ ] Generic "sensor" terminology in new code and API fields where it does
       not break existing endpoints (aliases first, renames later).
 
