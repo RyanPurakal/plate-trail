@@ -10,5 +10,9 @@
   "student_town": "New Brunswick",
   "student_home_share": 0.7,
   "scenario_town": "Edison",
-  "map": {"center": [-74.39, 40.53], "zoom": 11.6}
+  "map": {"center": [-74.39, 40.53], "zoom": 11.6},
+  "notes": {
+    "unlisted_sensors": "Edison's 92 approved cameras have no public locations.",
+    "read_volume": "Edison PD's portal reports 518,797 \u201cunique plate reads\u201d in 30 days, far more than any simulated crowd, so these shares are upper bounds."
+  }
 }

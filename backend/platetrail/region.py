@@ -18,7 +18,8 @@ Example file:
       "student_home_share": 0.7,
       "scenario_town": "Example",
       "camera_sources": [{"type": "file", "path": "example_sensors.geojson"}],
-      "map": {"center": [-74.4, 40.5], "zoom": 12}
+      "map": {"center": [-74.4, 40.5], "zoom": 12},
+      "notes": {"unlisted_sensors": "...", "read_volume": "..."}
     }
 
 student_town (optional) is the town with the main university campus: student
@@ -37,6 +38,12 @@ map (optional) sets the frontend's initial view, served by GET /region:
 "center" as [lon, lat] with "zoom", and/or "bounds" as [west, south, east,
 north] (fitted on load, taking precedence over center/zoom). Without it the
 frontend falls back to its own default view.
+
+notes (optional) holds short plain-text sentences about this dataset that the
+frontend shows next to the related results, served by GET /region:
+"unlisted_sensors" (known sensors without public locations, shown with the
+density scenario) and "read_volume" (a published read count to compare the
+simulated crowd with, shown under the unicity chart). Other keys are rejected.
 """
 
 import json
@@ -69,6 +76,7 @@ class CameraSource:
 
 
 SOURCE_TYPES = ("osm", "file")
+NOTE_KEYS = ("unlisted_sensors", "read_volume")
 
 
 @dataclass(frozen=True)
@@ -97,6 +105,7 @@ class Region:
     scenario_town: str | None = None  # resolved to the first town by parse_region
     camera_sources: tuple[CameraSource, ...] = (CameraSource("osm"),)
     map: MapDefaults = MapDefaults()
+    notes: tuple[tuple[str, str], ...] = ()  # (key, text) pairs, keys from NOTE_KEYS
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -160,6 +169,21 @@ def _parse_map(raw: dict | None) -> MapDefaults:
     return view
 
 
+def _parse_notes(raw: dict | None) -> tuple[tuple[str, str], ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, dict):
+        raise ValueError("notes must be an object")
+    notes = []
+    for key, text in raw.items():
+        if key not in NOTE_KEYS:
+            raise ValueError(f"unknown note {key!r} (expected one of {', '.join(NOTE_KEYS)})")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(f"note {key!r} must be non-empty text")
+        notes.append((key, text.strip()))
+    return tuple(notes)
+
+
 def parse_region(data: dict, base_dir: Path | None = None) -> Region:
     try:
         towns = tuple(
@@ -177,6 +201,7 @@ def parse_region(data: dict, base_dir: Path | None = None) -> Region:
             scenario_town=str(data.get("scenario_town") or towns[0].label) if towns else None,
             camera_sources=_parse_sources(data.get("camera_sources"), base_dir),
             map=_parse_map(data.get("map")),
+            notes=_parse_notes(data.get("notes")),
         )
     except (KeyError, TypeError, ValueError) as e:
         raise RegionConfigError(f"invalid region config: {e!r}") from e

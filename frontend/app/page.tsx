@@ -11,7 +11,6 @@ import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from 
 import type { Layers, Mode } from "@/components/MapView";
 import {
   checkRoute,
-  EXAMPLE_REGION_ID,
   FALLBACK_REGION_NAME,
   FALLBACK_SCENARIO_TOWN,
   getArea,
@@ -471,7 +470,7 @@ export default function Home() {
           <CompareRoutes routes={routes} checks={routeChecks} onCheck={runRouteCheck}
             onShow={(id) => { setRouteDraft(null); setShownRoute(id); }} />
         )}
-        {tab === "population" && <PopulationView scenarioTown={scenarioTown} exampleRegion={(region?.id ?? EXAMPLE_REGION_ID) === EXAMPLE_REGION_ID} />}
+        {tab === "population" && <PopulationView scenarioTown={scenarioTown} notes={region?.notes ?? {}} />}
         {tab === "yourweek" && (
           <YourWeek pins={pins} pickMode={pickMode} setPickMode={setPickMode}
                     onResult={(d) => { setDetail(d); setDay(null); setReveal(1); setMode("saw");

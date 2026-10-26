@@ -284,9 +284,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       hypothetical-camera tooltip, map popup and population notes use
       `name`/`scenario_town`; NJ-only published figures (92 approved cameras,
       the agency's 30-day read count) show only for the example region.
-- [ ] Optional region `notes` (or similar) so dataset-specific comparison
+- [x] Optional region `notes` (or similar) so dataset-specific comparison
       figures live in the region file instead of being gated by region id in
-      `PopulationView.tsx`.
+      `PopulationView.tsx`. The region file's optional `notes` object takes
+      `unlisted_sensors` (shown with the density scenario) and `read_volume`
+      (shown under the unicity chart) as plain text; other keys are rejected.
+      `GET /region` serves them and the frontend shows them where present,
+      with a generic upper-bound sentence when `read_volume` is missing. The
+      NJ figures now live in `nj_edison_new_brunswick.json`; the frontend no
+      longer checks the region id.
 - [ ] Region bounding box option: allow a plain bbox instead of OSM boundary
       relations for areas without clean municipal boundaries.
 - [ ] Setup guide `docs/new_region.md`: step-by-step for a new area, with a

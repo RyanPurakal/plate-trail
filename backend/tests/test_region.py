@@ -104,3 +104,20 @@ def test_map_view_is_optional_and_parsed():
 def test_invalid_map_view_is_rejected(bad):
     with pytest.raises(RegionConfigError):
         parse_region({**BASE, "map": bad})
+
+
+def test_notes_are_optional_and_parsed():
+    assert parse_region(BASE).notes == ()
+    r = parse_region({**BASE, "notes": {"read_volume": "  A published count.  "}})
+    assert dict(r.notes) == {"read_volume": "A published count."}
+
+
+@pytest.mark.parametrize("bad", [
+    {"something_else": "text"},
+    {"read_volume": ""},
+    {"read_volume": 12},
+    ["read_volume"],
+])
+def test_invalid_notes_are_rejected(bad):
+    with pytest.raises(RegionConfigError):
+        parse_region({**BASE, "notes": bad})

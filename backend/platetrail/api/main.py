@@ -1,7 +1,7 @@
 """FastAPI application.
 
     GET  /health
-    GET  /region           active study area: id, name, town labels, initial map view
+    GET  /region           active study area: id, name, town labels, initial map view, dataset notes
     GET  /area             public fixed sensors and a summary for any bbox (no region file needed)
     POST /geocode          place search (Nominatim) -> boxes to explore; the text is never stored or logged
     POST /route/check      sensors one route passes and where reads would happen, on the study roads or a
@@ -87,6 +87,7 @@ def region() -> dict:
         "student_town": r.student_town,
         "scenario_town": r.scenario_town,
         "map": r.map.as_dict(),
+        "notes": dict(r.notes),
     }
 
 

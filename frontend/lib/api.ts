@@ -185,6 +185,13 @@ export type Region = {
   student_town: string | null;
   scenario_town: string | null;
   map: MapDefaults;
+  notes?: RegionNotes; // older APIs omit it
+};
+
+/** Plain-text sentences about the region's dataset, shown next to the related study results. */
+export type RegionNotes = {
+  unlisted_sensors?: string; // known sensors without public locations (density scenario)
+  read_volume?: string; // a published read count to compare the simulated crowd with (unicity)
 };
 
 export const getRegion = () => get<Region>("/region");
@@ -192,8 +199,6 @@ export const getRegion = () => get<Region>("/region");
 /** Labels used until GET /region answers (or if it fails): the bundled example region. */
 export const FALLBACK_REGION_NAME = "Edison & New Brunswick, NJ";
 export const FALLBACK_SCENARIO_TOWN = "Edison";
-// Facts in the UI that describe the example dataset only (e.g. the agency's published read count).
-export const EXAMPLE_REGION_ID = "nj_edison_new_brunswick";
 export const getCameras = () => get<CameraCollection>("/cameras");
 export const getRuns = () => get<RunListItem[]>("/runs");
 export const getRun = (id: number) => get<RunDetail>(`/runs/${id}`);
