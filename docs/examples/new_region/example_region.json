@@ -1,0 +1,14 @@
+{
+  "id": "example_princeton_box",
+  "name": "Princeton, New Jersey (worked example)",
+  "parent_iso3166_2": "US-NJ",
+  "buffer_m": 1500,
+  "towns": [
+    {"label": "Princeton", "bbox": [-74.69, 40.33, -74.62, 40.38]}
+  ],
+  "camera_sources": [
+    {"type": "file", "path": "example_sensors.csv", "source": "example-hypothetical"},
+    {"type": "osm"}
+  ],
+  "map": {"bounds": [-74.69, 40.33, -74.62, 40.38]}
+}

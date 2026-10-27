@@ -245,10 +245,16 @@ stored server-side. The Edison and New Brunswick study stays as the
       `YourWeek` and `LogTable` load as separate chunks via `next/dynamic`.
       Only `GET /region` runs on load. The area card shows a pulsing
       placeholder while the first area loads.
-- [ ] Docker setup still works with the new views (data dir for the area
-      cache mounted). The compose file already mounts `./data:/data` and the
-      area cache lives under `PLATETRAIL_DATA_DIR/raw/overpass_areas`; still
-      needs a `docker compose up` run through Explore and a route check.
+- [x] Docker setup still works with the new views (data dir for the area
+      cache mounted). Checked 2026-10-26 with a fresh `docker compose up
+      --build` (separate project name and ports): `/region`, a cached and an
+      uncached `/area` (about 2 minutes for Overpass; sensor and road cache
+      files land in `data/raw/overpass_areas/` on the host), `/route/check`
+      on the study graph and on roads fetched around a route outside it,
+      `/route/history`, and the web image opening a `?bbox=` link and
+      checking a saved route in the browser. Route checks wrote nothing to
+      `data/` and the API log shows only paths. README has a short
+      "Check-up in Docker" note.
 
 ## Reusability (configurable region and sensors)
 
@@ -262,7 +268,7 @@ stored server-side. The Edison and New Brunswick study stays as the
       region keys used by both routine generators and the density scenario.
       Default-region routines are byte-identical to before (checked by hashing
       template and NHTS fixture routines over many seeds).
-- [ ] `sim/scenarios.py` module docstring still describes the NJ camera
+- [x] `sim/scenarios.py` module docstring still describes the NJ camera
       approval; reword neutrally (covered by the vendor-wording item below).
 - [x] Camera list from a file: `FileCameraLoader` reads GeoJSON Points or CSV
       (lon, lat, optional id/town/direction). The region's optional
@@ -278,13 +284,33 @@ stored server-side. The Edison and New Brunswick study stays as the
       hypothetical-camera tooltip, map popup and population notes use
       `name`/`scenario_town`; NJ-only published figures (92 approved cameras,
       the agency's 30-day read count) show only for the example region.
-- [ ] Optional region `notes` (or similar) so dataset-specific comparison
+- [x] Optional region `notes` (or similar) so dataset-specific comparison
       figures live in the region file instead of being gated by region id in
-      `PopulationView.tsx`.
-- [ ] Region bounding box option: allow a plain bbox instead of OSM boundary
-      relations for areas without clean municipal boundaries.
-- [ ] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
-      small worked example region file.
+      `PopulationView.tsx`. The region file's optional `notes` object takes
+      `unlisted_sensors` (shown with the density scenario) and `read_volume`
+      (shown under the unicity chart) as plain text; other keys are rejected.
+      `GET /region` serves them and the frontend shows them where present,
+      with a generic upper-bound sentence when `read_volume` is missing. The
+      NJ figures now live in `nj_edison_new_brunswick.json`; the frontend no
+      longer checks the region id.
+- [x] Region bounding box option: allow a plain bbox instead of OSM boundary
+      relations for areas without clean municipal boundaries. A town may be
+      `{"label": ..., "bbox": [west, south, east, north]}` (at most 0.5 deg a
+      side, like `GET /area`) instead of an OSM relation; the two kinds mix
+      in one region. Box towns query cameras and places by the box (no
+      boundary check), feed the study-area polygon as plain rectangles
+      (`roads.graph.town_polygons`) and are stored in `towns` with an
+      `osm_id` of `bbox/w,s,e,n`. The default region's Overpass query texts
+      are unchanged, so existing caches stay valid.
+- [x] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
+      small worked example region file. The example in
+      `docs/examples/new_region/` is one box town (Princeton, NJ) with
+      OpenStreetMap plus a CSV of three hypothetical sensor placements;
+      `test_region.py` loads it and its file sensors so it stays valid. The
+      guide covers fields, towns as relations or boxes, sensor files,
+      checking the file, building data locally and in Docker (compose now
+      passes `PLATETRAIL_REGION` through to the api and worker), and the
+      NHTS caveat. The README's study-area paragraph links to it.
 - [ ] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors
       placed in any configured town, with neutral wording.
 - [ ] Document which parts depend on US data (NHTS trip diaries) and what an
@@ -292,8 +318,12 @@ stored server-side. The Edison and New Brunswick study stays as the
 
 ## Neutral wording in code
 
-- [ ] Rename vendor-specific wording in core code comments (e.g. in
-      `sim/scenarios.py`) to neutral terms ("additional cameras").
+- [x] Rename vendor-specific wording in core code comments (e.g. in
+      `sim/scenarios.py`) to neutral terms ("additional cameras"). The
+      scenario docstring now speaks of additional cameras without public
+      locations and "fixed plate-reader cameras" on arterials. Manufacturer
+      names left in `etl/cross_check.py` and `etl/directions.py` are OSM tag
+      values and source credits (DeFlock), so they stay.
 - [ ] Generic "sensor" terminology in new code and API fields where it does
       not break existing endpoints (aliases first, renames later).
 

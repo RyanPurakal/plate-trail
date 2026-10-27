@@ -22,7 +22,6 @@ from collections import Counter
 from dataclasses import dataclass
 
 import numpy as np
-import osmnx as ox
 from shapely import wkb
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 from shapely.ops import polygonize, unary_union
@@ -34,7 +33,7 @@ from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
 from platetrail.geo import WGS84
 from platetrail.region import get_region
-from platetrail.roads.graph import _configure_osmnx
+from platetrail.roads.graph import _configure_osmnx, town_polygons
 
 # Places farther than this from the drive network (service roads included) are
 # not sampled as anchors. The user's requirement: snap or reject anchors more
@@ -53,18 +52,26 @@ INDUSTRIAL_BUILDINGS = {"industrial", "warehouse"}
 WORK_CATEGORIES = ("work", "retail", "grocery", "food", "services", "hospital", "university", "industrial")
 
 
+def _place_filters(within: str) -> list[str]:
+    return [
+        f'  nwr({within})["shop"];',
+        f'  nwr({within})["amenity"~"^({"|".join(sorted(FOOD | SERVICES | {"place_of_worship", "hospital", "university", "college"}))})$"];',
+        f'  nwr({within})["leisure"~"^({"|".join(sorted(LEISURE))})$"];',
+        f'  nwr({within})["office"];',
+        f'  nwr({within})["building"~"^({"|".join(sorted(WORK_BUILDINGS | INDUSTRIAL_BUILDINGS | {"university", "college", "hospital"}))})$"];',
+    ]
+
+
 def build_query() -> str:
-    area = ",".join(str(3600000000 + rid) for rid in get_region().relations.values())
-    return f"""[out:json][timeout:180];
-area(id:{area})->.a;
-(
-  nwr(area.a)["shop"];
-  nwr(area.a)["amenity"~"^({'|'.join(sorted(FOOD | SERVICES | {'place_of_worship', 'hospital', 'university', 'college'}))})$"];
-  nwr(area.a)["leisure"~"^({'|'.join(sorted(LEISURE))})$"];
-  nwr(area.a)["office"];
-  nwr(area.a)["building"~"^({'|'.join(sorted(WORK_BUILDINGS | INDUSTRIAL_BUILDINGS | {'university', 'college', 'hospital'}))})$"];
-);
-out center tags;"""
+    region = get_region()
+    head, filters = ["[out:json][timeout:180];"], []
+    if region.relations:
+        area = ",".join(str(3600000000 + rid) for rid in region.relations.values())
+        head.append(f"area(id:{area})->.a;")
+        filters += _place_filters("area.a")
+    for w, s, e, n in region.bboxes.values():
+        filters += _place_filters(f"{s},{w},{n},{e}")  # Overpass boxes are south,west,north,east
+    return "\n".join([*head, "(", *filters, ");", "out center tags;"])
 
 
 def _classify(tags: dict) -> tuple[str, str] | None:
@@ -111,15 +118,17 @@ def parse_places(response: dict) -> list[dict]:
 
 def load_towns(engine: Engine) -> None:
     _configure_osmnx(get_settings().data_dir)
-    relations = get_region().relations
-    gdf = ox.geocode_to_gdf([f"R{rid}" for rid in relations.values()], by_osmid=True)
+    region = get_region()
+    osm_ids = {label: f"relation/{rid}" for label, rid in region.relations.items()}
+    osm_ids.update({label: "bbox/" + ",".join(f"{v:g}" for v in b) for label, b in region.bboxes.items()})
     with engine.begin() as conn:
-        for (name, rid), geom in zip(relations.items(), gdf.geometry):
+        for name, geom in town_polygons(region).items():
+            rid = osm_ids[name]
             mp = geom if isinstance(geom, MultiPolygon) else MultiPolygon([geom])
             conn.execute(
                 text("INSERT INTO towns (name, osm_id, geom) VALUES (:n, :o, ST_GeomFromText(:w, 4326))"
                      " ON CONFLICT (name) DO UPDATE SET osm_id = EXCLUDED.osm_id, geom = EXCLUDED.geom"),
-                {"n": name, "o": f"relation/{rid}", "w": mp.wkt},
+                {"n": name, "o": rid, "w": mp.wkt},
             )
 
 

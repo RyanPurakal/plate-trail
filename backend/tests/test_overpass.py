@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -121,3 +122,24 @@ def test_non_retryable_error_raises_immediately(tmp_path):
     with pytest.raises(httpx.HTTPStatusError):
         loader.load()
     assert not list(tmp_path.glob("*.json"))  # failures are not cached
+
+
+def test_bbox_town_is_queried_by_box_without_boundary(tmp_path):
+    region = Region("boxville", "Boxville", "US-PA",
+                    (Town("Boxville", bbox=(-75.2, 39.9, -75.1, 40.0)), Town("Testville", "Testville", 1)))
+    queries = []
+    no_boundary = {"elements": [e for e in FIXTURE["elements"] if e["type"] != "relation"]}
+
+    def handler(request):
+        q = parse_qs(request.content.decode())["data"][0]
+        queries.append(q)
+        return httpx.Response(200, json=no_boundary if "39.9" in q else FIXTURE)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    loader = OverpassLoader(RawCache(tmp_path), region=region, client=client, backoff_s=0)
+    records = loader.load()
+    assert len(queries) == 2
+    assert 'nwr(39.9,-75.2,40.0,-75.1)["man_made"="surveillance"]' in queries[0]
+    assert "boundary" not in queries[0]
+    assert {r.town for r in records} == {"Boxville", "Testville"}
+    assert sum(r.town == "Boxville" for r in records) == 5

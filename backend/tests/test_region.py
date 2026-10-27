@@ -104,3 +104,94 @@ def test_map_view_is_optional_and_parsed():
 def test_invalid_map_view_is_rejected(bad):
     with pytest.raises(RegionConfigError):
         parse_region({**BASE, "map": bad})
+
+
+def test_notes_are_optional_and_parsed():
+    assert parse_region(BASE).notes == ()
+    r = parse_region({**BASE, "notes": {"read_volume": "  A published count.  "}})
+    assert dict(r.notes) == {"read_volume": "A published count."}
+
+
+@pytest.mark.parametrize("bad", [
+    {"something_else": "text"},
+    {"read_volume": ""},
+    {"read_volume": 12},
+    ["read_volume"],
+])
+def test_invalid_notes_are_rejected(bad):
+    with pytest.raises(RegionConfigError):
+        parse_region({**BASE, "notes": bad})
+
+
+def _box_region(**town):
+    return parse_region({"id": "b", "name": "B", "parent_iso3166_2": "US-PA",
+                         "towns": [{"label": "Downtown", **town},
+                                   {"label": "A", "osm_name": "A", "osm_relation": 7}]})
+
+
+def test_town_can_be_a_plain_bbox():
+    r = _box_region(bbox=[-75.2, 39.9, -75.1, 40.0])
+    assert r.towns[0].bbox == (-75.2, 39.9, -75.1, 40.0)
+    assert r.towns[0].osm_relation is None
+    assert r.bboxes == {"Downtown": (-75.2, 39.9, -75.1, 40.0)}
+    assert r.relations == {"A": 7}
+    assert r.labels == ("Downtown", "A")
+
+
+@pytest.mark.parametrize("town", [
+    {"bbox": [-75.1, 39.9, -75.2, 40.0]},  # west > east
+    {"bbox": [-75.2, 39.9, -75.1]},
+    {"bbox": [-75.2, 39.9, -74.5, 40.0]},  # over the size limit
+    {"bbox": [-75.2, 39.9, -75.1, 95.0]},
+    {"bbox": [-75.2, 39.9, -75.1, 40.0], "osm_relation": 1, "osm_name": "X"},
+    {},  # neither a box nor a relation
+])
+def test_invalid_bbox_towns_are_rejected(town):
+    with pytest.raises(RegionConfigError):
+        _box_region(**town)
+
+
+def test_town_polygons_use_boxes_without_network():
+    from platetrail.roads.graph import town_polygons
+
+    r = parse_region({"id": "b", "name": "B", "parent_iso3166_2": "US-PA",
+                      "towns": [{"label": "Downtown", "bbox": [-75.2, 39.9, -75.1, 40.0]}]})
+    shapes = town_polygons(r)
+    assert list(shapes) == ["Downtown"]
+    assert shapes["Downtown"].bounds == (-75.2, 39.9, -75.1, 40.0)
+
+
+def test_places_query_covers_bbox_towns(monkeypatch):
+    from platetrail.routines import places
+
+    r = _box_region(bbox=[-75.2, 39.9, -75.1, 40.0])
+    monkeypatch.setattr(places, "get_region", lambda: r)
+    q = places.build_query()
+    assert "area(id:3600000007)->.a;" in q
+    assert 'nwr(area.a)["shop"];' in q
+    assert 'nwr(39.9,-75.2,40.0,-75.1)["shop"];' in q  # south,west,north,east
+    assert q.endswith(");\nout center tags;")
+
+
+def test_worked_example_region_loads(monkeypatch):
+    """docs/new_region.md's example region and its sensor file stay valid."""
+    from pathlib import Path
+
+    from platetrail.etl.run_etl import default_loaders
+    from platetrail.etl.loaders.file import FileCameraLoader
+
+    path = Path(__file__).resolve().parents[2] / "docs" / "examples" / "new_region" / "example_region.json"
+    monkeypatch.setenv("PLATETRAIL_REGION", str(path))
+    r = load_region()
+    assert r.id == "example_princeton_box"
+    assert r.labels == ("Princeton",)
+    assert [s.source or s.type for s in r.camera_sources] == ["example-hypothetical", "osm"]
+    assert r.map.bounds == r.towns[0].bbox
+
+    file_loader = default_loaders(r)[0]
+    assert isinstance(file_loader, FileCameraLoader)
+    recs = file_loader.load()
+    w, s, e, n = r.towns[0].bbox
+    assert [x.source_id for x in recs] == ["ex-1", "ex-2", "ex-3"]
+    assert all(w <= x.lon <= e and s <= x.lat <= n and x.source == "example-hypothetical" for x in recs)
+    assert recs[1].directions_deg == [90.0, 270.0] and recs[2].directions_deg is None
