@@ -348,10 +348,12 @@ stored server-side. The Edison and New Brunswick study stays as the
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
 - [ ] Upgrade Next.js past the flagged advisory so `next build` stops failing
       intermittently on its security check.
-- [ ] API: validate `extra_cameras` and other scenario inputs against the
-      active region. (`scenario_town` is validated; still open: whether
-      `extra_cameras` fits the chosen town's arterial length at 300 m spacing,
-      which today fails late in the job rather than as a 422.)
+- [x] API: validate `extra_cameras` and other scenario inputs against the
+      active region. `scenario_town` is checked in the request model; for
+      `extra_cameras` the API tries the seeded placement before queuing
+      (`POST /simulate`, `/jobs/simulate`, `/jobs/population`), so a count
+      that can't fit the town's arterials at 300 m spacing is a 422 with the
+      reason instead of a failed job. Same seed, same answer as the run.
 - [ ] Study view: a town picker for hypothetical cameras in the driver and
       population forms when the region has more than one town.
 - [ ] Sensor files: optionally assign `town` by point-in-boundary when a

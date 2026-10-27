@@ -169,6 +169,14 @@ def test_job_validation_matches_simulate(client):
     assert client.post("/jobs/simulate", json={"weeks": 0}).status_code == 422
 
 
+def test_unplaceable_extra_cameras_rejected_up_front(client):
+    # The toy graph has no arterial roads, so no scenario camera can be placed: 422 before any run or job.
+    for path in ("/simulate", "/jobs/simulate"):
+        resp = client.post(path, json={"extra_cameras": 2})
+        assert resp.status_code == 422 and "extra_cameras" in resp.json()["detail"]
+    assert client.post("/jobs/population", json={"drivers": 3, "extra_cameras": 2}).status_code == 422
+
+
 def test_population_job_and_unicity_endpoint(client):
     job = client.post("/jobs/population", json={"drivers": 5, "weeks": 1, "seed": 1}).json()
     assert job["state"] == "SUCCESS", job
