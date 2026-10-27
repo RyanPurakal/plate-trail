@@ -323,8 +323,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       `--scenario-town`. `GET /populations` returns `scenario_town`, and the
       study view labels hypothetical cameras with the town a run or
       population actually used. No town picker in the UI yet.
-- [ ] Document which parts depend on US data (NHTS trip diaries) and what an
+- [x] Document which parts depend on US data (NHTS trip diaries) and what an
       alternative routine source would need to provide.
+      `docs/routine_sources.md`: only the example study's drivers use NHTS
+      (Explore, routes, read history and Your week do not); the fields
+      `NHTSRoutineGenerator` reads, the purpose-code mapping, converting
+      another survey to `NHTSDiaries` or writing a new `RoutineGenerator`,
+      and caveats. `test_nhts.py` builds diaries in code with no survey files.
+      Linked from `docs/new_region.md`.
 
 ## Neutral wording in code
 

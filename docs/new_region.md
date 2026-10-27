@@ -146,4 +146,6 @@ Routines come from the US National Household Travel Survey (NHTS 2022) trip
 diaries, so simulated drivers keep US travel patterns wherever the region
 is. The template generator (`--generator template`) avoids NHTS, but its
 times and shares are hand-written assumptions. Places come from OpenStreetMap and work
-anywhere it has shops, schools and workplaces mapped.
+anywhere it has shops, schools and workplaces mapped. The Explore and My routes views
+do not use NHTS at all. [routine_sources.md](routine_sources.md) lists what
+depends on it and what another routine source would need to provide.
