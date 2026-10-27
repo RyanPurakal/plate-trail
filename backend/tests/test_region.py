@@ -171,3 +171,27 @@ def test_places_query_covers_bbox_towns(monkeypatch):
     assert 'nwr(area.a)["shop"];' in q
     assert 'nwr(39.9,-75.2,40.0,-75.1)["shop"];' in q  # south,west,north,east
     assert q.endswith(");\nout center tags;")
+
+
+def test_worked_example_region_loads(monkeypatch):
+    """docs/new_region.md's example region and its sensor file stay valid."""
+    from pathlib import Path
+
+    from platetrail.etl.run_etl import default_loaders
+    from platetrail.etl.loaders.file import FileCameraLoader
+
+    path = Path(__file__).resolve().parents[2] / "docs" / "examples" / "new_region" / "example_region.json"
+    monkeypatch.setenv("PLATETRAIL_REGION", str(path))
+    r = load_region()
+    assert r.id == "example_princeton_box"
+    assert r.labels == ("Princeton",)
+    assert [s.source or s.type for s in r.camera_sources] == ["example-hypothetical", "osm"]
+    assert r.map.bounds == r.towns[0].bbox
+
+    file_loader = default_loaders(r)[0]
+    assert isinstance(file_loader, FileCameraLoader)
+    recs = file_loader.load()
+    w, s, e, n = r.towns[0].bbox
+    assert [x.source_id for x in recs] == ["ex-1", "ex-2", "ex-3"]
+    assert all(w <= x.lon <= e and s <= x.lat <= n and x.source == "example-hypothetical" for x in recs)
+    assert recs[1].directions_deg == [90.0, 270.0] and recs[2].directions_deg is None

@@ -30,6 +30,8 @@ services:
       PLATETRAIL_DATA_DIR: /data
       CORS_ORIGINS: http://localhost:3000
       REDIS_URL: redis://redis:6379/0
+      # Bundled region id or a .json path under /data; empty = the NJ study.
+      PLATETRAIL_REGION: ${PLATETRAIL_REGION:-}
     volumes:
       # Overpass, OSMnx and NHTS caches persist on the host so reruns don't refetch.
       - ./data:/data

@@ -302,8 +302,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       (`roads.graph.town_polygons`) and are stored in `towns` with an
       `osm_id` of `bbox/w,s,e,n`. The default region's Overpass query texts
       are unchanged, so existing caches stay valid.
-- [ ] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
-      small worked example region file.
+- [x] Setup guide `docs/new_region.md`: step-by-step for a new area, with a
+      small worked example region file. The example in
+      `docs/examples/new_region/` is one box town (Princeton, NJ) with
+      OpenStreetMap plus a CSV of three hypothetical sensor placements;
+      `test_region.py` loads it and its file sensors so it stays valid. The
+      guide covers fields, towns as relations or boxes, sensor files,
+      checking the file, building data locally and in Docker (compose now
+      passes `PLATETRAIL_REGION` through to the api and worker), and the
+      NHTS caveat. The README's study-area paragraph links to it.
 - [ ] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors
       placed in any configured town, with neutral wording.
 - [ ] Document which parts depend on US data (NHTS trip diaries) and what an
