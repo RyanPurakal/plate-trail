@@ -171,7 +171,7 @@ export default function Home() {
   const [pickMode, setPickMode] = useState<"home" | "work" | null>(null);
   const [pins, setPins] = useState<{ home: [number, number] | null; work: [number, number] | null }>({ home: null, work: null });
   const [region, setRegion] = useState<Region | null>(null);
-  const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0 });
+  const [form, setForm] = useState({ generator: "nhts" as "nhts" | "template", template: "", weeks: 1, seed: 1, extra: 0, town: "" });
   const [area, setArea] = useState<AreaResult | null>(null);
   const [areaLoading, setAreaLoading] = useState(false);
   const [areaError, setAreaError] = useState<string | null>(null);
@@ -342,6 +342,9 @@ export default function Home() {
 
   const regionName = region?.name ?? FALLBACK_REGION_NAME;
   const scenarioTown = region?.scenario_town ?? FALLBACK_SCENARIO_TOWN;
+  // Town for this run's hypothetical cameras: the form's pick, if it is still a region town.
+  const towns = region?.towns ?? [];
+  const formTown = towns.includes(form.town) ? form.town : scenarioTown;
   const showDriver = tab === "driver" || (tab === "yourweek" && detail?.stored === false);
 
   // Real cameras plus any synthetic scenario cameras this run used.
@@ -392,7 +395,8 @@ export default function Home() {
     setError(null);
     try {
       const run_id = await simulateJob({ generator: form.generator, template: form.template || undefined,
-                                         weeks: form.weeks, seed: form.seed, extra_cameras: form.extra }, setJob);
+                                         weeks: form.weeks, seed: form.seed, extra_cameras: form.extra,
+                                         scenario_town: form.extra > 0 && towns.includes(form.town) ? form.town : undefined }, setJob);
       setRuns(await getRuns());
       setRunId(run_id);
     } catch (err) {
@@ -509,9 +513,15 @@ export default function Home() {
                      onChange={(e) => setForm({ ...form, seed: Number(e.target.value) })} />
               <span className="unit">seed</span>
               <input type="number" min={0} max={200} value={form.extra} aria-label="extra cameras"
-                     title={`Hypothetical cameras added in ${scenarioTown}. Placement is simulated: arterials chosen in proportion to length, at least 300 m apart, one direction each.`}
+                     title={`Hypothetical cameras added in ${formTown}. Placement is simulated: arterials chosen in proportion to length, at least 300 m apart, one direction each.`}
                      onChange={(e) => setForm({ ...form, extra: Number(e.target.value) })} />
               <span className="unit">+hypothetical cams</span>
+              {towns.length > 1 && form.extra > 0 && (
+                <select value={formTown} aria-label="town for hypothetical cameras"
+                        onChange={(e) => setForm({ ...form, town: e.target.value })}>
+                  {towns.map((t) => <option key={t} value={t}>in {t}</option>)}
+                </select>
+              )}
               <button disabled={busy}>{busy ? jobLabel(job) : "run"}</button>
             </form>
           </details>

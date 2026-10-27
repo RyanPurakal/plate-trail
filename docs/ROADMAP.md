@@ -357,8 +357,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       (`POST /simulate`, `/jobs/simulate`, `/jobs/population`), so a count
       that can't fit the town's arterials at 300 m spacing is a 422 with the
       reason instead of a failed job. Same seed, same answer as the run.
-- [ ] Study view: a town picker for hypothetical cameras in the driver and
-      population forms when the region has more than one town.
+- [x] Study view: a town picker for hypothetical cameras in the driver and
+      population forms when the region has more than one town. The "One
+      driver" form shows an "in <town>" select next to "+hypothetical cams"
+      when the count is above 0 and `GET /region` lists more than one town
+      (default: the region's `scenario_town`); the pick is sent as
+      `scenario_town` and named in the tooltip. Populations are only built
+      from the CLI (`--scenario-town`), so there is no population form to
+      add it to.
 - [ ] Sensor files: optionally assign `town` by point-in-boundary when a
       multi-town region's file has no town column (needs boundaries without
       OSM, so pairs well with the bbox item).
@@ -441,3 +447,5 @@ stored server-side. The Edison and New Brunswick study stays as the
   Next.js's security-advisory check (`SecurityFatalError`) after a successful
   compile and typecheck; it happens with or without the change. Upgrading Next
   is worth its own item.
+- 2026-10-27: driver-form town picker landed (frontend only). Checked by
+  typecheck, build and backend tests; not clicked through in a browser.
