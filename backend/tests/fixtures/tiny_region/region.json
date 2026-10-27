@@ -1,0 +1,16 @@
+{
+  "id": "tiny_test_region",
+  "name": "Tiny test region (synthetic)",
+  "parent_iso3166_2": "US-NJ",
+  "buffer_m": 0,
+  "towns": [
+    {"label": "West", "bbox": [-74.402, 40.498, -74.385, 40.525]},
+    {"label": "East", "bbox": [-74.385, 40.498, -74.368, 40.525]}
+  ],
+  "student_town": "West",
+  "scenario_town": "East",
+  "camera_sources": [
+    {"type": "file", "path": "sensors.csv", "source": "tiny-fixture"}
+  ],
+  "map": {"bounds": [-74.402, 40.498, -74.368, 40.525]}
+}

@@ -359,8 +359,17 @@ stored server-side. The Edison and New Brunswick study stays as the
 - [ ] Sensor files: optionally assign `town` by point-in-boundary when a
       multi-town region's file has no town column (needs boundaries without
       OSM, so pairs well with the bbox item).
-- [ ] Tests: an end-to-end smoke test on a tiny synthetic region (fixture graph
+- [x] Tests: an end-to-end smoke test on a tiny synthetic region (fixture graph
       + fixture cameras) that does not need network access.
+      `tests/test_smoke_region.py` makes `tests/fixtures/tiny_region` (two box
+      towns, six CSV sensors) the active region and builds a 6 x 6 street grid
+      with one primary and one secondary road plus a place of every category
+      in code. It runs region config -> file sensors -> direction-aware
+      snapping -> commuter routine -> routing, matching and noise ->
+      inference (home placed within 1.5 km, regular passes found), a
+      12-driver population through unicity and the policy comparison, and a
+      2-sensor density scenario in the East town. No database or network;
+      about a second.
 - [ ] Performance: profile the population runner after the C++ router and note
       the next bottleneck in `docs/technical_reference.md`.
 
