@@ -125,7 +125,7 @@ def test_simulate_passes_match_and_noise_settings(client):
 @pytest.mark.parametrize("payload", [
     {"weeks": 0}, {"weeks": 9}, {"template": "astronaut"}, {"start": "2026-10-13"},
     {"generator": "nhts", "template": "commuter"}, {"generator": "template", "template": "worker"},
-    {"generator": "census"}, {"extra_cameras": 201},
+    {"generator": "census"}, {"extra_cameras": 201}, {"scenario_town": "Nowhere"},
     {"match": {"tolerance_deg": 200}}, {"match": {"facing": "sideways"}}, {"noise": {"p_miss": 1.5}}, {"seed": -1},
 ])
 def test_simulate_rejects_bad_requests(client, payload):

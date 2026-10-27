@@ -19,6 +19,9 @@ Placement (ASSUMPTION; not based on any actual placement plan):
   snapped to both directed edges of a two-way road, like real cameras, and
   the matcher decides captures.
 * Synthetic cameras get negative ids and labels "scenario/<seed>/<i>".
+
+The scenario town can be any town of the active region (`density_scenario`);
+the region's `scenario_town` is only the default.
 """
 
 from dataclasses import dataclass
@@ -29,11 +32,12 @@ from shapely.geometry.base import BaseGeometry
 
 from platetrail.roads.snap import is_service
 from platetrail.sim.routing import Router
-from platetrail.sim.trip import CameraEdge, SimCamera
+from platetrail.sim.trip import CameraEdge, CameraSet, SimCamera
 
 ARTERIALS = ("trunk", "primary", "secondary", "tertiary")
 MIN_SPACING_M = 300.0
 MAX_TRIES_PER_CAMERA = 200
+PLACEMENT = "assumption: arterials, length-weighted, >= 300 m apart"
 
 
 @dataclass(frozen=True)
@@ -117,3 +121,25 @@ def synthetic_cameras(
                               edges=edges, lon=lon, lat=lat))
         records.append(ScenarioCamera(label, lon, lat, facing))
     return sims, records
+
+
+def density_scenario(router: Router, cameras: CameraSet, towns: dict[str, BaseGeometry], n: int, seed: int,
+                     town: str | None = None) -> tuple[CameraSet, dict]:
+    """Real cameras plus n synthetic ones in `town` (default: the region's scenario_town), and the scenario json.
+
+    `towns` maps town name to a lon/lat polygon. A town missing from a non-empty `towns` is an error rather
+    than a silent fallback to the whole network; with no towns loaded at all (toy graphs) cameras go
+    anywhere on the network and the scenario's town is None.
+    """
+    if town is None:
+        from platetrail.region import get_region
+
+        town = get_region().scenario_town
+    if towns and town not in towns:
+        raise ValueError(f"unknown scenario town {town!r}; expected one of {sorted(towns)}")
+    within = towns.get(town) if towns else None
+    sims, recs = synthetic_cameras(router, n, seed, within=within,
+                                   existing=[(c.lon, c.lat) for c in cameras.by_id.values() if c.lon is not None])
+    scenario = {"extra_cameras": n, "town": town if within is not None else None, "placement": PLACEMENT,
+                "cameras": [r.as_json() for r in recs]}
+    return CameraSet(list(cameras.by_id.values()) + sims), scenario

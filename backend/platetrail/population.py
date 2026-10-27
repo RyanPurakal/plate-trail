@@ -59,16 +59,10 @@ def simulate_population(runner, request: PopulationRequest, progress=None, keep_
     report = progress or (lambda stage, done, total: None)
     cameras, scenario = runner.cameras, None
     if request.extra_cameras > 0:
-        from platetrail.region import get_region
-        from platetrail.sim.scenarios import synthetic_cameras
+        from platetrail.sim.scenarios import density_scenario
 
-        town = request.scenario_town or get_region().scenario_town
-        sims, recs = synthetic_cameras(
-            runner.router, request.extra_cameras, request.seed, within=runner.towns.get(town),
-            existing=[(c.lon, c.lat) for c in runner.cameras.by_id.values() if c.lon is not None])
-        cameras = CameraSet(list(runner.cameras.by_id.values()) + sims)
-        scenario = {"extra_cameras": request.extra_cameras, "town": town,
-                    "cameras": [r.as_json() for r in recs]}
+        cameras, scenario = density_scenario(runner.router, runner.cameras, runner.towns, request.extra_cameras,
+                                             request.seed, request.scenario_town)
     gen = runner.make_generator(SimulationRequest(generator=request.generator))
     start = datetime.combine(request.start, time())
     end = start + timedelta(weeks=request.weeks, days=1)  # night shifts may end the following Monday
@@ -165,11 +159,12 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--generator", choices=["nhts", "template"], default="nhts")
     ap.add_argument("--extra-cameras", type=int, default=0)
+    ap.add_argument("--scenario-town", default=None, help="town for --extra-cameras (default: the region's scenario town)")
     args = ap.parse_args()
     from platetrail.sim.service import get_local_runner
 
     req = PopulationRequest(args.drivers, args.weeks, seed=args.seed, generator=args.generator,
-                            extra_cameras=args.extra_cameras)
+                            extra_cameras=args.extra_cameras, scenario_town=args.scenario_town)
     last = [-1]
 
     def progress(stage, done, total):

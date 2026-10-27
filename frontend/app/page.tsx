@@ -352,7 +352,7 @@ export default function Home() {
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [c.lon, c.lat] as [number, number] },
       properties: {
-        kind: "camera" as const, camera_id: -(i + 1), osm_id: c.label, town: scn.town, has_direction: true,
+        kind: "camera" as const, camera_id: -(i + 1), osm_id: c.label, town: scn.town ?? "", has_direction: true,
         directions_deg: c.directions_deg, direction_ambiguous: false, alt_directions_deg: null, snap_ambiguous: false,
         manufacturer: null, camera_kind: "scenario" as const, lot_name: null,
       },
@@ -638,7 +638,7 @@ export default function Home() {
           onPick={(kind, pt) => { setPins({ ...pins, [kind]: pt }); setPickMode(null); }}
           pins={tab === "yourweek" ? pins : undefined}
           initialView={region?.map ?? null}
-          scenarioTown={scenarioTown}
+          scenarioTown={detail?.run.scenario?.town ?? scenarioTown}
         />
         <div className="legend">
           {mode === "saw" ? (

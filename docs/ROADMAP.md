@@ -311,8 +311,18 @@ stored server-side. The Edison and New Brunswick study stays as the
       checking the file, building data locally and in Docker (compose now
       passes `PLATETRAIL_REGION` through to the api and worker), and the
       NHTS caveat. The README's study-area paragraph links to it.
-- [ ] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors
-      placed in any configured town, with neutral wording.
+- [x] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors
+      placed in any configured town, with neutral wording. `density_scenario`
+      (shared by single runs and populations) places them in any town of the
+      active region; `/simulate`, `/jobs/simulate` and `/jobs/population`
+      take an optional `scenario_town`, rejected with a 422 unless it is one
+      of the region's towns (default: the region's `scenario_town`). A town
+      with no polygon loaded is now an error instead of a silent spread over
+      the whole network (a runner with no towns at all, like the test toy
+      graphs, still places anywhere and records `town: null`). Both CLIs take
+      `--scenario-town`. `GET /populations` returns `scenario_town`, and the
+      study view labels hypothetical cameras with the town a run or
+      population actually used. No town picker in the UI yet.
 - [ ] Document which parts depend on US data (NHTS trip diaries) and what an
       alternative routine source would need to provide.
 
@@ -333,7 +343,11 @@ stored server-side. The Edison and New Brunswick study stays as the
 - [ ] Upgrade Next.js past the flagged advisory so `next build` stops failing
       intermittently on its security check.
 - [ ] API: validate `extra_cameras` and other scenario inputs against the
-      active region.
+      active region. (`scenario_town` is validated; still open: whether
+      `extra_cameras` fits the chosen town's arterial length at 300 m spacing,
+      which today fails late in the job rather than as a 422.)
+- [ ] Study view: a town picker for hypothetical cameras in the driver and
+      population forms when the region has more than one town.
 - [ ] Sensor files: optionally assign `town` by point-in-boundary when a
       multi-town region's file has no town column (needs boundaries without
       OSM, so pairs well with the bbox item).
