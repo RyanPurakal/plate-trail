@@ -346,8 +346,11 @@ stored server-side. The Edison and New Brunswick study stays as the
 ## App quality
 
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
-- [ ] Upgrade Next.js past the flagged advisory so `next build` stops failing
-      intermittently on its security check.
+- [x] Upgrade Next.js past the flagged advisory so `next build` stops failing
+      intermittently on its security check. `next` is now ^16.4.3 (16.0.0
+      through 16.4.0 are flagged by `npm audit`; 16.4.3 reports 0
+      vulnerabilities). Only Next's own packages changed in the lockfile;
+      typecheck and two back-to-back builds passed with no advisory notice.
 - [x] API: validate `extra_cameras` and other scenario inputs against the
       active region. `scenario_town` is checked in the request model; for
       `extra_cameras` the API tries the seeded placement before queuing
