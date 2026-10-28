@@ -340,15 +340,27 @@ stored server-side. The Edison and New Brunswick study stays as the
       locations and "fixed plate-reader cameras" on arterials. Manufacturer
       names left in `etl/cross_check.py` and `etl/directions.py` are OSM tag
       values and source credits (DeFlock), so they stay.
-- [ ] Generic "sensor" terminology in new code and API fields where it does
+- [x] Generic "sensor" terminology in new code and API fields where it does
       not break existing endpoints (aliases first, renames later).
       - [x] Check-up endpoints: `/route/check` steps carry `sensor_id` and
             `/route/history` regular passes carry `sensor_label`, next to the
             older `camera_id` / `camera_label` (same values, kept for existing
             clients). The check-up UI (route map, timeline, compare, last
             look) reads the new names.
-      - [ ] Study endpoints (`/cameras`, runs, inference) and a date to drop
-            the older check-up names.
+      - [x] Study endpoints (`/cameras`, runs, inference) and a date to drop
+            the older check-up names. `/cameras` points and direction rays
+            carry `sensor_id`; `GET /runs/{id}` and `/yourweek` passes, reads
+            and outages carry `sensor_id` / `sensor_label` (via
+            `sensor_names` in `api/queries.py`); the naive guess adds
+            `sensor_label` and `top_sensor`, inference anchors
+            `nearest_sensor`, and regular passes and anomalies
+            `sensor_label`. Same values as the older names, which stay until
+            at least 2027-01-31.
+- [ ] Study view (`MapView`, `LogTable`, `Charts`, `YourWeek`, `lib/api.ts`)
+      reads the `sensor_*` names, then, after 2027-01-31, drop the older
+      `camera_id` / `camera_label` / `nearest_camera` / `top_camera` fields
+      from responses (check-up and study alike). Database columns and the
+      `kind: "camera"` value stay as they are.
 
 ## App quality
 

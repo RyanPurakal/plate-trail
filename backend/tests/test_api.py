@@ -52,8 +52,10 @@ def test_cameras_geojson(client, engine):
     assert set(props) == {"node/1", "node/2"}
     assert props["node/1"]["directions_deg"] == [90.0] and props["node/1"]["camera_kind"] == "public_road"
     assert props["node/2"]["has_direction"] is False
+    assert all(p["sensor_id"] == p["camera_id"] for p in props.values())
     with_rays = client.get("/cameras", params={"rays": True}).json()
-    assert sum(f["properties"]["kind"] == "direction_ray" for f in with_rays["features"]) == 1
+    rays = [f["properties"] for f in with_rays["features"] if f["properties"]["kind"] == "direction_ray"]
+    assert len(rays) == 1 and rays[0]["sensor_id"] == props["node/1"]["sensor_id"]
 
 
 def _load_toy_cameras(engine):
@@ -94,16 +96,22 @@ def test_simulate_then_fetch_run(client, engine):
     assert all(r["pass_id"] in pass_ids for r in detail["reads"])
     assert all(r["plate_state"] == "ZZ" and r["time"] == r["true_time"] for r in detail["reads"])
     assert len(detail["reads"]) == sum(p["captured"] for p in detail["passes"])
+    for row in detail["passes"] + detail["reads"]:  # sensor names next to the older camera names
+        assert row["sensor_id"] == row["camera_id"] and row["sensor_label"] == row["camera_label"]
 
     inf = detail["inference"]
     assert "HDBSCAN" in inf["method"] and inf["reads_used"] == len(detail["reads"])
     assert inf["home"] is not None and inf["home"]["confidence"] in ("high", "medium", "low")
     assert isinstance(inf["conclusions"], list) and inf["conclusions"]
+    assert inf["home"]["nearest_sensor"] == inf["home"]["nearest_camera"]
+    assert all(p["sensor_label"] == p["camera_label"] for p in inf["regular"] + inf["anomalies"])
     guess = detail["naive_guess"]
     assert "naive baseline" in guess["method"] and "not the inference engine" in guess["method"]
     assert guess["days_used"] == 5 and guess["possible"]
     for kind in ("home", "work"):
         assert {"camera_label", "lon", "lat", "error_m", "support_days", "is_top_camera", "truth"} <= set(guess[kind])
+        assert guess[kind]["sensor_label"] == guess[kind]["camera_label"]
+    assert guess["top_sensor"] == guess["top_camera"]
     assert guess["home"]["error_m"] >= 0
     assert guess["work"]["error_m"] is None and guess["work"]["truth"] is None  # fixed routine has no work anchor
 
@@ -215,6 +223,8 @@ def test_your_week_is_simulated_and_not_stored(client, engine):
     assert len(body["trips"]["features"]) == 10  # 5 workdays x 2
     assert body["run"]["anchors"]["home"]["key"] == "you/home"
     assert "inference" in body and "naive_guess" in body
+    assert all(r["sensor_id"] == r["camera_id"] and r["sensor_label"] == r["camera_label"]
+               for r in body["passes"] + body["reads"])
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM runs")).scalar_one() == runs_before
     assert not any(k.startswith("route:") for k in cache._d)  # route cache bypassed

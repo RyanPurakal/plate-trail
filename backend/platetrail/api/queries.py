@@ -17,6 +17,15 @@ def _iso(v):
     return v.isoformat() if v is not None else None
 
 
+def sensor_names(d: dict) -> dict:
+    """Add sensor_id / sensor_label next to the older camera_id / camera_label (same values, kept for
+    existing clients)."""
+    for old, new in (("camera_id", "sensor_id"), ("camera_label", "sensor_label")):
+        if old in d:
+            d[new] = d[old]
+    return d
+
+
 def list_runs(engine: Engine, limit: int = 100) -> list[dict]:
     with engine.connect() as conn:
         rows = conn.execute(text(
@@ -70,9 +79,9 @@ def get_run(engine: Engine, run_id: int) -> dict | None:
         "naive_guess": naive_guess(reads, coords, run["anchors"]),
         "inference": inference(reads, coords, run["anchors"], f"{run['plate_state']} {run['plate']}"),
         "trips": {"type": "FeatureCollection", "features": trip_features},
-        "passes": [{**dict(p), "time": _iso(p["time"])} for p in passes],
-        "reads": [{**dict(r), "time": _iso(r["time"]), "true_time": _iso(r["true_time"])} for r in reads],
-        "outages": [{**dict(o), "start_time": _iso(o["start_time"]), "end_time": _iso(o["end_time"])}
+        "passes": [sensor_names({**dict(p), "time": _iso(p["time"])}) for p in passes],
+        "reads": [sensor_names({**dict(r), "time": _iso(r["time"]), "true_time": _iso(r["true_time"])}) for r in reads],
+        "outages": [sensor_names({**dict(o), "start_time": _iso(o["start_time"]), "end_time": _iso(o["end_time"])})
                     for o in outages],
     }
 
@@ -88,7 +97,7 @@ def naive_guess(reads, coords: dict, anchors: dict) -> dict:
             return None
         t = truth[kind]
         return {
-            "camera_label": g.camera_label, "lon": g.lon, "lat": g.lat, "support_days": g.support_days,
+            "sensor_label": g.camera_label, "camera_label": g.camera_label, "lon": g.lon, "lat": g.lat, "support_days": g.support_days,
             "error_m": round(g.error_m(t["lon"], t["lat"]), 1) if t else None,
             "is_top_camera": g.camera_label == res.top_camera,
             "truth": {"lon": t["lon"], "lat": t["lat"], "name": t.get("name"), "category": t.get("category")} if t else None,
@@ -99,6 +108,7 @@ def naive_guess(reads, coords: dict, anchors: dict) -> dict:
                   "day's longest gap (work); not the inference engine",
         "possible": res.possible,
         "days_used": res.days_used,
+        "top_sensor": res.top_camera,
         "top_camera": res.top_camera,
         "home": one("home", res.home),
         "work": one("work", res.work),
@@ -163,7 +173,8 @@ def inference(reads, coords: dict, anchors: dict, identity: str) -> dict:
             return None
         t = truth.get(a.kind)
         return {"lon": a.lon, "lat": a.lat, "radius_m": round(a.radius_m), "confidence": a.confidence,
-                "support_days": a.support_days, "possible_days": a.possible_days, "nearest_camera": a.nearest_camera,
+                "support_days": a.support_days, "possible_days": a.possible_days,
+                "nearest_sensor": a.nearest_camera, "nearest_camera": a.nearest_camera,
                 "error_m": round(a.error_m(t["lon"], t["lat"]), 1) if t else None}
 
     return {
@@ -171,9 +182,10 @@ def inference(reads, coords: dict, anchors: dict, identity: str) -> dict:
         "reads_used": inf.reads,
         "home": anchor(inf.home),
         "work": anchor(inf.work),
-        "regular": [{"camera_label": p.camera_label, "minute_of_day": p.minute_of_day, "days": p.days,
+        "regular": [{"sensor_label": p.camera_label, "camera_label": p.camera_label, "minute_of_day": p.minute_of_day, "days": p.days,
                      "weekdays": list(p.weekdays)} for p in inf.regular],
-        "anomalies": [{"time": a.time.isoformat(), "camera_label": a.camera_label, "score": a.score}
+        "anomalies": [{"time": a.time.isoformat(), "sensor_label": a.camera_label, "camera_label": a.camera_label,
+                       "score": a.score}
                       for a in inf.anomalies],
         "conclusions": inf.conclusions,
     }
