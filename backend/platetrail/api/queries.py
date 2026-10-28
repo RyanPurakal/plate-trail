@@ -99,7 +99,7 @@ def naive_guess(reads, coords: dict, anchors: dict) -> dict:
         return {
             "sensor_label": g.camera_label, "camera_label": g.camera_label, "lon": g.lon, "lat": g.lat, "support_days": g.support_days,
             "error_m": round(g.error_m(t["lon"], t["lat"]), 1) if t else None,
-            "is_top_camera": g.camera_label == res.top_camera,
+            "is_top_sensor": g.camera_label == res.top_camera, "is_top_camera": g.camera_label == res.top_camera,
             "truth": {"lon": t["lon"], "lat": t["lat"], "name": t.get("name"), "category": t.get("category")} if t else None,
         }
 

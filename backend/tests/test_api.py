@@ -111,6 +111,7 @@ def test_simulate_then_fetch_run(client, engine):
     for kind in ("home", "work"):
         assert {"camera_label", "lon", "lat", "error_m", "support_days", "is_top_camera", "truth"} <= set(guess[kind])
         assert guess[kind]["sensor_label"] == guess[kind]["camera_label"]
+        assert guess[kind]["is_top_sensor"] == guess[kind]["is_top_camera"]
     assert guess["top_sensor"] == guess["top_camera"]
     assert guess["home"]["error_m"] >= 0
     assert guess["work"]["error_m"] is None and guess["work"]["truth"] is None  # fixed routine has no work anchor

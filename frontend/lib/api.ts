@@ -4,7 +4,7 @@ export type CameraKind = "public_road" | "private_lot" | "service_road" | "scena
 
 export type CameraProps = {
   kind: "camera";
-  camera_id: number;
+  sensor_id: number;
   osm_id: string | null;
   town: string;
   has_direction: boolean;
@@ -77,8 +77,8 @@ export type Pass = {
   id: number;
   trip_seq: number;
   pass_seq: number;
-  camera_id: number;
-  camera_label: string;
+  sensor_id: number;
+  sensor_label: string;
   time: string;
   event: "road" | "arrival" | "departure";
   travel_bearing_deg: number | null;
@@ -92,8 +92,8 @@ export type Read = {
   id: number;
   read_seq: number;
   pass_id: number;
-  camera_id: number;
-  camera_label: string;
+  sensor_id: number;
+  sensor_label: string;
   time: string;
   true_time: string;
   plate_state: string;
@@ -103,12 +103,12 @@ export type Read = {
 };
 
 export type GuessPoint = {
-  camera_label: string;
+  sensor_label: string;
   lon: number;
   lat: number;
   support_days: number;
   error_m: number | null;
-  is_top_camera: boolean;
+  is_top_sensor: boolean;
   truth: { lon: number; lat: number; name: string | null; category: string | null } | null;
 };
 
@@ -116,7 +116,7 @@ export type NaiveGuess = {
   method: string;
   possible: boolean;
   days_used: number;
-  top_camera: string | null;
+  top_sensor: string | null;
   home: GuessPoint | null;
   work: GuessPoint | null;
 };
@@ -135,7 +135,7 @@ export type EngineAnchor = {
   confidence: "high" | "medium" | "low";
   support_days: number;
   possible_days: number;
-  nearest_camera: string;
+  nearest_sensor: string;
   error_m: number | null;
 };
 
@@ -144,8 +144,8 @@ export type Inference = {
   reads_used: number;
   home: EngineAnchor | null;
   work: EngineAnchor | null;
-  regular: { camera_label: string; minute_of_day: number; days: number; weekdays: number[] }[];
-  anomalies: { time: string; camera_label: string; score: number }[];
+  regular: { sensor_label: string; minute_of_day: number; days: number; weekdays: number[] }[];
+  anomalies: { time: string; sensor_label: string; score: number }[];
   conclusions: string[];
 };
 
@@ -162,7 +162,7 @@ export type RunDetail = {
   trips: { type: "FeatureCollection"; features: TripFeature[] };
   passes: Pass[];
   reads: Read[];
-  outages: { camera_label: string; start_time: string; end_time: string }[];
+  outages: { sensor_label: string; start_time: string; end_time: string }[];
 };
 
 async function get<T>(path: string): Promise<T> {

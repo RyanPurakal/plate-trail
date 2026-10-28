@@ -124,8 +124,8 @@ function NaiveCard({ guess, mode }: { guess: NaiveGuess; mode: Mode }) {
       <div className="nb-row">
         <span className="nb-k">{label}?</span>
         <span>
-          camera {g.camera_label.replace("node/", "")} <span className="dim">· {g.support_days} day{g.support_days === 1 ? "" : "s"}</span>
-          {g.is_top_camera && <span className="dim"> · = top camera</span>}
+          camera {g.sensor_label.replace("node/", "")} <span className="dim">· {g.support_days} day{g.support_days === 1 ? "" : "s"}</span>
+          {g.is_top_sensor && <span className="dim"> · = top camera</span>}
         </span>
         <span className={`nb-err ${mode}`}>
           {g.error_m == null ? "no truth" : `off by ${(g.error_m / 1000).toFixed(g.error_m < 10000 ? 2 : 1)} km`}
@@ -355,7 +355,7 @@ export default function Home() {
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [c.lon, c.lat] as [number, number] },
       properties: {
-        kind: "camera" as const, camera_id: -(i + 1), osm_id: c.label, town: scn.town ?? "", has_direction: true,
+        kind: "camera" as const, sensor_id: -(i + 1), osm_id: c.label, town: scn.town ?? "", has_direction: true,
         directions_deg: c.directions_deg, direction_ambiguous: false, alt_directions_deg: null, snap_ambiguous: false,
         manufacturer: null, camera_kind: "scenario" as const, lot_name: null,
       },
@@ -385,7 +385,7 @@ export default function Home() {
     return { trips: view.trips.length, km: km_, passes: view.passes.length, captured, lost };
   }, [view]);
 
-  const cameraCount = new Set(view.reads.map((r) => r.camera_label)).size;
+  const cameraCount = new Set(view.reads.map((r) => r.sensor_label)).size;
   const misreads = view.reads.filter((r) => r.misread).length;
   const run = detail?.run;
 

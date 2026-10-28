@@ -105,13 +105,13 @@ type PointFeature = CameraCollection["features"][number];
 
 function readFeatures(reads: Read[], idx: Map<string, PointFeature>) {
   const counts = new Map<string, number>();
-  for (const r of reads) counts.set(r.camera_label, (counts.get(r.camera_label) ?? 0) + 1);
+  for (const r of reads) counts.set(r.sensor_label, (counts.get(r.sensor_label) ?? 0) + 1);
   const points = [...counts].flatMap(([label, n]) => {
     const f = idx.get(label);
     return f ? [{ type: "Feature" as const, geometry: f.geometry, properties: { label, n } }] : [];
   });
   // The implied trail: reads joined in recorded-time order. It is all an analyst would have.
-  const coords = reads.flatMap((r) => (idx.get(r.camera_label) ? [idx.get(r.camera_label)!.geometry.coordinates] : []));
+  const coords = reads.flatMap((r) => (idx.get(r.sensor_label) ? [idx.get(r.sensor_label)!.geometry.coordinates] : []));
   const trail = coords.length > 1 ? [{ type: "Feature" as const, geometry: { type: "LineString" as const, coordinates: coords }, properties: {} }] : [];
   return { points: { ...EMPTY, features: points }, trail: { ...EMPTY, features: trail } };
 }
@@ -120,12 +120,12 @@ function passFeatures(passes: Pass[], idx: Map<string, PointFeature>) {
   type Agg = { n: number; read: number; lost: number; skipped: number };
   const agg = new Map<string, Agg>();
   for (const p of passes) {
-    const a = agg.get(p.camera_label) ?? { n: 0, read: 0, lost: 0, skipped: 0 };
+    const a = agg.get(p.sensor_label) ?? { n: 0, read: 0, lost: 0, skipped: 0 };
     a.n += 1;
     if (!p.captured) a.skipped += 1;
     else if (p.noise_outcome === "read") a.read += 1;
     else a.lost += 1;
-    agg.set(p.camera_label, a);
+    agg.set(p.sensor_label, a);
   }
   const features = [...agg].flatMap(([label, a]) => {
     const f = idx.get(label);
@@ -137,9 +137,9 @@ function passFeatures(passes: Pass[], idx: Map<string, PointFeature>) {
 }
 
 function popupHtml(p: CameraProps & { bearing?: number }, passes: Pass[], reads: Read[], scenarioTown: string) {
-  const label = p.osm_id ?? `camera ${p.camera_id}`;
-  const mine = passes.filter((x) => x.camera_label === label);
-  const rd = reads.filter((x) => x.camera_label === label);
+  const label = p.osm_id ?? `camera ${p.sensor_id}`;
+  const mine = passes.filter((x) => x.sensor_label === label);
+  const rd = reads.filter((x) => x.sensor_label === label);
   const kind = { public_road: "public road", private_lot: "private lot", service_road: "service street",
     scenario: `hypothetical camera (simulated placement on an arterial in ${scenarioTown})` }[p.camera_kind];
   const facing = p.has_direction ? `faces ${(p.directions_deg ?? [p.bearing]).join(" / ")}°` : "no direction tag";
@@ -339,7 +339,7 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
     markers.current.forEach((mk) => mk.remove());
     markers.current = [];
     const lines: Feature[] = [];
-    const same = guess?.home && guess?.work && guess.home.camera_label === guess.work.camera_label;
+    const same = guess?.home && guess?.work && guess.home.sensor_label === guess.work.sensor_label;
     for (const [kind, g] of [["home", guess?.home], ["work", guess?.work]] as const) {
       if (!g) continue;
       const word = kind === "home" ? "HOME" : "WORK";
@@ -347,7 +347,7 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
       if (!(same && kind === "work")) {
         markers.current.push(new maplibregl.Marker({
           element: markerEl(same ? "HOME? · WORK?" : `${word}?`, `guess guess-${kind}`,
-            `Naive guess (${same ? "home and work" : kind}): camera ${g.camera_label}`),
+            `Naive guess (${same ? "home and work" : kind}): camera ${g.sensor_label}`),
           anchor: "bottom", offset: [0, -10],
         }).setLngLat([g.lon, g.lat]).addTo(map.current!));
       }
@@ -387,11 +387,11 @@ export default function MapView({ cameras, trips, passes, reads, mode, layers, f
     set("eng-err", { ...EMPTY, features: errs });
     const idx = cameraIndex(cameras);
     const regular = inference && reveal >= 2
-      ? [...new Set(inference.regular.map((r) => r.camera_label))].flatMap((l) => (idx.get(l) ? [{ type: "Feature" as const, geometry: idx.get(l)!.geometry, properties: {} }] : []))
+      ? [...new Set(inference.regular.map((r) => r.sensor_label))].flatMap((l) => (idx.get(l) ? [{ type: "Feature" as const, geometry: idx.get(l)!.geometry, properties: {} }] : []))
       : [];
     set("regular", { ...EMPTY, features: regular });
     const anom = inference && reveal >= 3
-      ? inference.anomalies.flatMap((a) => (idx.get(a.camera_label) ? [{ type: "Feature" as const, geometry: idx.get(a.camera_label)!.geometry, properties: {} }] : []))
+      ? inference.anomalies.flatMap((a) => (idx.get(a.sensor_label) ? [{ type: "Feature" as const, geometry: idx.get(a.sensor_label)!.geometry, properties: {} }] : []))
       : [];
     set("anom", { ...EMPTY, features: anom });
   }, [ready, inference, reveal, mode, cameras, guess]);

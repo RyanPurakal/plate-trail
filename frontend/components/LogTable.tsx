@@ -41,11 +41,11 @@ export default function LogTable({ mode, reads, passes, focusLabel, onFocus }: P
           </thead>
           <tbody>
             {reads.map((r, i) => (
-              <tr key={r.id} className={focusLabel === r.camera_label ? "focused" : ""} onClick={() => toggle(r.camera_label)}
+              <tr key={r.id} className={focusLabel === r.sensor_label ? "focused" : ""} onClick={() => toggle(r.sensor_label)}
                   style={{ animationDelay: `${Math.min(i, 30) * 18}ms` }}>
                 <td className="num">{r.read_seq + 1}</td>
                 <td>{stamp(r.time)}</td>
-                <td className="cam">{r.camera_label.replace("node/", "")}</td>
+                <td className="cam">{r.sensor_label.replace("node/", "")}</td>
                 <td className="plate"><span className="state">{r.plate_state}</span> {r.plate}</td>
               </tr>
             ))}
@@ -70,7 +70,7 @@ export default function LogTable({ mode, reads, passes, focusLabel, onFocus }: P
             const fate = passFate(p);
             const r = readByPass.get(p.id);
             return (
-              <tr key={p.id} className={focusLabel === p.camera_label ? "focused" : ""} onClick={() => toggle(p.camera_label)}
+              <tr key={p.id} className={focusLabel === p.sensor_label ? "focused" : ""} onClick={() => toggle(p.sensor_label)}
                   style={{ animationDelay: `${Math.min(i, 30) * 18}ms` }}>
                 <td className="num">{p.trip_seq + 1}</td>
                 <td>{stamp(p.time)}</td>

@@ -356,11 +356,17 @@ stored server-side. The Edison and New Brunswick study stays as the
             `nearest_sensor`, and regular passes and anomalies
             `sensor_label`. Same values as the older names, which stay until
             at least 2027-01-31.
-- [ ] Study view (`MapView`, `LogTable`, `Charts`, `YourWeek`, `lib/api.ts`)
-      reads the `sensor_*` names, then, after 2027-01-31, drop the older
-      `camera_id` / `camera_label` / `nearest_camera` / `top_camera` fields
-      from responses (check-up and study alike). Database columns and the
-      `kind: "camera"` value stay as they are.
+- [x] Study view (`MapView`, `LogTable`, `Charts`, `YourWeek`, `lib/api.ts`)
+      reads the `sensor_*` names. The study types in `lib/api.ts` carry only
+      `sensor_id`, `sensor_label`, `nearest_sensor`, `top_sensor` and the
+      naive guess's new `is_top_sensor` (added next to `is_top_camera`);
+      `page.tsx`, `MapView` and `LogTable` read those, and hypothetical
+      scenario cameras are built with `sensor_id`. On-screen wording in the
+      study view is unchanged.
+- [ ] After 2027-01-31, drop the older `camera_id` / `camera_label` /
+      `nearest_camera` / `top_camera` / `is_top_camera` fields from responses
+      (check-up and study alike) and the `camera_*` aliases in the check-up
+      types. Database columns and the `kind: "camera"` value stay as they are.
 
 ## App quality
 
@@ -478,3 +484,6 @@ stored server-side. The Edison and New Brunswick study stays as the
   is worth its own item.
 - 2026-10-27: driver-form town picker landed (frontend only). Checked by
   typecheck, build and backend tests; not clicked through in a browser.
+- 2026-10-28: study view reads the `sensor_*` names. Checked by typecheck,
+  build and the full backend suite against a local PostGIS (482 passed); not
+  clicked through in a browser.
