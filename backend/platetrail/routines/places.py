@@ -20,8 +20,10 @@ import argparse
 import math
 from collections import Counter
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
+import shapely
 from shapely import wkb
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 from shapely.ops import polygonize, unary_union
@@ -265,6 +267,13 @@ class PlacePool:
             self.by_category.setdefault(p.category, []).append(p)
         self.residential = residential  # (edge key, geometry 4326, length_m, town)
 
+    @cached_property
+    def residential_mids(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Street midpoint lons, lats and lengths, computed once (sample_home_by_distance runs per drop-off)."""
+        mids = shapely.line_interpolate_point([g for _, g, _, _ in self.residential], 0.5, normalized=True)
+        return (shapely.get_x(mids).astype(np.float64), shapely.get_y(mids).astype(np.float64),
+                np.array([s[2] for s in self.residential], dtype=np.float64))
+
     @classmethod
     def from_db(cls, engine: Engine) -> "PlacePool":
         with engine.connect() as conn:
@@ -340,10 +349,8 @@ def sample_by_distance(pool: "PlacePool", categories: tuple[str, ...], rng: np.r
 
 def sample_home_by_distance(pool: "PlacePool", rng: np.random.Generator, origin: Place, target_m: float) -> Place:
     """Another residence (for drop-offs and visits), at a distance matching the trip length."""
-    mids = np.array([[g.interpolate(0.5, normalized=True).x, g.interpolate(0.5, normalized=True).y]
-                     for _, g, _, _ in pool.residential])
-    d = np.array([WGS84.inv(origin.lon, origin.lat, x, y)[2] for x, y in mids])
-    lengths = np.array([s[2] for s in pool.residential])
+    xs, ys, lengths = pool.residential_mids
+    d = WGS84.inv(np.full(len(xs), origin.lon), np.full(len(xs), origin.lat), xs, ys)[2]
     w = _distance_weights(d, target_m) * lengths
     key, geom, _, town = pool.residential[int(rng.choice(len(w), p=w / w.sum()))]
     frac = float(rng.random())

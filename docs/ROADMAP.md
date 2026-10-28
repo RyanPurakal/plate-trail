@@ -340,12 +340,42 @@ stored server-side. The Edison and New Brunswick study stays as the
       locations and "fixed plate-reader cameras" on arterials. Manufacturer
       names left in `etl/cross_check.py` and `etl/directions.py` are OSM tag
       values and source credits (DeFlock), so they stay.
-- [ ] Generic "sensor" terminology in new code and API fields where it does
+- [x] Generic "sensor" terminology in new code and API fields where it does
       not break existing endpoints (aliases first, renames later).
+      - [x] Check-up endpoints: `/route/check` steps carry `sensor_id` and
+            `/route/history` regular passes carry `sensor_label`, next to the
+            older `camera_id` / `camera_label` (same values, kept for existing
+            clients). The check-up UI (route map, timeline, compare, last
+            look) reads the new names.
+      - [x] Study endpoints (`/cameras`, runs, inference) and a date to drop
+            the older check-up names. `/cameras` points and direction rays
+            carry `sensor_id`; `GET /runs/{id}` and `/yourweek` passes, reads
+            and outages carry `sensor_id` / `sensor_label` (via
+            `sensor_names` in `api/queries.py`); the naive guess adds
+            `sensor_label` and `top_sensor`, inference anchors
+            `nearest_sensor`, and regular passes and anomalies
+            `sensor_label`. Same values as the older names, which stay until
+            at least 2027-01-31.
+- [x] Study view (`MapView`, `LogTable`, `Charts`, `YourWeek`, `lib/api.ts`)
+      reads the `sensor_*` names. The study types in `lib/api.ts` carry only
+      `sensor_id`, `sensor_label`, `nearest_sensor`, `top_sensor` and the
+      naive guess's new `is_top_sensor` (added next to `is_top_camera`);
+      `page.tsx`, `MapView` and `LogTable` read those, and hypothetical
+      scenario cameras are built with `sensor_id`. On-screen wording in the
+      study view is unchanged.
+- [ ] After 2027-01-31, drop the older `camera_id` / `camera_label` /
+      `nearest_camera` / `top_camera` / `is_top_camera` fields from responses
+      (check-up and study alike) and the `camera_*` aliases in the check-up
+      types. Database columns and the `kind: "camera"` value stay as they are.
 
 ## App quality
 
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
+      Blocked for now (2026-10-28): `eslint-config-next` 16.4.3 pulls in
+      typescript-eslint 8.72, which refuses TypeScript 7 (the project's
+      `typescript`). An npm override giving the lint packages TS 6
+      (`@typescript/typescript6`) failed on peer resolution. Retry once
+      typescript-eslint supports TS 7, or move `tsc` to a separate package.
 - [x] Upgrade Next.js past the flagged advisory so `next build` stops failing
       intermittently on its security check. `next` is now ^16.4.3 (16.0.0
       through 16.4.0 are flagged by `npm audit`; 16.4.3 reports 0
@@ -384,8 +414,21 @@ stored server-side. The Edison and New Brunswick study stays as the
       12-driver population through unicity and the policy comparison, and a
       2-sensor density scenario in the East town. No database or network;
       about a second.
-- [ ] Performance: profile the population runner after the C++ router and note
-      the next bottleneck in `docs/technical_reference.md`.
+- [x] Performance: profile the population runner after the C++ router and note
+      the next bottleneck in `docs/technical_reference.md`. With the C++
+      search at 8% of a 1,000-driver job, the time was route geometry
+      (shapely `substring`, 29%) and `sample_home_by_distance` (25%), which
+      redid every residential street's midpoint and distance per call. Those
+      are now cached per `PlacePool` and computed in one array call: same
+      digest, job 86.6 s -> about 68.5 s.
+- [x] Performance: skip `substring` for route edges driven end to end (or
+      cache each edge's coordinates) in `Router._compute`, now the largest
+      share of a population job. Check the route polylines stay identical,
+      not just the benchmark digest. Full edges now use a per-edge coordinate
+      list kept on the `Router`; only the partial first and last edges call
+      `substring`. Polylines identical on 3,000 study-graph routes and in a
+      new test with bent multi-vertex edges; same digest, 1,000-driver job
+      about 68.5 s -> 40 s. Details in `technical_reference.md`.
 
 ## Notes
 
@@ -454,3 +497,6 @@ stored server-side. The Edison and New Brunswick study stays as the
   is worth its own item.
 - 2026-10-27: driver-form town picker landed (frontend only). Checked by
   typecheck, build and backend tests; not clicked through in a browser.
+- 2026-10-28: study view reads the `sensor_*` names. Checked by typecheck,
+  build and the full backend suite against a local PostGIS (482 passed); not
+  clicked through in a browser.

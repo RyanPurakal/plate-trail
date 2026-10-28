@@ -199,6 +199,46 @@ from the two measurements, not a profile of the C++ run.
 python scripts/benchmark_router.py --drivers 1000 --weeks 1 --repeats 3   # needs DATABASE_URL and the graph cache
 ```
 
+**Profile with the C++ router** (2026-10-28, cProfile of the same
+1,000-driver, 1-week job, `PLATETRAIL_ROUTER=cpp`, no Redis). cProfile adds a
+lot of overhead to small Python calls, so the shares below matter more than
+the absolute times.
+
+| Part of the job | Share |
+|---|---|
+| Routing (`Router.route_points`) | 66% |
+| - route geometry: shapely `substring` per route edge (1.33 M calls) | 29% |
+| - the C++ search itself (`_search_cpp`) | 8% |
+| - the rest of `_compute` (virtual edges, path to edge keys, `RouteEdge`s) | about 29% |
+| Routine generation (`NHTSRoutineGenerator.generate`) | 30% |
+| - `sample_home_by_distance` (drop-offs and visits) | 25% |
+| Matching, noise and storing the population | under 4% |
+
+`sample_home_by_distance` recomputed the midpoint of every residential
+street and the distance to each one in a Python loop, on every call (1,291
+calls). The midpoints and lengths are now computed once per `PlacePool`
+(`PlacePool.residential_mids`) and the distances in one array call to
+`Geod.inv`. Same draws (`test_home_by_distance_matches_per_street_weights`),
+same digest over the whole job (`844e422acceb2774`, 14,930 trips, 6,572
+reads), and the unprofiled job went from 86.6 s to 68.1 s and 69.2 s (one
+run before, two after, same machine).
+
+**Route geometry.** After that change, a second profile (on a busier
+machine) put routing at 84% of the job: `substring` 36%, the C++ search 10%,
+and the rest Python glue in `_compute`. Most route edges are driven end to
+end (`f0 = 0`, `f1 = 1`), where `substring` is not needed: `_compute` now
+takes those edges' coordinates from a per-edge list kept on the `Router`
+(`Router._coords`) and calls `substring` only for the partial first and last
+edges. Because reads are placed along the route and the benchmark digest
+only covers the coordinate count, the polylines were checked directly:
+`substring(geometry, 0, 1)` equals the edge's own coordinates on all 24,697
+edges of the study graph, 3,000 random study-graph routes (1.06 M points)
+are identical with and without the shortcut (`_compute` 15.8 s -> 6.4 s for
+those routes), and `test_full_edge_coords_match_substring` compares the two
+on grids with bent multi-vertex edges. The 1,000-driver job keeps digest
+`844e422acceb2774` and went from about 68.5 s to 39.1 s and 41.0 s (two
+runs, C++ router, 2026-10-28).
+
 ## Routine generator
 
 `platetrail.routines` plans each synthetic driver's trips behind a

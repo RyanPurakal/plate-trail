@@ -122,7 +122,7 @@ def route_history(legs: list[dict], start: tuple[float, float], end: tuple[float
             "reads": len(reads),
             "days_with_reads": inf.days_with_reads,
             "sensors_read": len({r.camera_label for r in reads}),
-            "regular": [{"camera_label": p.camera_label, "time": _hhmm(p.minute_of_day), "days": p.days,
+            "regular": [{"sensor_label": p.camera_label, "camera_label": p.camera_label, "time": _hhmm(p.minute_of_day), "days": p.days,
                          "weekdays": list(p.weekdays)} for p in inf.regular],
             "places": places,
             "summary": _summary(days, trips, reads, inf, places),

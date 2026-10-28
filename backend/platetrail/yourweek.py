@@ -73,7 +73,7 @@ class YourWeekGenerator(RoutineGenerator):
 
 def simulate_week(runner, week: WeekInput, weeks: int = 1, seed: int = 0) -> dict:
     """Run-like response (same shape as GET /runs/{id}) built only in memory."""
-    from platetrail.api.queries import inference, naive_guess
+    from platetrail.api.queries import inference, naive_guess, sensor_names
     from platetrail.sim.runner import SimulationRequest
 
     out = runner.simulate(SimulationRequest(weeks=weeks, seed=seed), generator=YourWeekGenerator(runner.pool, week),
@@ -83,13 +83,13 @@ def simulate_week(runner, week: WeekInput, weeks: int = 1, seed: int = 0) -> dic
     coords = {c.label: (c.lon, c.lat) for c in cams.by_id.values() if c.lon is not None}
     outcome = {r.pass_id: "read" for r in out.noise.reads}
     outcome.update({d.pass_id: d.reason for d in out.noise.dropped})
-    passes = [{"id": seq, "trip_seq": ti, "pass_seq": seq, "camera_id": p.camera_id, "camera_label": label.get(p.camera_id, ""),
+    passes = [sensor_names({"id": seq, "trip_seq": ti, "pass_seq": seq, "camera_id": p.camera_id, "camera_label": label.get(p.camera_id, ""),
                "time": p.time.isoformat(), "event": p.event, "travel_bearing_deg": p.travel_bearing_deg,
                "road_name": p.road_name, "captured": p.captured, "match_reason": p.reason.value,
-               "noise_outcome": outcome.get(seq) if p.captured else None} for seq, ti, p in out.passes]
-    reads = [{"id": r.read_id, "read_seq": r.read_id, "pass_id": r.pass_id, "camera_id": r.camera_id,
+               "noise_outcome": outcome.get(seq) if p.captured else None}) for seq, ti, p in out.passes]
+    reads = [sensor_names({"id": r.read_id, "read_seq": r.read_id, "pass_id": r.pass_id, "camera_id": r.camera_id,
               "camera_label": label.get(r.camera_id, ""), "time": r.time.isoformat(), "true_time": r.true_time.isoformat(),
-              "plate_state": r.state, "plate": r.plate, "misread": r.misread, "jitter_s": r.jitter_s}
+              "plate_state": r.state, "plate": r.plate, "misread": r.misread, "jitter_s": r.jitter_s})
              for r in out.noise.reads]
     anchors = {k: {"key": p.key, "category": p.category, "lon": p.lon, "lat": p.lat, "town": p.town, "name": p.name}
                for k, p in out.sim.routine.anchors.items()}

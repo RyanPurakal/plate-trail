@@ -36,8 +36,10 @@ def test_each_direction_is_read_by_one_of_the_opposite_pair(toy):
     for leg in (out, back):
         assert leg["sensors_passed"] == 2 and leg["reads"] == 1
         assert len(leg["steps"]) == 2
-    read_out = {s["camera_id"] for s in out["steps"] if s["read"]}
-    read_back = {s["camera_id"] for s in back["steps"] if s["read"]}
+    read_out = {s["sensor_id"] for s in out["steps"] if s["read"]}
+    read_back = {s["sensor_id"] for s in back["steps"] if s["read"]}
+    # camera_id stays as an older name for sensor_id
+    assert all(s["camera_id"] == s["sensor_id"] for leg in (out, back) for s in leg["steps"])
     assert read_out and read_back and read_out != read_back
     missed = [s for s in out["steps"] if not s["read"]][0]
     assert missed["reason"] == "wrong_direction"

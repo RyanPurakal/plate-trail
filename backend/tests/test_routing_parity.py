@@ -11,6 +11,8 @@ from datetime import datetime
 
 import networkx as nx
 import pytest
+from shapely.geometry import LineString
+from shapely.ops import substring
 
 from platetrail.sim import routing
 from platetrail.sim.routing import NoRoute, Router
@@ -63,6 +65,37 @@ def test_backend_flag(monkeypatch):
     monkeypatch.setenv("PLATETRAIL_ROUTER", "fortran")
     with pytest.raises(ValueError):
         routing.default_backend()
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_full_edge_coords_match_substring(seed, monkeypatch):
+    """Edges driven end to end take their own coordinates instead of substring(geometry, 0, 1). The polylines
+    (and so where reads land) must be identical to the all-substring path, on bent multi-vertex geometries too."""
+    rng = random.Random(200 + seed)
+    G = grid_graph(7, seed)
+    for u, v, k, d in G.edges(keys=True, data=True):
+        if rng.random() < 0.5:
+            (x0, y0), (x1, y1) = (G.nodes[u]["x"], G.nodes[u]["y"]), (G.nodes[v]["x"], G.nodes[v]["y"])
+            bends = [(x0 + (x1 - x0) * t + rng.uniform(-3e-4, 3e-4), y0 + (y1 - y0) * t + rng.uniform(-3e-4, 3e-4))
+                     for t in sorted(rng.uniform(0.1, 0.9) for _ in range(rng.randint(1, 4)))]
+            d["geometry"] = LineString([(x0, y0), *bends, (x1, y1)])
+    fast = Router(G, backend="python")
+    pairs = [(xy(rng.uniform(0, 1200), rng.uniform(0, 1200)), xy(rng.uniform(0, 1200), rng.uniform(0, 1200)))
+             for _ in range(80)]
+    got = []
+    for o, d in pairs:
+        try:
+            got.append(fast.route(o, d, DEPART, use_cache=False))
+        except NoRoute:
+            got.append(None)
+    assert any(r is not None and any(e.frac_from == 0.0 and e.frac_to == 1.0 for e in r.edges) for r in got)
+
+    monkeypatch.setattr(Router, "_coords",
+                        lambda self, e: list(substring(self._geometry(e), 0.0, 1.0, normalized=True).coords))
+    ref = Router(G, backend="python")
+    for (o, d), r in zip(pairs, got):
+        if r is not None:
+            same_route(ref.route(o, d, DEPART, use_cache=False), r)
 
 
 @needs_cpp

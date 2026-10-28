@@ -44,7 +44,8 @@ def cameras_feature_collection(engine: Engine, ray_m: float = 30.0) -> dict:
         for r in rows:
             props = {
                 "kind": "camera",
-                "camera_id": r["id"],
+                "sensor_id": r["id"],
+                "camera_id": r["id"],  # older name for sensor_id, kept for existing clients
                 "osm_id": r["source_id"] if r["source"] == "osm" else None,
                 "source": r["source"],
                 "sources": r["sources"],
@@ -79,6 +80,7 @@ def cameras_feature_collection(engine: Engine, ray_m: float = 30.0) -> dict:
                         "geometry": {"type": "LineString", "coordinates": [[r["lon"], r["lat"]], [lon2, lat2]]},
                         "properties": {
                             "kind": "direction_ray",
+                            "sensor_id": r["id"],
                             "camera_id": r["id"],
                             "bearing_deg": brg,
                             "stroke": "#c0392b",

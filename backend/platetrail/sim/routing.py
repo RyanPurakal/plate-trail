@@ -167,6 +167,7 @@ class Router:
             h.update(f"{u},{v},{k},{d['_cost']:.4f};".encode())
         self.fingerprint = h.hexdigest()[:16]
         self.cache_hits = 0
+        self._edge_coords: dict[EdgeKey, list] = {}
         self.backend = backend or default_backend()
         if self.backend not in BACKENDS:
             raise ValueError(f"backend must be one of {BACKENDS}, got {self.backend!r}")
@@ -231,6 +232,13 @@ class Router:
             return geom
         u, v, _ = e
         return LineString([(self.G.nodes[u]["x"], self.G.nodes[u]["y"]), (self.G.nodes[v]["x"], self.G.nodes[v]["y"])])
+
+    def _coords(self, e: EdgeKey) -> list:
+        """The edge's coordinates, kept per edge: what substring(geometry, 0, 1) gives for an edge driven end to end."""
+        c = self._edge_coords.get(e)
+        if c is None:
+            c = self._edge_coords[e] = list(self._geometry(e).coords)
+        return c
 
     def _route_edge(self, e: EdgeKey, f0: float, f1: float, offset: float) -> RouteEdge:
         data = self._data(e)
@@ -335,8 +343,11 @@ class Router:
             re_ = self._route_edge(e, f0, f1, t)
             edges.append(re_)
             t += re_.travel_time_s
-            seg = substring(self._geometry(e), f0, f1, normalized=True)
-            seg_coords = list(seg.coords) if seg.geom_type == "LineString" else [seg.coords[0]]
+            if f0 == 0.0 and f1 == 1.0:  # most edges: no substring needed (callers only copy from the list)
+                seg_coords = self._coords(e)
+            else:
+                seg = substring(self._geometry(e), f0, f1, normalized=True)
+                seg_coords = list(seg.coords) if seg.geom_type == "LineString" else [seg.coords[0]]
             coords.extend(seg_coords if not coords else seg_coords[1:])
         if not coords:
             g = self._geometry(o.edge).interpolate(o.fraction, normalized=True)

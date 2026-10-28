@@ -52,7 +52,8 @@ def check_leg(router: Router, cameras: CameraSet, start: tuple[float, float], en
         cam = cameras.by_id.get(p.camera_id)
         offset = (p.time - route.depart).total_seconds()
         steps.append({
-            "camera_id": p.camera_id,
+            "sensor_id": p.camera_id,
+            "camera_id": p.camera_id,  # older name for sensor_id, kept for existing clients
             "label": p.label,
             "lon": cam.lon if cam else None,
             "lat": cam.lat if cam else None,
@@ -68,7 +69,7 @@ def check_leg(router: Router, cameras: CameraSet, start: tuple[float, float], en
         "geometry": {"type": "LineString", "coordinates": [list(c) for c in route.coords]},
         "length_m": round(route.length_m, 1),
         "duration_s": round(route.duration_s, 1),
-        "sensors_passed": len({s["camera_id"] for s in steps}),
+        "sensors_passed": len({s["sensor_id"] for s in steps}),
         "reads": sum(1 for s in steps if s["read"]),
         "steps": steps,
     }

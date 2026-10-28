@@ -7,7 +7,9 @@ from shapely.geometry import LineString
 
 from platetrail.routines.nhts import NHTSRoutineGenerator
 from platetrail.routines.nhts_data import load_diaries
-from platetrail.routines.places import Place, PlacePool, sample_by_distance
+from platetrail.geo import WGS84
+from platetrail.routines.places import (Place, PlacePool, _distance_weights, sample_by_distance,
+                                         sample_home_by_distance)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "nhts"
 MONDAY = date(2026, 10, 12)
@@ -86,6 +88,24 @@ def test_distance_matching_prefers_trip_length():
     short = [sample_by_distance(p, ("grocery",), rng, origin, 1300).key for _ in range(500)]
     long = [sample_by_distance(p, ("grocery",), rng, origin, 13000).key for _ in range(500)]
     assert short.count("near") > 450 and long.count("far") > 450
+
+
+def test_home_by_distance_matches_per_street_weights():
+    # The cached street midpoints and the array distance call give the same draw as computing each street in turn.
+    rng = np.random.default_rng(3)
+    streets = [(f"{i}-{i + 1}-0", LineString([(-74.45 + rng.random() * 0.1, 40.48 + rng.random() * 0.1),
+                                             (-74.45 + rng.random() * 0.1, 40.48 + rng.random() * 0.1)]),
+                50.0 + rng.random() * 500, "Edison") for i in range(40)]
+    p, origin = PlacePool([], streets), Place("o", "home", -74.41, 40.52)
+    mids = [(g.interpolate(0.5, normalized=True).x, g.interpolate(0.5, normalized=True).y) for _, g, _, _ in streets]
+    d = np.array([WGS84.inv(origin.lon, origin.lat, x, y)[2] for x, y in mids])
+    w = _distance_weights(d, 4000) * np.array([s[2] for s in streets])
+    for seed in range(20):
+        a, b = np.random.default_rng(seed), np.random.default_rng(seed)
+        key, geom, _, _ = streets[int(a.choice(len(w), p=w / w.sum()))]
+        pt = geom.interpolate(float(a.random()), normalized=True)
+        got = sample_home_by_distance(p, b, origin, 4000)
+        assert got.key.startswith(f"home/{key}/") and (got.lon, got.lat) == (pt.x, pt.y)
 
 
 def test_missing_files_error_is_helpful(tmp_path):

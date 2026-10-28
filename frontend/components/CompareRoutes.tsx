@@ -25,7 +25,7 @@ const legRows = (d: RouteLeg["direction"], name: string): Row[] => [
 const ROWS: Row[] = [
   ...legRows("outbound", "Start to end"),
   ...legRows("return", "Way back"),
-  ["Different sensors passed", (r) => String(new Set(r.legs.flatMap((l) => l.steps.map((st) => st.camera_id))).size)],
+  ["Different sensors passed", (r) => String(new Set(r.legs.flatMap((l) => l.steps.map((st) => st.sensor_id))).size)],
   ["Roads used", (r) => (r.network.kind === "region" ? `${r.network.name} study roads` : "OpenStreetMap roads")],
 ];
 

@@ -72,7 +72,7 @@ function LegSummary({ leg, focus, onFocus }: LegProps) {
           return (
             <li key={key} className={`${st.read ? "read" : "pass"}${on ? " on" : ""}`}>
               <button className="mr-step" aria-pressed={on} disabled={!at}
-                onClick={() => onFocus(on || !at ? null : { key, at, cameraId: st.camera_id })}>
+                onClick={() => onFocus(on || !at ? null : { key, at, cameraId: st.sensor_id })}>
                 <span className="mr-when">{clock(st.offset_s)}</span>
                 <span>
                   <span className="mr-step-what">{st.read ? "Would record" : "Passes, not recorded"}</span>
