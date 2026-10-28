@@ -339,7 +339,8 @@ export async function searchPlaces(q: string): Promise<{ results: PlaceMatch[]; 
 
 /** POST /route/check: one step per sensor the drive passes, in order along the route. */
 export type RouteStep = {
-  camera_id: string;
+  sensor_id: string;
+  camera_id: string; // older name for sensor_id
   label: string | null;
   lon: number | null;
   lat: number | null;
@@ -407,7 +408,7 @@ export type HistoryPeriod = {
   reads: number;
   days_with_reads: number;
   sensors_read: number;
-  regular: { camera_label: string; time: string; days: number; weekdays: number[] }[];
+  regular: { sensor_label: string; camera_label: string; time: string; days: number; weekdays: number[] }[];
   places: { overnight?: HistoryPlace; daytime?: HistoryPlace };
   summary: string[];
 };

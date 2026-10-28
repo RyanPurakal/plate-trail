@@ -342,10 +342,22 @@ stored server-side. The Edison and New Brunswick study stays as the
       values and source credits (DeFlock), so they stay.
 - [ ] Generic "sensor" terminology in new code and API fields where it does
       not break existing endpoints (aliases first, renames later).
+      - [x] Check-up endpoints: `/route/check` steps carry `sensor_id` and
+            `/route/history` regular passes carry `sensor_label`, next to the
+            older `camera_id` / `camera_label` (same values, kept for existing
+            clients). The check-up UI (route map, timeline, compare, last
+            look) reads the new names.
+      - [ ] Study endpoints (`/cameras`, runs, inference) and a date to drop
+            the older check-up names.
 
 ## App quality
 
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
+      Blocked for now (2026-10-28): `eslint-config-next` 16.4.3 pulls in
+      typescript-eslint 8.72, which refuses TypeScript 7 (the project's
+      `typescript`). An npm override giving the lint packages TS 6
+      (`@typescript/typescript6`) failed on peer resolution. Retry once
+      typescript-eslint supports TS 7, or move `tsc` to a separate package.
 - [x] Upgrade Next.js past the flagged advisory so `next build` stops failing
       intermittently on its security check. `next` is now ^16.4.3 (16.0.0
       through 16.4.0 are flagged by `npm audit`; 16.4.3 reports 0

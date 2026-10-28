@@ -260,7 +260,7 @@ export default function Home() {
     announce(`Checking ${r.name}…`);
     try {
       const result = await checkRoute(r.start, r.end);
-      const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.camera_id))));
+      const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.sensor_id))));
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null, change } }));
       announce(routeAnnouncement(r.name, result, change));
     } catch (e) {

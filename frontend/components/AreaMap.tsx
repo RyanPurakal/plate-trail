@@ -246,8 +246,8 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
       features.push({ type: "Feature", properties: { direction: leg.direction }, geometry: leg.geometry });
       for (const st of leg.steps) {
         if (st.lon == null || st.lat == null) continue;
-        const prev = read.get(st.camera_id);
-        read.set(st.camera_id, { at: [st.lon, st.lat], read: !!prev?.read || st.read });
+        const prev = read.get(st.sensor_id);
+        read.set(st.sensor_id, { at: [st.lon, st.lat], read: !!prev?.read || st.read });
       }
     }
     for (const [id, p] of read) {

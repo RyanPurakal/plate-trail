@@ -35,6 +35,7 @@ def test_longer_retention_reveals_more(legs):
     assert year["reads"] <= year["trips"]  # one sensor reads each direction; a few reads are missed
     assert year["sensors_read"] == 2
     assert year["regular"] and year["regular"][0]["weekdays"] == [0, 1, 2, 3, 4]
+    assert all(r["sensor_label"] == r["camera_label"] for r in year["regular"])
     assert "overnight" in year["places"]
     assert year["places"]["overnight"]["distance_m"] < 1000
     assert all(isinstance(s, str) for s in year["summary"]) and "a year" in year["summary"][0]
