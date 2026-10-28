@@ -69,6 +69,23 @@ def get_runner() -> SimulationRunner:
     return get_local_runner()
 
 
+def _check_density_scenario(body: SimulateRequest | PopulationRequestBody, runner: SimulationRunner | None = None):
+    """422 now if the scenario's extra cameras can't be placed, instead of a failed run or job later.
+
+    Placement is seeded by the request, so trying it here gives the same answer the run would.
+    """
+    if body.extra_cameras <= 0:
+        return
+    from platetrail.sim.scenarios import density_scenario
+
+    runner = runner or get_runner()
+    try:
+        density_scenario(runner.router, runner.cameras, runner.towns, body.extra_cameras, body.seed,
+                         body.scenario_town)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"extra_cameras: {e}; try fewer extra cameras") from e
+
+
 @app.get("/health")
 def health() -> dict:
     with get_engine().connect() as conn:
@@ -185,6 +202,7 @@ def cameras(rays: bool = False) -> dict:
 
 @app.post("/simulate", status_code=201)
 def simulate(body: SimulateRequest, runner: SimulationRunner = Depends(get_runner)) -> dict:
+    _check_density_scenario(body, runner)
     try:
         run_id = runner.run(body.to_request())
     except (AnchorTooFar, NoRoute) as e:
@@ -197,6 +215,7 @@ def simulate(body: SimulateRequest, runner: SimulationRunner = Depends(get_runne
 @app.post("/jobs/simulate", status_code=202)
 def submit_simulate_job(body: SimulateRequest) -> dict:
     """Queue a simulation (Celery worker if Redis is configured, else in-process); poll GET /jobs/{id}."""
+    _check_density_scenario(body)
     return submit_simulation(body.model_dump(mode="json"))
 
 
@@ -211,6 +230,7 @@ def get_job(job_id: str) -> dict:
 @app.post("/jobs/population", status_code=202)
 def submit_population_job(body: PopulationRequestBody) -> dict:
     """Queue a population run (many drivers, one configuration); poll GET /jobs/{id} for population_id."""
+    _check_density_scenario(body)
     return submit_population(body.model_dump(mode="json"))
 
 

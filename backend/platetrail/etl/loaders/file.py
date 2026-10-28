@@ -5,8 +5,9 @@ a planning office, a survey, or a hand-made hypothetical placement.
 
 GeoJSON: a FeatureCollection of Point features. Properties (all optional):
   id         stable id within the file (default: feature index)
-  town       a town label of the region (required if the region has more
-             than one town)
+  town       a town label of the region; when missing it is the region's
+             only town, or the box town (a town given as a bbox) the point
+             falls in. Required for a point outside every box town.
   direction  facing bearing(s), same formats as the OSM tag: "90",
              "90;270", "NE", "45-135"; missing = no usable direction
 Other properties are kept as tags.
@@ -64,8 +65,20 @@ def read_rows(path: Path) -> list[dict[str, Any]]:
     raise SensorFileError(f"unsupported sensor file type {suffix!r} (use .geojson, .json or .csv)")
 
 
+def town_for_point(region: Region, lon: float, lat: float) -> str | None:
+    """The town a point belongs to when a file row gives none, or None.
+
+    A one-town region's only town; otherwise the one box town containing the
+    point (edges count). Relation towns have no boundary without OSM, so a
+    point outside every box, or inside more than one, gets no town.
+    """
+    if len(region.labels) == 1:
+        return region.labels[0]
+    hits = [label for label, (w, s, e, n) in region.bboxes.items() if w <= lon <= e and s <= lat <= n]
+    return hits[0] if len(hits) == 1 else None
+
+
 def parse_rows(rows: list[dict[str, Any]], region: Region, source: str) -> list[CameraRecord]:
-    single_town = region.labels[0] if len(region.labels) == 1 else None
     records = []
     for i, row in enumerate(rows):
         try:
@@ -74,7 +87,11 @@ def parse_rows(rows: list[dict[str, Any]], region: Region, source: str) -> list[
             raise SensorFileError(f"row {i}: invalid lon/lat") from e
         if not (-180 <= lon <= 180 and -90 <= lat <= 90):
             raise SensorFileError(f"row {i}: lon/lat out of range ({lon}, {lat})")
-        town = row.get("town") or single_town
+        town = row.get("town") or town_for_point(region, lon, lat)
+        if town is None:
+            raise SensorFileError(
+                f"row {i}: no town given and ({lon}, {lat}) is not inside exactly one town box; add a town"
+            )
         if town not in region.labels:
             raise SensorFileError(f"row {i}: town {town!r} is not one of the region's towns {list(region.labels)}")
         raw = row.get("direction")

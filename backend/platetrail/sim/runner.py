@@ -123,17 +123,10 @@ class LocalRunner(SimulationRunner):
         plate = synthetic_plate(np.random.default_rng([request.seed, 2]))
         cameras, scenario = self.cameras, None
         if request.extra_cameras > 0:
-            from platetrail.region import get_region
-            from platetrail.sim.scenarios import synthetic_cameras
+            from platetrail.sim.scenarios import density_scenario
 
-            town = request.scenario_town or get_region().scenario_town
-            sims, recs = synthetic_cameras(
-                self.router, request.extra_cameras, request.seed, within=self.towns.get(town),
-                existing=[(c.lon, c.lat) for c in self.cameras.by_id.values() if c.lon is not None])
-            cameras = CameraSet(list(self.cameras.by_id.values()) + sims)
-            scenario = {"extra_cameras": request.extra_cameras, "town": town,
-                        "placement": "assumption: arterials, length-weighted, >= 300 m apart",
-                        "cameras": [r.as_json() for r in recs]}
+            cameras, scenario = density_scenario(self.router, self.cameras, self.towns, request.extra_cameras,
+                                                 request.seed, request.scenario_town)
         report("routing", 0, len(routine.trips))
         sim = simulate_routine(self.router, cameras, routine, request.match,
                                on_trip=lambda done, total: report("routing", done, total), use_cache=use_cache)
@@ -264,11 +257,13 @@ def main() -> None:
     ap.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 12))
     ap.add_argument("--zero-noise", action="store_true", help="store the noiseless read log")
     ap.add_argument("--extra-cameras", type=int, default=0, help="density scenario: synthetic cameras in the region's scenario town")
+    ap.add_argument("--scenario-town", default=None, help="town for --extra-cameras (default: the region's scenario town)")
     args = ap.parse_args()
     runner = LocalRunner.from_db()
     req = SimulationRequest(args.template, args.weeks, args.start, args.seed,
                             noise=NoiseConfig.noiseless(args.seed) if args.zero_noise else None,
-                            extra_cameras=args.extra_cameras, generator=args.generator)
+                            extra_cameras=args.extra_cameras, generator=args.generator,
+                            scenario_town=args.scenario_town)
     run_id = runner.run(req)
     with runner.engine.connect() as conn:
         summary, gen, state, plate = conn.execute(

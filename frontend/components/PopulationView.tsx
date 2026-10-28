@@ -12,6 +12,7 @@ type PopulationItem = {
   seed: number;
   generator: string;
   extra_cameras: number;
+  scenario_town?: string | null; // town the hypothetical cameras were placed in (null: whole network)
   stale: boolean;
   summary: { reads: number; reads_per_driver_median: number; drivers_never_read: number };
 };
@@ -49,7 +50,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 type Props = {
-  scenarioTown: string; // where hypothetical cameras are placed (region's scenario_town)
+  scenarioTown: string; // region's scenario_town, for populations stored before the town was recorded
   notes: RegionNotes; // the region's dataset notes from GET /region
 };
 
@@ -119,7 +120,7 @@ export default function PopulationView({ scenarioTown, notes }: Props) {
           </p>
           {pop.extra_cameras > 0 && (
             <div className="nb-note">
-              Includes {pop.extra_cameras} hypothetical cameras in {scenarioTown}.
+              Includes {pop.extra_cameras} hypothetical cameras in {pop.scenario_town ?? scenarioTown}.
               {notes.unlisted_sensors && ` ${notes.unlisted_sensors}`} Placement is simulated: arterial roads (trunk to tertiary) chosen in proportion to length, at least 300 m from any other camera, each reading one direction, drawn per seed.
             </div>
           )}

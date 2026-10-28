@@ -311,10 +311,26 @@ stored server-side. The Edison and New Brunswick study stays as the
       checking the file, building data locally and in Docker (compose now
       passes `PLATETRAIL_REGION` through to the api and worker), and the
       NHTS caveat. The README's study-area paragraph links to it.
-- [ ] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors
-      placed in any configured town, with neutral wording.
-- [ ] Document which parts depend on US data (NHTS trip diaries) and what an
+- [x] Generalize the density scenario (`sim/scenarios.py`): synthetic sensors
+      placed in any configured town, with neutral wording. `density_scenario`
+      (shared by single runs and populations) places them in any town of the
+      active region; `/simulate`, `/jobs/simulate` and `/jobs/population`
+      take an optional `scenario_town`, rejected with a 422 unless it is one
+      of the region's towns (default: the region's `scenario_town`). A town
+      with no polygon loaded is now an error instead of a silent spread over
+      the whole network (a runner with no towns at all, like the test toy
+      graphs, still places anywhere and records `town: null`). Both CLIs take
+      `--scenario-town`. `GET /populations` returns `scenario_town`, and the
+      study view labels hypothetical cameras with the town a run or
+      population actually used. No town picker in the UI yet.
+- [x] Document which parts depend on US data (NHTS trip diaries) and what an
       alternative routine source would need to provide.
+      `docs/routine_sources.md`: only the example study's drivers use NHTS
+      (Explore, routes, read history and Your week do not); the fields
+      `NHTSRoutineGenerator` reads, the purpose-code mapping, converting
+      another survey to `NHTSDiaries` or writing a new `RoutineGenerator`,
+      and caveats. `test_nhts.py` builds diaries in code with no survey files.
+      Linked from `docs/new_region.md`.
 
 ## Neutral wording in code
 
@@ -330,15 +346,44 @@ stored server-side. The Edison and New Brunswick study stays as the
 ## App quality
 
 - [ ] Frontend: run `npm run lint` in CI if not already, fix any warnings.
-- [ ] Upgrade Next.js past the flagged advisory so `next build` stops failing
-      intermittently on its security check.
-- [ ] API: validate `extra_cameras` and other scenario inputs against the
-      active region.
-- [ ] Sensor files: optionally assign `town` by point-in-boundary when a
+- [x] Upgrade Next.js past the flagged advisory so `next build` stops failing
+      intermittently on its security check. `next` is now ^16.4.3 (16.0.0
+      through 16.4.0 are flagged by `npm audit`; 16.4.3 reports 0
+      vulnerabilities). Only Next's own packages changed in the lockfile;
+      typecheck and two back-to-back builds passed with no advisory notice.
+- [x] API: validate `extra_cameras` and other scenario inputs against the
+      active region. `scenario_town` is checked in the request model; for
+      `extra_cameras` the API tries the seeded placement before queuing
+      (`POST /simulate`, `/jobs/simulate`, `/jobs/population`), so a count
+      that can't fit the town's arterials at 300 m spacing is a 422 with the
+      reason instead of a failed job. Same seed, same answer as the run.
+- [x] Study view: a town picker for hypothetical cameras in the driver and
+      population forms when the region has more than one town. The "One
+      driver" form shows an "in <town>" select next to "+hypothetical cams"
+      when the count is above 0 and `GET /region` lists more than one town
+      (default: the region's `scenario_town`); the pick is sent as
+      `scenario_town` and named in the tooltip. Populations are only built
+      from the CLI (`--scenario-town`), so there is no population form to
+      add it to.
+- [x] Sensor files: optionally assign `town` by point-in-boundary when a
       multi-town region's file has no town column (needs boundaries without
-      OSM, so pairs well with the bbox item).
-- [ ] Tests: an end-to-end smoke test on a tiny synthetic region (fixture graph
+      OSM, so pairs well with the bbox item). A row with no town now gets the
+      region's only town or the one box town containing the point
+      (`town_for_point` in `etl/loaders/file.py`). Relation towns have no
+      boundary offline, so a point outside every box, or on an edge shared
+      by two boxes, still stops the ETL and asks for a town. Documented in
+      `camera_sources.md` and `new_region.md`.
+- [x] Tests: an end-to-end smoke test on a tiny synthetic region (fixture graph
       + fixture cameras) that does not need network access.
+      `tests/test_smoke_region.py` makes `tests/fixtures/tiny_region` (two box
+      towns, six CSV sensors) the active region and builds a 6 x 6 street grid
+      with one primary and one secondary road plus a place of every category
+      in code. It runs region config -> file sensors -> direction-aware
+      snapping -> commuter routine -> routing, matching and noise ->
+      inference (home placed within 1.5 km, regular passes found), a
+      12-driver population through unicity and the policy comparison, and a
+      2-sensor density scenario in the East town. No database or network;
+      about a second.
 - [ ] Performance: profile the population runner after the C++ router and note
       the next bottleneck in `docs/technical_reference.md`.
 
@@ -407,3 +452,5 @@ stored server-side. The Edison and New Brunswick study stays as the
   Next.js's security-advisory check (`SecurityFatalError`) after a successful
   compile and typecheck; it happens with or without the change. Upgrading Next
   is worth its own item.
+- 2026-10-27: driver-form town picker landed (frontend only). Checked by
+  typecheck, build and backend tests; not clicked through in a browser.

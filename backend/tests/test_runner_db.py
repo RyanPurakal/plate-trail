@@ -126,6 +126,7 @@ def test_density_scenario_stored_with_run(engine):
                                          extra_cameras=3))
     (scn,) = rows(engine, dense, "SELECT scenario FROM runs WHERE id = :r")
     assert scn.scenario["extra_cameras"] == 3 and len(scn.scenario["cameras"]) == 3
+    assert scn.scenario["town"] is None  # no town polygons on the toy runner: whole network
     assert rows(engine, base, "SELECT scenario FROM runs WHERE id = :r")[0].scenario is None
     labels = {r.camera_label for r in rows(engine, dense, "SELECT camera_label FROM camera_passes WHERE run_id = :r")}
     real = {r.camera_label for r in rows(engine, base, "SELECT camera_label FROM camera_passes WHERE run_id = :r")}

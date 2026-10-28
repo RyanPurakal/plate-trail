@@ -125,7 +125,7 @@ def test_simulate_passes_match_and_noise_settings(client):
 @pytest.mark.parametrize("payload", [
     {"weeks": 0}, {"weeks": 9}, {"template": "astronaut"}, {"start": "2026-10-13"},
     {"generator": "nhts", "template": "commuter"}, {"generator": "template", "template": "worker"},
-    {"generator": "census"}, {"extra_cameras": 201},
+    {"generator": "census"}, {"extra_cameras": 201}, {"scenario_town": "Nowhere"},
     {"match": {"tolerance_deg": 200}}, {"match": {"facing": "sideways"}}, {"noise": {"p_miss": 1.5}}, {"seed": -1},
 ])
 def test_simulate_rejects_bad_requests(client, payload):
@@ -167,6 +167,14 @@ def test_unknown_job_is_404(client):
 
 def test_job_validation_matches_simulate(client):
     assert client.post("/jobs/simulate", json={"weeks": 0}).status_code == 422
+
+
+def test_unplaceable_extra_cameras_rejected_up_front(client):
+    # The toy graph has no arterial roads, so no scenario camera can be placed: 422 before any run or job.
+    for path in ("/simulate", "/jobs/simulate"):
+        resp = client.post(path, json={"extra_cameras": 2})
+        assert resp.status_code == 422 and "extra_cameras" in resp.json()["detail"]
+    assert client.post("/jobs/population", json={"drivers": 3, "extra_cameras": 2}).status_code == 422
 
 
 def test_population_job_and_unicity_endpoint(client):

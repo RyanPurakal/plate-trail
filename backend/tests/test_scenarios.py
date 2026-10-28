@@ -3,7 +3,8 @@ from shapely.geometry import box
 
 from platetrail.geo import WGS84, angle_diff
 from platetrail.sim.routing import Router
-from platetrail.sim.scenarios import synthetic_cameras
+from platetrail.sim.scenarios import density_scenario, synthetic_cameras
+from platetrail.sim.trip import CameraSet
 from test_trip import lot_graph, xy
 
 # lot_graph: public tertiary roads 0-1, 1-2, 2-3, 3-4 (3,000 m in total) and service roads 1-10-3.
@@ -62,3 +63,24 @@ def test_impossible_spacing_raises(router):
 
 def test_zero_cameras_is_a_no_op(router):
     assert synthetic_cameras(router, 0, seed=1) == ([], [])
+
+
+def test_density_scenario_in_a_chosen_town(router):
+    west = box(*xy(-500, -100), *xy(10, 100))
+    east = box(*xy(10, -100), *xy(3000, 100))
+    towns = {"West": west, "East": east}
+    cams, scn = density_scenario(router, CameraSet([]), towns, 1, seed=6, town="West")
+    assert scn["town"] == "West" and scn["extra_cameras"] == 1 and "placement" in scn
+    assert all(c["lon"] <= xy(0, 0)[0] + 1e-9 for c in scn["cameras"])
+    assert [c.camera_id for c in cams.by_id.values()] == [-1]
+
+
+def test_density_scenario_rejects_unknown_town(router):
+    with pytest.raises(ValueError, match="unknown scenario town"):
+        density_scenario(router, CameraSet([]), {"West": box(*xy(-500, -100), *xy(10, 100))}, 1, seed=6,
+                         town="Nowhere")
+
+
+def test_density_scenario_without_towns_uses_whole_network(router):
+    _, scn = density_scenario(router, CameraSet([]), {}, 2, seed=6, town="Anywhere")
+    assert scn["town"] is None and len(scn["cameras"]) == 2

@@ -12,6 +12,18 @@ from platetrail.sim.runner import SimulationRequest
 MAX_WEEKS = 8  # keeps a synchronous request to a few seconds
 
 
+def _region_town(v: str | None) -> str | None:
+    """scenario_town must name a town of the active region (None: the region's default)."""
+    if v is None:
+        return v
+    from platetrail.region import get_region
+
+    labels = get_region().labels
+    if v not in labels:
+        raise ValueError(f"scenario_town must be one of {list(labels)}")
+    return v
+
+
 class MatchSettings(BaseModel):
     tolerance_deg: float = Field(45.0, ge=0, le=180)
     facing: Literal["rear_plate", "oncoming"] = "rear_plate"
@@ -36,7 +48,8 @@ class SimulateRequest(BaseModel):
     start: date = date(2026, 10, 12)
     seed: int = Field(0, ge=0)
     zero_noise: bool = False
-    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario (synthetic cameras in the region's scenario_town)
+    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario: synthetic cameras in scenario_town
+    scenario_town: str | None = None  # any town of the active region; None: the region's scenario_town
     match: MatchSettings = MatchSettings()
     noise: NoiseSettings = NoiseSettings()
 
@@ -54,12 +67,14 @@ class SimulateRequest(BaseModel):
             raise ValueError("start must be a Monday")
         return v
 
+    check_scenario_town = field_validator("scenario_town")(_region_town)
+
     def to_request(self) -> SimulationRequest:
         noise = (NoiseConfig.noiseless(self.seed) if self.zero_noise
                  else NoiseConfig(seed=self.seed, **self.noise.model_dump()))
         return SimulationRequest(self.template, self.weeks, self.start, self.seed,
                                  MatchConfig(**self.match.model_dump()), noise, self.extra_cameras,
-                                 generator=self.generator)
+                                 self.scenario_town, generator=self.generator)
 
 
 class PopulationRequestBody(BaseModel):
@@ -69,8 +84,11 @@ class PopulationRequestBody(BaseModel):
     seed: int = Field(0, ge=0)
     generator: Literal["nhts", "template"] = "nhts"
     extra_cameras: int = Field(0, ge=0, le=200)
+    scenario_town: str | None = None  # any town of the active region; None: the region's scenario_town
     match: MatchSettings = MatchSettings()
     noise: NoiseSettings = NoiseSettings()
+
+    check_scenario_town = field_validator("scenario_town")(_region_town)
 
     @field_validator("start")
     @classmethod
@@ -84,7 +102,7 @@ class PopulationRequestBody(BaseModel):
 
         return PopulationRequest(self.drivers, self.weeks, self.start, self.seed, self.generator,
                                  MatchConfig(**self.match.model_dump()), NoiseConfig(**self.noise.model_dump()),
-                                 self.extra_cameras)
+                                 self.extra_cameras, self.scenario_town)
 
 
 class LonLat(BaseModel):

@@ -34,11 +34,15 @@ A relative `path` is resolved against the region file's folder. The default,
 used by the Edison and New Brunswick region, is `[{"type": "osm"}]`.
 
 - **GeoJSON**: a FeatureCollection of Point features. Optional properties
-  `id`, `town` (a region town label; required when the region has more than
-  one town) and `direction` (same formats as the OSM tag: `90`, `90;270`,
+  `id`, `town` (a region town label) and `direction` (same formats as the OSM tag: `90`, `90;270`,
   `NE`, `45-135`).
 - **CSV**: a header row with `lon` and `lat`, plus the same optional `id`,
   `town` and `direction` columns.
+- **Missing town**: a row with no `town` gets the region's only town, or
+  the town given as a box (`bbox`) that contains the point. A point outside
+  every box town, or on the edge shared by two, needs an explicit `town`;
+  towns defined by an OSM relation have no boundary offline, so their rows
+  always name the town in a multi-town region.
 
 Other properties or columns are kept as tags. Rows with bad coordinates, an
 unknown town or a non-Point geometry stop the ETL with an error rather than

@@ -91,3 +91,23 @@ def test_distance_matching_prefers_trip_length():
 def test_missing_files_error_is_helpful(tmp_path):
     with pytest.raises(FileNotFoundError, match="--download"):
         load_diaries(tmp_path)
+
+
+def test_diaries_built_in_code_drive_the_generator():
+    # The contract for another routine source (docs/routine_sources.md): diaries, stay-home shares and
+    # persona weights built directly, with no survey files and a pool far below MIN_POOL.
+    from platetrail.routines.nhts_data import Diary, DiaryTrip, NHTSDiaries
+
+    commute = (DiaryTrip(8 * 60, 3, 6.0), DiaryTrip(17 * 60, 13, 2.0), DiaryTrip(17 * 60 + 40, 1, 4.0))
+    errands = (DiaryTrip(10 * 60, 12, 3.0), DiaryTrip(11 * 60, 1, 3.0))
+    data = NHTSDiaries(
+        diaries=[Diary("worker", 2, 1.0, commute), Diary("worker", 7, 1.0, errands)],
+        stay_home={("worker", 1): 1.0},  # nobody drives on Sundays
+        persona_weight={"worker": 1.0},
+    )
+    r = NHTSRoutineGenerator(pool(), data).generate(1, MONDAY, 1, np.random.default_rng(0))
+    assert r.template == "nhts_worker"
+    assert r.trips[0].origin == r.anchors["home"] and r.trips[-1].dest == r.anchors["home"]
+    assert all(t.depart.weekday() != 6 for t in r.trips)
+    work = [t for t in r.trips if t.purpose == "work"]
+    assert work and {t.depart.strftime("%H:%M") for t in work} == {"08:00"}

@@ -109,7 +109,7 @@ def list_populations(engine: Engine) -> list[dict]:
     with engine.connect() as conn:
         rows = conn.execute(text(
             "SELECT id, created_at, drivers, weeks, start_date, seed, generator, summary,"
-            " coalesce((scenario->>'extra_cameras')::int, 0) AS extra_cameras,"
+            " coalesce((scenario->>'extra_cameras')::int, 0) AS extra_cameras, scenario->>'town' AS scenario_town,"
             " (camera_snapshot IS NULL OR camera_snapshot IS DISTINCT FROM (SELECT max(loaded_at) FROM cameras)) AS stale"
             " FROM populations ORDER BY id DESC")).mappings().all()
     return [{**dict(r), "created_at": _iso(r["created_at"]), "start_date": _iso(r["start_date"])} for r in rows]

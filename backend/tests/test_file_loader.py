@@ -57,6 +57,29 @@ def test_bad_rows_fail_loudly(tmp_path, features):
         FileCameraLoader(_geojson(tmp_path, features), region=TWO_TOWNS).load()
 
 
+BOX_TOWNS = Region("boxes", "Boxes", "US-PA", (
+    Town("West", bbox=(-74.5, 40.0, -74.4, 40.1)),
+    Town("East", bbox=(-74.4, 40.0, -74.3, 40.1)),
+    Town("Rel", "Rel", 3),
+))
+
+
+def test_missing_town_comes_from_the_town_box(tmp_path):
+    path = tmp_path / "sensors.csv"
+    path.write_text("id,lon,lat,town\na,-74.45,40.05,\nb,-74.35,40.02,\nc,-74.45,40.05,Rel\n")
+    recs = FileCameraLoader(path, region=BOX_TOWNS).load()
+    assert [(r.source_id, r.town) for r in recs] == [("a", "West"), ("b", "East"), ("c", "Rel")]
+
+
+@pytest.mark.parametrize("lon,lat", [
+    (-74.0, 40.05),  # outside every box (could be in the relation town)
+    (-74.4, 40.05),  # on the shared edge of two boxes
+])
+def test_missing_town_without_one_box_fails(tmp_path, lon, lat):
+    with pytest.raises(SensorFileError, match="add a town"):
+        FileCameraLoader(_geojson(tmp_path, [_point(lon, lat)]), region=BOX_TOWNS).load()
+
+
 def test_csv_without_coordinates_fails(tmp_path):
     path = tmp_path / "sensors.csv"
     path.write_text("id,x,y\na,1,2\n")

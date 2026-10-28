@@ -123,7 +123,7 @@ export type NaiveGuess = {
 
 export type Scenario = {
   extra_cameras: number;
-  town: string;
+  town: string | null; // null: no town polygons loaded, placed anywhere on the network
   placement: string;
   cameras: { label: string; lon: number; lat: number; directions_deg: number[] }[];
 };
@@ -210,6 +210,7 @@ export type SimulateBody = {
   seed: number;
   zero_noise?: boolean;
   extra_cameras?: number;
+  scenario_town?: string; // any region town; omitted: the region's scenario_town
 };
 
 export type Job = {
