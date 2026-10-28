@@ -80,8 +80,9 @@ ex-2,-74.6672,40.3573,Princeton,90;270,hypothetical placement for the worked exa
 ex-3,-74.6455,40.3445,Princeton,,hypothetical placement for the worked example
 ```
 
-`town` must be one of the region's labels (it may be left out when the
-region has one town). `direction` takes the OSM tag formats (`90`, `90;270`,
+`town` must be one of the region's labels. It may be left out when the
+region has one town, or when the point lies inside exactly one town given
+as a box. `direction` takes the OSM tag formats (`90`, `90;270`,
 `NE`, `45-135`) or can be empty. Other columns are kept as tags. Give each
 file a distinct `source` name; it is the credit shown in Explore. Full
 format notes are in [camera_sources.md](camera_sources.md#sensors-from-a-file).

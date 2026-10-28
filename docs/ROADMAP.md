@@ -365,9 +365,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       `scenario_town` and named in the tooltip. Populations are only built
       from the CLI (`--scenario-town`), so there is no population form to
       add it to.
-- [ ] Sensor files: optionally assign `town` by point-in-boundary when a
+- [x] Sensor files: optionally assign `town` by point-in-boundary when a
       multi-town region's file has no town column (needs boundaries without
-      OSM, so pairs well with the bbox item).
+      OSM, so pairs well with the bbox item). A row with no town now gets the
+      region's only town or the one box town containing the point
+      (`town_for_point` in `etl/loaders/file.py`). Relation towns have no
+      boundary offline, so a point outside every box, or on an edge shared
+      by two boxes, still stops the ETL and asks for a town. Documented in
+      `camera_sources.md` and `new_region.md`.
 - [x] Tests: an end-to-end smoke test on a tiny synthetic region (fixture graph
       + fixture cameras) that does not need network access.
       `tests/test_smoke_region.py` makes `tests/fixtures/tiny_region` (two box
