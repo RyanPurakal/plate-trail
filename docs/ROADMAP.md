@@ -421,10 +421,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       redid every residential street's midpoint and distance per call. Those
       are now cached per `PlacePool` and computed in one array call: same
       digest, job 86.6 s -> about 68.5 s.
-- [ ] Performance: skip `substring` for route edges driven end to end (or
+- [x] Performance: skip `substring` for route edges driven end to end (or
       cache each edge's coordinates) in `Router._compute`, now the largest
       share of a population job. Check the route polylines stay identical,
-      not just the benchmark digest.
+      not just the benchmark digest. Full edges now use a per-edge coordinate
+      list kept on the `Router`; only the partial first and last edges call
+      `substring`. Polylines identical on 3,000 study-graph routes and in a
+      new test with bent multi-vertex edges; same digest, 1,000-driver job
+      about 68.5 s -> 40 s. Details in `technical_reference.md`.
 
 ## Notes
 
