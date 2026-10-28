@@ -414,8 +414,17 @@ stored server-side. The Edison and New Brunswick study stays as the
       12-driver population through unicity and the policy comparison, and a
       2-sensor density scenario in the East town. No database or network;
       about a second.
-- [ ] Performance: profile the population runner after the C++ router and note
-      the next bottleneck in `docs/technical_reference.md`.
+- [x] Performance: profile the population runner after the C++ router and note
+      the next bottleneck in `docs/technical_reference.md`. With the C++
+      search at 8% of a 1,000-driver job, the time was route geometry
+      (shapely `substring`, 29%) and `sample_home_by_distance` (25%), which
+      redid every residential street's midpoint and distance per call. Those
+      are now cached per `PlacePool` and computed in one array call: same
+      digest, job 86.6 s -> about 68.5 s.
+- [ ] Performance: skip `substring` for route edges driven end to end (or
+      cache each edge's coordinates) in `Router._compute`, now the largest
+      share of a population job. Check the route polylines stay identical,
+      not just the benchmark digest.
 
 ## Notes
 
