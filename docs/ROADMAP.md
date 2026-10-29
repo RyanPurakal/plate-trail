@@ -376,6 +376,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       `typescript`). An npm override giving the lint packages TS 6
       (`@typescript/typescript6`) failed on peer resolution. Retry once
       typescript-eslint supports TS 7, or move `tsc` to a separate package.
+- [x] Frontend tests for the on-device storage helpers (`lib/routes.ts`,
+      `lib/areas.ts`, `lib/snapshots.ts`), which were only checked with
+      throwaway scripts. `npm test` runs `tests/*.test.ts` with Node's own
+      test runner and type stripping (no new dependencies; a small resolve
+      hook in `tests/ts-resolve.mjs` adds the `.ts` the app's imports leave
+      out). Covers malformed and hand-edited stored values, rounding, name
+      defaults, list limits, blocked storage, look diffs, area pruning with
+      pinned saved areas, and forgetting looks. Runs in CI after typecheck.
 - [x] Upgrade Next.js past the flagged advisory so `next build` stops failing
       intermittently on its security check. `next` is now ^16.4.3 (16.0.0
       through 16.4.0 are flagged by `npm audit`; 16.4.3 reports 0
@@ -500,3 +508,5 @@ stored server-side. The Edison and New Brunswick study stays as the
 - 2026-10-28: study view reads the `sensor_*` names. Checked by typecheck,
   build and the full backend suite against a local PostGIS (482 passed); not
   clicked through in a browser.
+- 2026-10-29: frontend unit tests landed (15, about 0.2 s). Components are
+  still untested; a DOM test setup would be its own item.

@@ -279,6 +279,7 @@ cd backend && python3.12 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 export DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/platetrail
 .venv/bin/pytest            # unit + db/API tests (db tests use a separate platetrail_test database)
 cd ../frontend && npm install && npm run dev
+npm test                    # frontend unit tests (on-device storage helpers), Node's built-in runner
 ```
 
 The backend includes a C++ routing module (pybind11, built by `pip install -e .`), so a C++17 compiler is required. Routing uses it by default; `PLATETRAIL_ROUTER=python` selects the networkx reference. It returns identical routes about 5× faster end to end ([details](docs/technical_reference.md#c-router-pybind11)). Tests marked `db` are skipped when `DATABASE_URL` is unset. CI runs everything against a PostGIS service container on every push.
