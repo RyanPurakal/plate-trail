@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from platetrail.api.main import app, get_runner
+from platetrail.api.main import app, get_route_runner
 from platetrail.routearea import AreaNetworks, get_area_networks
 from platetrail.routecheck import check_route
 from platetrail.routehistory import route_history
@@ -75,7 +75,7 @@ def client(toy):
     def no_roads(bbox):
         raise NoRoute("no mapped roads")
 
-    app.dependency_overrides[get_runner] = lambda: toy
+    app.dependency_overrides[get_route_runner] = lambda: toy
     app.dependency_overrides[get_area_networks] = lambda: AreaNetworks(fetch_graph=no_roads)
     yield TestClient(app)
     app.dependency_overrides.clear()

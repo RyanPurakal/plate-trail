@@ -147,7 +147,7 @@ open http://localhost:3000
 
 Rerun the data steps in that order: reloading cameras clears their snaps, so `run_roads` must follow `run_etl`.
 
-**Check-up in Docker.** Exploring an area needs only step 1. Sensors and main roads for each explored box are fetched from OpenStreetMap on demand and cached under `data/raw/overpass_areas/` (mounted at `/data`, refetched after 7 days), so the first look at a new area can take a minute or two while Overpass answers. Route checks use the study road graph from step 2 when a route lies on it; other routes get roads downloaded around them and held in memory only. Nothing about a route is written to `data/` or to the API log.
+**Check-up in Docker.** The check-up needs only step 1. Sensors and main roads for each explored box are fetched from OpenStreetMap on demand and cached under `data/raw/overpass_areas/` (mounted at `/data`, refetched after 7 days), so the first look at a new area can take a minute or two while Overpass answers. Route checks use the study road graph and sensors from step 2 once they are built and a route lies on them; other routes get roads downloaded around them and held in memory only. Nothing about a route is written to `data/` or to the API log.
 
 **Study area.** The towns covered by the data steps come from a region file in `backend/platetrail/regions/`. The default, `nj_edison_new_brunswick`, is the NJ study. Set `PLATETRAIL_REGION` to another bundled id or to the path of a JSON file (towns as OSM boundary relations or plain boxes, optional sensor files, map view and notes) to build sensors, the road graph and places for a different area; Docker passes it through to the api and worker. [docs/new_region.md](docs/new_region.md) walks through a worked example.
 
@@ -281,6 +281,8 @@ export DATABASE_URL=postgresql+psycopg://platetrail:platetrail@localhost:5434/pl
 cd ../frontend && npm install && npm run dev
 npm test                    # frontend unit tests (on-device storage helpers), Node's built-in runner
 ```
+
+The check-up runs with no database: start `.venv/bin/uvicorn platetrail.api.main:app` without PostGIS and exploring areas, place search and route checks all work (routes use roads downloaded around them). The example study's endpoints answer 503 until the database is up and the API has been restarted.
 
 The backend includes a C++ routing module (pybind11, built by `pip install -e .`), so a C++17 compiler is required. Routing uses it by default; `PLATETRAIL_ROUTER=python` selects the networkx reference. It returns identical routes about 5× faster end to end ([details](docs/technical_reference.md#c-router-pybind11)). Tests marked `db` are skipped when `DATABASE_URL` is unset. CI runs everything against a PostGIS service container on every push.
 

@@ -314,7 +314,7 @@ export default function Home() {
       })
       .catch((e: Error) => {
         studyOpened.current = false; // try again on the next study tab switch
-        setError(`API unreachable: ${e.message}`);
+        setError(e instanceof TypeError ? `API unreachable: ${e.message}` : e.message); // TypeError: fetch itself failed
       });
   }, [tab]);
 
