@@ -165,9 +165,15 @@ export type RunDetail = {
   outages: { sensor_label: string; start_time: string; end_time: string }[];
 };
 
-async function get<T>(path: string): Promise<T> {
+/** The API's plain-language detail if it sent one (e.g. the study's database isn't available). */
+async function failure(resp: Response, label: string): Promise<Error> {
+  const body = await resp.json().catch(() => null);
+  return new Error(typeof body?.detail === "string" ? body.detail : `${label}: ${resp.status}`);
+}
+
+export async function get<T>(path: string): Promise<T> {
   const resp = await fetch(`${API_URL}${path}`);
-  if (!resp.ok) throw new Error(`${path}: ${resp.status}`);
+  if (!resp.ok) throw await failure(resp, path);
   return resp.json();
 }
 
@@ -229,7 +235,7 @@ export async function simulateJob(body: SimulateBody, onUpdate: (j: Job) => void
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!resp.ok) throw new Error(`simulate: ${resp.status} ${await resp.text()}`);
+  if (!resp.ok) throw await failure(resp, "simulate");
   let job: Job = await resp.json();
   onUpdate(job);
   while (job.state !== "SUCCESS" && job.state !== "FAILURE") {
@@ -247,7 +253,7 @@ export async function simulate(body: SimulateBody): Promise<{ run_id: number }> 
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!resp.ok) throw new Error(`simulate: ${resp.status} ${await resp.text()}`);
+  if (!resp.ok) throw await failure(resp, "simulate");
   return resp.json();
 }
 

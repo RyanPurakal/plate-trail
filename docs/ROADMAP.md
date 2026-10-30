@@ -384,6 +384,13 @@ stored server-side. The Edison and New Brunswick study stays as the
       out). Covers malformed and hand-edited stored values, rounding, name
       defaults, list limits, blocked storage, look diffs, area pruning with
       pinned saved areas, and forgetting looks. Runs in CI after typecheck.
+- [x] The check-up runs with no database. The API starts without PostGIS
+      (a warning in the log), `/region`, `/area`, `/geocode` and `/route/*`
+      work, and the study's endpoints answer 503 with a plain message that the
+      study tabs show. Route checks use the study network only when its graph
+      file and cameras are already there (`get_study_runner`); before, a first
+      check on an empty database began building the study graph and then
+      matched against no sensors. Otherwise they use roads around the route.
 - [x] Upgrade Next.js past the flagged advisory so `next build` stops failing
       intermittently on its security check. `next` is now ^16.4.3 (16.0.0
       through 16.4.0 are flagged by `npm audit`; 16.4.3 reports 0
@@ -510,3 +517,10 @@ stored server-side. The Edison and New Brunswick study stays as the
   clicked through in a browser.
 - 2026-10-29: frontend unit tests landed (15, about 0.2 s). Components are
   still untested; a DOM test setup would be its own item.
+- 2026-10-30: no-database check-up landed. Clicked through in a browser against
+  live OpenStreetMap data with no database: area load, adding and saving a
+  route, route check (about 2 minutes, mostly the road download), read history,
+  and the study tabs' message. Full backend suite passed against PostGIS in
+  Docker (498). In `next dev`, strict mode requests an uncached area twice and
+  Overpass may reject the duplicate with a 503; the page uses the good response.
+  `next dev` also writes an untracked `frontend/AGENTS.md`.

@@ -5,7 +5,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from platetrail.api.main import app, get_runner
+from platetrail.api.main import app, get_route_runner
 from platetrail.area import AreaError, build_area_query
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
@@ -133,7 +133,7 @@ def test_fetch_sensors_reads_a_fresh_area_cache_entry(tmp_path):
 @pytest.fixture
 def client():
     nets = networks()
-    app.dependency_overrides[get_runner] = lambda: SimpleNamespace(router=Router(toy_graph()),
+    app.dependency_overrides[get_route_runner] = lambda: SimpleNamespace(router=Router(toy_graph()),
                                                                    cameras=pair_on_main_st())
     app.dependency_overrides[get_area_networks] = lambda: nets
     yield TestClient(app), nets
@@ -142,6 +142,14 @@ def client():
 
 def post(c, a, b):
     return c.post("/route/check", json={"start": {"lon": a[0], "lat": a[1]}, "end": {"lon": b[0], "lat": b[1]}})
+
+
+def test_endpoint_without_study_data_uses_a_network_around_the_route(client):
+    c, nets = client
+    app.dependency_overrides[get_route_runner] = lambda: None
+    resp = post(c, shifted(xy(100, 5)), shifted(xy(900, 5)))
+    assert resp.status_code == 200 and resp.json()["network"]["kind"] == "area"
+    assert len(nets.calls) == 1
 
 
 def test_endpoint_uses_study_roads_when_possible(client):

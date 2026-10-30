@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { API_URL, type RegionNotes } from "@/lib/api";
+import { get, type RegionNotes } from "@/lib/api";
 import { BarChart, LineChart } from "./Charts";
 import LearnMore from "./LearnMore";
 
@@ -42,12 +42,6 @@ const POLICY_LABELS: Record<string, string> = {
   window_24h: "Search window ±12 h",
   aggregate_only: "Aggregate counts only",
 };
-
-async function get<T>(path: string): Promise<T> {
-  const r = await fetch(`${API_URL}${path}`);
-  if (!r.ok) throw new Error(`${path}: ${r.status}`);
-  return r.json();
-}
 
 type Props = {
   scenarioTown: string; // region's scenario_town, for populations stored before the town was recorded
@@ -131,7 +125,7 @@ export default function PopulationView({ scenarioTown, notes }: Props) {
         {unicity ? (
           <LineChart series={series} xLabel="sightings known (camera + hour)"
                      title="Drivers singled out by p sightings, in a crowd of N cars" />
-        ) : <div className="nb-note">Computing unicity…</div>}
+        ) : pid != null && !error && <div className="nb-note">Computing unicity…</div>}
         <div className="nb-note">
           Unicity (after de Montjoye et al. 2013): if plates were hashed, would p known sightings pick out one car?
           It falls as the crowd grows.{" "}
@@ -168,7 +162,7 @@ export default function PopulationView({ scenarioTown, notes }: Props) {
                         rows={shown.map((r) => ({ key: r.policy, label: POLICY_LABELS[r.policy] ?? r.policy, value: r.engine_home.within_1km_of_all }))} />
             </>
           )
-        ) : <div className="nb-note">Computing policies…</div>}
+        ) : pid != null && !error && <div className="nb-note">Computing policies…</div>}
         {sel && !table && (
           <div className="naive">
             <div className="nb-head"><span>{POLICY_LABELS[sel.policy] ?? sel.policy}</span></div>

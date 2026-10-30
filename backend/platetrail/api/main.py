@@ -16,8 +16,12 @@
 POST /simulate runs in the API process through the shared runner
 (sim.service). POST /jobs/simulate runs on a Celery worker when Redis is
 configured (platetrail.worker, platetrail.jobs), with progress and a run cache.
+
+The check-up endpoints (/region, /area, /geocode, /route/*) work with no database;
+the example study's endpoints answer 503 until one is reachable.
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 import httpx
@@ -25,7 +29,9 @@ import osmnx as ox
 import requests
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from platetrail.api.queries import (
     get_population,
@@ -46,12 +52,18 @@ from platetrail.region import get_region
 from platetrail.routearea import AreaNetworks, get_area_networks
 from platetrail.sim.routing import AnchorTooFar, NoRoute
 from platetrail.sim.runner import SimulationRunner
-from platetrail.sim.service import get_local_runner
+from platetrail.sim.service import get_local_runner, get_study_runner
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    apply_migrations(get_engine())
+    try:
+        apply_migrations(get_engine())
+    except OperationalError:
+        logger.warning("No database reachable: the check-up works, the example study does not. "
+                       "Start the database, then restart the API.")
     yield
 
 
@@ -64,9 +76,20 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(OperationalError)
+def database_unavailable(request, exc: OperationalError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={
+        "detail": "The example study's database isn't available. Exploring areas and checking routes still work."})
+
+
 def get_runner() -> SimulationRunner:
     """The process-wide runner; loads the road graph and cameras on first use (several seconds)."""
     return get_local_runner()
+
+
+def get_route_runner() -> SimulationRunner | None:
+    """The study network for route checks, or None if its data isn't there (routes then use a network around them)."""
+    return get_study_runner()
 
 
 def _check_density_scenario(body: SimulateRequest | PopulationRequestBody, runner: SimulationRunner | None = None):
@@ -133,17 +156,19 @@ def geocode(body: GeocodeBody) -> dict:
     return {"results": results, "attribution": ATTRIBUTION}
 
 
-def _checked_route(start, end, both_ways: bool, runner: SimulationRunner, networks: AreaNetworks) -> tuple[dict, dict]:
-    """(network, check_route result). Routes on the study region's roads use its network; others get a small
-    network built around the route from public map data (held briefly in memory only)."""
+def _checked_route(start, end, both_ways: bool, runner: SimulationRunner | None,
+                   networks: AreaNetworks) -> tuple[dict, dict]:
+    """(network, check_route result). Routes on the study region's roads use its network when it is loaded; others
+    get a small network built around the route from public map data (held briefly in memory only)."""
     from platetrail.routecheck import check_route
 
-    r = get_region()
-    try:
-        result = check_route(runner.router, runner.cameras, start, end, both_ways)
-        return {"kind": "region", "region": r.id, "name": r.name}, result
-    except (AnchorTooFar, NoRoute):
-        pass  # not on the study roads: check it on a network built around the route
+    if runner is not None:
+        r = get_region()
+        try:
+            result = check_route(runner.router, runner.cameras, start, end, both_ways)
+            return {"kind": "region", "region": r.id, "name": r.name}, result
+        except (AnchorTooFar, NoRoute):
+            pass  # not on the study roads: check it on a network built around the route
 
     try:
         net = networks.for_route(start, end)
@@ -168,7 +193,7 @@ def _checked_route(start, end, both_ways: bool, runner: SimulationRunner, networ
 
 
 @app.post("/route/check")
-def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_runner),
+def route_check(body: RouteCheckBody, runner: SimulationRunner | None = Depends(get_route_runner),
                 networks: AreaNetworks = Depends(get_area_networks)) -> dict:
     """Sensors a route passes (both ways by default). Session-only: nothing about the route is stored or logged."""
     start, end = (body.start.lon, body.start.lat), (body.end.lon, body.end.lat)
@@ -177,7 +202,7 @@ def route_check(body: RouteCheckBody, runner: SimulationRunner = Depends(get_run
 
 
 @app.post("/route/history")
-def route_history(body: RouteHistoryBody, runner: SimulationRunner = Depends(get_runner),
+def route_history(body: RouteHistoryBody, runner: SimulationRunner | None = Depends(get_route_runner),
                   networks: AreaNetworks = Depends(get_area_networks)) -> dict:
     """What a read history of one route, driven on a schedule and kept 1 to 365 days, could suggest.
     Session-only, like /route/check."""
