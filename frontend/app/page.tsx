@@ -6,6 +6,7 @@ import ExploreView from "@/components/ExploreView";
 import MyAreas from "@/components/MyAreas";
 import CompareAreas from "@/components/CompareAreas";
 import CompareRoutes from "@/components/CompareRoutes";
+import MoveData from "@/components/MoveData";
 import SinceLastVisit from "@/components/SinceLastVisit";
 import MyRoutes, { type RouteCheckState, type RouteDraft, type StepFocus } from "@/components/MyRoutes";
 import type { Layers, Mode } from "@/components/MapView";
@@ -30,7 +31,8 @@ import {
 } from "@/lib/api";
 import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { dayKey, km, parts, templateName } from "@/lib/format";
-import { areaKey, areaSnapshot, forgetLooks, makeSnapshot, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
+import { makeBackup, mergeBackup, mergeSummary, type Backup } from "@/lib/backup";
+import { areaKey, areaSnapshot, forgetLooks, loadSnapshots, makeSnapshot, recordLook, routeKey, saveSnapshots, type SnapshotChange } from "@/lib/snapshots";
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 import { onTabListKeyDown, tabStop } from "@/lib/tabs";
@@ -250,6 +252,14 @@ export default function Home() {
     if (shownRoute && !next.some((r) => r.id === shownRoute)) setShownRoute(null);
     setRouteChecks((c) => Object.fromEntries(Object.entries(c).filter(([id]) => next.some((r) => r.id === id))));
     forgetLooks((k) => k.startsWith("route:") && !next.some((r) => routeKey(r.id) === k));
+  }
+
+  function importSaved(file: Backup) {
+    const merged = mergeBackup({ routes, areas: savedAreas, snapshots: loadSnapshots() }, file);
+    updateRoutes(merged.routes);
+    updateAreas(merged.areas);
+    saveSnapshots(merged.snapshots);
+    return mergeSummary(merged);
   }
 
   // Results stay in page memory only; reloading the page or deleting the route drops them.
@@ -473,6 +483,11 @@ export default function Home() {
         {tab === "explore" && (
           <CompareRoutes routes={routes} checks={routeChecks} onCheck={runRouteCheck}
             onShow={(id) => { setRouteDraft(null); setShownRoute(id); }} />
+        )}
+        {tab === "explore" && (
+          <MoveData hasSaved={routes.length + savedAreas.length > 0}
+            onExport={() => makeBackup({ routes, areas: savedAreas, snapshots: loadSnapshots() })}
+            onImport={importSaved} />
         )}
         {tab === "population" && <PopulationView scenarioTown={scenarioTown} notes={region?.notes ?? {}} />}
         {tab === "yourweek" && (

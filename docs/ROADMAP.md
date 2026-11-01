@@ -255,6 +255,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       checking a saved route in the browser. Route checks wrote nothing to
       `data/` and the API log shows only paths. README has a short
       "Check-up in Docker" note.
+- [x] Move saved routes and areas to another browser. Everything saved lives
+      in one browser's local storage, so clearing it lost a person's routes and
+      their "since your last visit" history. "Move to another browser" card at
+      the bottom of the Explore sidebar: "Save to a file" downloads a JSON file
+      (`lib/backup.ts`) with the saved routes, saved areas and their own last
+      looks, leaving out looks at boxes that were only explored. "Add from a
+      file" reads one in the browser and only adds: items already here (same
+      points or box) keep their name and look, and the card says how many were
+      added, already saved or over the limits. The file is never uploaded.
 
 ## Reusability (configurable region and sensors)
 
@@ -524,3 +533,11 @@ stored server-side. The Edison and New Brunswick study stays as the
   Docker (498). In `next dev`, strict mode requests an uncached area twice and
   Overpass may reject the duplicate with a 503; the page uses the good response.
   `next dev` also writes an untracked `frontend/AGENTS.md`.
+- 2026-10-31: moving saved data by file landed (frontend only). Lint retried:
+  typescript-eslint 8.72.1 still needs TypeScript below 6.1, so it stays
+  blocked. Checked in a browser at phone width with made-up data: a bad file,
+  adding a file, adding it again, and the saved file's contents, with the
+  download itself stubbed. Backend suite ran without PostGIS (452 passed, 46
+  skipped); no backend code changed. With sections 1 to 6 done, the next run
+  should pick from a real click-through of an area and route in a return visit,
+  or a backend single-flight so two requests for one uncached box share a fetch.
