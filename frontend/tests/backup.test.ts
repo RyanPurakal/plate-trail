@@ -27,6 +27,12 @@ describe("makeBackup and parseBackup", () => {
     assert.deepEqual(parseBackup(makeBackup(saved)), saved);
   });
 
+  test("the last change found stays with a look in the file", () => {
+    const changed = { found: "2026-10-22T08:00:00.000Z", since: "2026-10-20T08:00:00.000Z", added: ["osm:2"], removed: [] };
+    const text = makeBackup({ routes: [], areas: [area("a1")], snapshots: { [areaKey(box)]: { ...look("osm:2"), changed } } });
+    assert.deepEqual(parseBackup(text)!.snapshots[areaKey(box)].changed, changed);
+  });
+
   test("looks at boxes that were explored but not saved stay out of the file", () => {
     const text = makeBackup({ routes: [], areas: [area("a1")], snapshots: { [areaKey(box)]: look("osm:2"), [areaKey(otherBox)]: look("osm:3"), [routeKey("gone")]: look("osm:4") } });
     assert.deepEqual(Object.keys(parseBackup(text)!.snapshots), [areaKey(box)]);

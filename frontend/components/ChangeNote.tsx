@@ -1,7 +1,7 @@
 "use client";
 
 import { shortDate } from "@/lib/area";
-import type { SnapshotChange } from "@/lib/snapshots";
+import { sensorChangeText, type SnapshotChange } from "@/lib/snapshots";
 
 type Props = {
   change: SnapshotChange | null; // null on a first look
@@ -23,11 +23,17 @@ export default function ChangeNote({ change, what, sourceName = (s) => s, onPick
   }
   const when = shortDate(change.since) ?? "an earlier visit";
   const same = !change.added.length && !change.removed.length;
+  const newIds = same ? change.earlier?.added ?? [] : change.added;
   return (
     <div className="ex-change" aria-live="polite">
       <div className="ex-k">Since your last look ({when})</div>
       {same ? (
-        <div>No sensors added or removed {what}.</div>
+        <>
+          <div>No sensors added or removed {what}.</div>
+          {change.earlier && (
+            <div>Latest change, found {shortDate(change.earlier.found) ?? "earlier"}: {sensorChangeText(change.earlier)}.</div>
+          )}
+        </>
       ) : (
         <ul>
           {change.added.length > 0 && <li>{plural(change.added.length, "sensor")} newly listed</li>}
@@ -37,9 +43,9 @@ export default function ChangeNote({ change, what, sourceName = (s) => s, onPick
       {change.updated.length > 0 && (
         <div className="dim">Updated data: {change.updated.map(sourceName).join(", ")}.</div>
       )}
-      {onPickAdded && change.added.length > 0 && (
+      {onPickAdded && newIds.length > 0 && (
         <div className="ex-change-new">
-          {change.added.slice(0, 5).map((id, i) => (
+          {newIds.slice(0, 5).map((id, i) => (
             <button key={id} className="ex-share" onClick={() => onPickAdded(id)}>Show new sensor {i + 1}</button>
           ))}
         </div>

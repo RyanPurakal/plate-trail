@@ -7,7 +7,7 @@ import type { BBox } from "../lib/area";
 import { addArea, MAX_AREAS, nextAreaName, parseAreas, renameArea, saveAreas, loadAreas, AREAS_KEY } from "../lib/areas";
 import { addRoute, cleanName, MAX_NAME, MAX_ROUTES, nextRouteName, parseRoutes, removeRoute, renameRoute } from "../lib/routes";
 import {
-  areaKey, diffSnapshot, forgetLooks, loadSnapshots, makeSnapshot, MAX_AREA_SNAPSHOTS, parseSnapshots, putSnapshot, recordLook, routeKey,
+  areaKey, diffSnapshot, forgetLooks, KEEP_CHANGE_DAYS, latestChange, loadSnapshots, makeSnapshot, MAX_AREA_SNAPSHOTS, parseSnapshots, putSnapshot, recordLook, routeKey,
   SNAP_KEY, type Snapshot,
 } from "../lib/snapshots";
 
@@ -171,6 +171,53 @@ describe("snapshots", () => {
     assert.deepEqual(change?.added, ["b"]);
     assert.deepEqual(loadSnapshots()[key].ids, ["a", "b"]);
     assert.deepEqual(recordLook(key, snap(["a", "b"], {}, "2026-10-30T00:00:00Z"))?.added, []);
+  });
+
+  test("a sensor change stays with later looks, so a reload can still say what it was", () => {
+    const key = routeKey("r1");
+    recordLook(key, snap(["a"], {}, "2026-10-20T00:00:00Z"));
+    const found = recordLook(key, snap(["b"], {}, "2026-10-21T00:00:00Z"));
+    assert.deepEqual(found?.added, ["b"]);
+    assert.equal(found?.earlier, undefined);
+    const next = recordLook(key, snap(["b"], {}, "2026-10-22T00:00:00Z"));
+    assert.deepEqual(next?.added, []);
+    assert.deepEqual(next?.earlier, { found: "2026-10-21T00:00:00Z", since: "2026-10-20T00:00:00Z", added: ["b"], removed: ["a"] });
+    assert.deepEqual(loadSnapshots()[key].changed, next?.earlier);
+    const replaced = recordLook(key, snap([], {}, "2026-10-23T00:00:00Z"));
+    assert.deepEqual(replaced?.removed, ["b"]);
+    assert.deepEqual(loadSnapshots()[key].changed?.added, []);
+  });
+
+  test("a data date moving on is not kept as a sensor change", () => {
+    const key = routeKey("r1");
+    recordLook(key, snap(["a"], { osm: "2026-10-01" }, "2026-10-20T00:00:00Z"));
+    const next = recordLook(key, snap(["a"], { osm: "2026-10-02" }, "2026-10-21T00:00:00Z"));
+    assert.deepEqual(next?.updated, ["osm"]);
+    assert.equal(next?.earlier, undefined);
+    assert.equal(loadSnapshots()[key].changed, undefined);
+  });
+
+  test("a kept change is dropped after KEEP_CHANGE_DAYS", () => {
+    const key = routeKey("r1");
+    const days = (n: number) => new Date(Date.UTC(2026, 9, 1 + n)).toISOString();
+    recordLook(key, snap(["a"], {}, days(0)));
+    recordLook(key, snap(["b"], {}, days(1)));
+    assert.ok(latestChange(loadSnapshots()[key], new Date(days(1 + KEEP_CHANGE_DAYS)).getTime()));
+    assert.equal(latestChange(loadSnapshots()[key], new Date(days(2 + KEEP_CHANGE_DAYS)).getTime()), null);
+    const late = recordLook(key, snap(["b"], {}, days(2 + KEEP_CHANGE_DAYS)));
+    assert.equal(late?.earlier, undefined);
+    assert.equal(loadSnapshots()[key].changed, undefined);
+  });
+
+  test("parseSnapshots keeps a stored change and drops a malformed one", () => {
+    const changed = { found: "2026-10-21T00:00:00Z", since: "2026-10-20T00:00:00Z", added: ["b"], removed: [] };
+    const raw = JSON.stringify({
+      [routeKey("good")]: { ids: ["b"], sources: {}, seen: "2026-10-21T00:00:00Z", changed },
+      [routeKey("bad")]: { ids: ["b"], sources: {}, seen: "2026-10-21T00:00:00Z", changed: { found: 1, added: "b" } },
+    });
+    const out = parseSnapshots(raw);
+    assert.deepEqual(out[routeKey("good")].changed, changed);
+    assert.equal("changed" in out[routeKey("bad")], false);
   });
 
   test("forgetLooks removes matching keys and clears storage when nothing is left", () => {

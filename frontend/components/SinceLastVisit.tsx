@@ -5,10 +5,10 @@ import { getArea } from "@/lib/api";
 import { shortDate, type BBox } from "@/lib/area";
 import type { SavedArea } from "@/lib/areas";
 import type { SavedRoute } from "@/lib/routes";
-import { areaKey, areaSnapshot, loadSnapshots, recordLook, routeKey, type SnapshotChange } from "@/lib/snapshots";
+import { areaKey, areaSnapshot, latestChange, loadSnapshots, recordLook, routeKey, sensorChangeText, type FoundChange, type SnapshotChange } from "@/lib/snapshots";
 import type { RouteCheckState } from "./MyRoutes";
 
-type AreaVisit = { id: string; status: "recent" | "first" | "error"; seen?: string } | { id: string; status: "done"; change: SnapshotChange };
+type AreaVisit = { id: string; status: "recent" | "first" | "error"; seen?: string; earlier?: FoundChange | null } | { id: string; status: "done"; change: SnapshotChange };
 
 type Props = {
   areas: SavedArea[];
@@ -34,7 +34,7 @@ async function checkAreas(areas: SavedArea[], onProgress: (i: number) => void): 
     onProgress(i);
     const seen = snaps[areaKey(a.bbox)]?.seen;
     if (seen && Date.now() - new Date(seen).getTime() < RECHECK_AFTER_MS) {
-      out.push({ id: a.id, status: "recent", seen });
+      out.push({ id: a.id, status: "recent", seen, earlier: latestChange(snaps[areaKey(a.bbox)]) });
       continue;
     }
     try {
@@ -50,15 +50,12 @@ async function checkAreas(areas: SavedArea[], onProgress: (i: number) => void): 
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-function changeText(c: SnapshotChange): string {
-  const parts = [
-    c.added.length > 0 && `${plural(c.added.length, "sensor")} newly listed`,
-    c.removed.length > 0 && `${c.removed.length} no longer listed`,
-  ].filter(Boolean);
-  return parts.length ? parts.join(", ") : "no sensors added or removed";
-}
+const earlierText = (c: FoundChange | null | undefined) =>
+  c ? `; latest change, found ${shortDate(c.found) ?? "earlier"}: ${sensorChangeText(c)}` : "";
 
 const changed = (c: SnapshotChange) => c.added.length + c.removed.length + c.updated.length > 0;
+
+const visitEarlier = (v: AreaVisit) => v.status === "done" ? v.change.earlier : v.earlier;
 
 /** "Since your last visit": on return, saved areas are re-checked against this browser's last look at them;
  *  routes checked before can be re-checked with one click (they use the compute-only route check). */
@@ -83,6 +80,8 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
   const checkedBefore = routes.filter((r) => snaps[routeKey(r.id)]);
   const routeBusy = checkedBefore.some((r) => checks[r.id]?.loading);
   const routeDone = checkedBefore.filter((r) => checks[r.id]?.result);
+  // Routes are not re-checked without a click, so what an earlier check found is listed until then.
+  const routeListed = checkedBefore.filter((r) => checks[r.id]?.result || latestChange(snaps[routeKey(r.id)]));
 
   if (!areas.length && !checkedBefore.length) return null;
 
@@ -113,12 +112,12 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
             {shown.map((v) => {
               const a = byId.get(v.id)!;
               const note = v.status === "done"
-                ? `since ${shortDate(v.change.since) ?? "last look"}: ${changeText(v.change)}${v.change.updated.length ? "; data updated" : ""}`
-                : v.status === "recent" ? `looked at ${shortDate(v.seen ?? null) ?? "recently"}, within the last hour`
+                ? `since ${shortDate(v.change.since) ?? "last look"}: ${sensorChangeText(v.change)}${v.change.updated.length ? "; data updated" : ""}${earlierText(v.change.earlier)}`
+                : v.status === "recent" ? `looked at ${shortDate(v.seen ?? null) ?? "recently"}, within the last hour${earlierText(v.earlier)}`
                 : v.status === "first" ? "first look from this browser"
                 : "couldn't be checked right now";
               return (
-                <li key={v.id} className={v.status === "done" && changed(v.change) ? "on" : ""}>
+                <li key={v.id} className={(v.status === "done" && changed(v.change)) || visitEarlier(v) ? "on" : ""}>
                   <button className="mr-name" onClick={() => onOpenArea(a.bbox)}>
                     {a.name}<span className="dim"> · {note}</span>
                   </button>
@@ -132,14 +131,17 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
       {checkedBefore.length > 0 && (
         <>
           <div className="ex-k">Routes you checked before</div>
-          {routeDone.length > 0 && (
+          {routeListed.length > 0 && (
             <ul className="mr-list">
-              {routeDone.map((r) => {
-                const c = checks[r.id]?.change;
+              {routeListed.map((r) => {
+                const check = checks[r.id];
+                const c = check?.change;
+                const note = !check?.result ? earlierText(latestChange(snaps[routeKey(r.id)])).slice(2)
+                  : c ? `since ${shortDate(c.since) ?? "last check"}: ${sensorChangeText(c)}${earlierText(c.earlier)}` : "checked";
                 return (
                   <li key={r.id}>
                     <button className="mr-name" onClick={() => onShowRoute(r.id)}>
-                      {r.name}<span className="dim"> · {c ? `since ${shortDate(c.since) ?? "last check"}: ${changeText(c)}` : "checked"}</span>
+                      {r.name}<span className="dim"> · {note}</span>
                     </button>
                   </li>
                 );

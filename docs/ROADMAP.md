@@ -264,6 +264,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       file" reads one in the browser and only adds: items already here (same
       points or box) keep their name and look, and the card says how many were
       added, already saved or over the limits. The file is never uploaded.
+- [x] A change found on a return visit stays visible. A look used to replace
+      the last one as soon as its change was shown, so opening the area from
+      the panel said "no change" and a reload lost it, with only the counts
+      ever on screen. The stored look now keeps the last sensor change it found
+      (`changed` in `lib/snapshots.ts`, for 30 days, replaced by a newer one;
+      a source's data date moving on doesn't count). The area card and route
+      result add "Latest change, found <date>" with the show-new-sensor
+      buttons, and the panel lists it for areas looked at in the last hour and
+      for routes not re-checked yet. Saved files carry it.
 
 ## Reusability (configurable region and sensors)
 
@@ -541,3 +550,8 @@ stored server-side. The Edison and New Brunswick study stays as the
   skipped); no backend code changed. With sections 1 to 6 done, the next run
   should pick from a real click-through of an area and route in a return visit,
   or a backend single-flight so two requests for one uncached box share a fetch.
+- 2026-11-01: return visit clicked through in a browser against the real API
+  and live OpenStreetMap data, with a made-up earlier look: the panel, opening
+  the area from it, showing a new sensor, reloading, no sideways scroll at
+  375 px. Re-checking a route was not part of it. The single-flight
+  for an uncached box is the next pick.
