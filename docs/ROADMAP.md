@@ -462,6 +462,15 @@ stored server-side. The Edison and New Brunswick study stays as the
       `substring`. Polylines identical on 3,000 study-graph routes and in a
       new test with bent multi-vertex edges; same digest, 1,000-driver job
       about 68.5 s -> 40 s. Details in `technical_reference.md`.
+- [x] One Overpass fetch per uncached box. Two requests for the same box
+      (strict mode's double render, two tabs) both asked Overpass, which may
+      reject the second with a 503. `_cached_fetch` in `area.py` now runs
+      through a per-cache-file single-flight: callers arriving during a fetch
+      wait and share its result or error, and the next call after it starts
+      fresh. `RawCache` writes to a temp file and renames, so a reader (the
+      route-check network loader reads the area cache without waiting) never
+      sees a half-written file. In-process only; separate API workers can
+      still fetch the same box once each.
 
 ## Notes
 
@@ -555,3 +564,7 @@ stored server-side. The Edison and New Brunswick study stays as the
   the area from it, showing a new sensor, reloading, no sideways scroll at
   375 px. Re-checking a route was not part of it. The single-flight
   for an uncached box is the next pick.
+- 2026-11-02: single-flight for area fetches landed (backend only). Tested
+  with mocked Overpass in threads; backend suite without PostGIS: 454 passed,
+  46 skipped. Next candidates: re-checking a saved route on a return visit in
+  a browser, or the same sharing for the route-area road download.

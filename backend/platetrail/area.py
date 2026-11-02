@@ -10,7 +10,9 @@ the cached Overpass responses (sensors and main roads).
 
 import logging
 import math
+import threading
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 import httpx
 
@@ -319,8 +321,55 @@ def load_area(
     }
 
 
+class _Flight:
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result: dict | None = None
+        self.error: BaseException | None = None
+
+
+_flights: dict[str, _Flight] = {}
+_flights_lock = threading.Lock()
+
+
+def _single_flight(key: str, fn: Callable[[], dict]) -> dict:
+    """Run fn once per key at a time; callers arriving meanwhile wait and share its result or error.
+
+    /area runs in FastAPI's thread pool, so two requests for one uncached box
+    (a double render, two tabs, a route check next to the area load) would
+    otherwise both ask Overpass, which may reject the second with a 503.
+    """
+    with _flights_lock:
+        flight = _flights.get(key)
+        leader = flight is None
+        if leader:
+            flight = _flights[key] = _Flight()
+    if not leader:
+        flight.done.wait()
+        if flight.error is not None:
+            raise flight.error
+        return flight.result
+    try:
+        flight.result = fn()
+        return flight.result
+    except BaseException as e:
+        flight.error = e
+        raise
+    finally:
+        with _flights_lock:
+            del _flights[key]
+        flight.done.set()
+
+
 def _cached_fetch(query: str, cache: RawCache, overpass: OverpassClient, now: datetime) -> dict:
-    """Cached Overpass response, refetched after MAX_AGE; a stale copy is used if the refetch fails."""
+    """Cached Overpass response, refetched after MAX_AGE; a stale copy is used if the refetch fails.
+
+    Concurrent calls for the same cache entry share one fetch (_single_flight).
+    """
+    return _single_flight(str(cache.path_for(query)), lambda: _fetch_or_cached(query, cache, overpass, now))
+
+
+def _fetch_or_cached(query: str, cache: RawCache, overpass: OverpassClient, now: datetime) -> dict:
     fetched_at = cache.fetched_at(query)
     stale = fetched_at is None or now - fetched_at > MAX_AGE
     try:

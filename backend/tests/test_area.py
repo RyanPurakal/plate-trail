@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -230,3 +232,70 @@ def test_load_area_reports_main_road_coverage(tmp_path):
     result = load_area((-74.42, 40.5, -74.3, 40.6), cache=RawCache(tmp_path), client=overpass_client([]))
     roads = result["summary"]["main_roads"]
     assert roads["road_km"] > 8 and roads["share"] == 0
+
+
+def test_concurrent_loads_of_one_uncached_box_share_one_fetch(tmp_path):
+    cache, calls = RawCache(tmp_path), []
+    entered, release = threading.Event(), threading.Event()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if not is_roads(request):
+            entered.set()
+            release.wait(5)
+        return httpx.Response(200, json=ROADS if is_roads(request) else RESPONSE)
+
+    client = OverpassClient(httpx.Client(transport=httpx.MockTransport(handler)), urls=("http://overpass.test",),
+                            attempts_per_url=1, backoff_s=0)
+    box = (-74.42, 40.5, -74.3, 40.6)
+    results = []
+
+    def load():
+        results.append(load_area(box, cache=cache, client=client))
+
+    first = threading.Thread(target=load)
+    first.start()
+    assert entered.wait(5)
+    second = threading.Thread(target=load)
+    second.start()
+    time.sleep(0.1)
+    assert second.is_alive() and len(sensor_calls(calls)) == 1  # waiting on the first fetch
+    release.set()
+    first.join(5)
+    second.join(5)
+    assert len(results) == 2 and all(r["summary"]["sensor_count"] == 2 for r in results)
+    assert len(sensor_calls(calls)) == 1 and len(calls) == 2
+    assert area_mod._flights == {}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_single_flight_shares_an_error_then_frees_the_key():
+    entered, release, runs = threading.Event(), threading.Event(), []
+
+    def failing():
+        runs.append(1)
+        entered.set()
+        release.wait(5)
+        raise RuntimeError("overpass busy")
+
+    errors = []
+
+    def call():
+        try:
+            area_mod._single_flight("k", failing)
+        except RuntimeError as e:
+            errors.append(str(e))
+
+    first = threading.Thread(target=call)
+    first.start()
+    assert entered.wait(5)
+    second = threading.Thread(target=call)
+    second.start()
+    time.sleep(0.1)
+    release.set()
+    first.join(5)
+    second.join(5)
+    assert errors == ["overpass busy", "overpass busy"] and len(runs) == 1
+    # a later call runs again rather than reusing the failure
+    assert area_mod._single_flight("k", lambda: {"ok": True}) == {"ok": True}
+    assert area_mod._flights == {}

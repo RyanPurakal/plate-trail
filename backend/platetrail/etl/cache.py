@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -33,5 +35,8 @@ class RawCache:
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "response": response,
         }
-        path.write_text(json.dumps(envelope))
+        # write then rename, so a reader never sees a half-written file
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(envelope))
+        os.replace(tmp, path)
         return response
