@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import httpx
+import osmnx as ox
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,7 +10,8 @@ from platetrail.api.main import app, get_route_runner
 from platetrail.area import AreaError, build_area_query
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
-from platetrail.routearea import AreaNetworks, build_camera_set, fetch_sensors, get_area_networks, route_bbox
+from platetrail.routearea import (AreaNetworks, build_camera_set, fetch_drive_graph, fetch_sensors, get_area_networks,
+                                  route_bbox)
 from platetrail.routecheck import check_route
 from platetrail.sim.routing import NoRoute, Router
 from test_trip import pair_on_main_st, toy_graph, xy
@@ -108,6 +110,40 @@ def client_for(calls, status=200):
         return httpx.Response(status, json=RESPONSE)
     return OverpassClient(httpx.Client(transport=httpx.MockTransport(handler)), urls=("http://overpass.test",),
                           attempts_per_url=1, backoff_s=0)
+
+
+OSMNX_OFF = ("use_cache", "log_file", "log_console")
+
+
+@pytest.fixture
+def osmnx_cache_and_logs_on(monkeypatch):
+    for name in OSMNX_OFF:
+        monkeypatch.setattr(ox.settings, name, True)
+    monkeypatch.setattr(ox, "add_edge_speeds", lambda G, **kw: G)
+    monkeypatch.setattr(ox, "add_edge_travel_times", lambda G: G)
+
+
+def test_fetch_drive_graph_turns_osmnx_cache_and_logs_off(monkeypatch, osmnx_cache_and_logs_on):
+    seen = {}
+
+    def fake_graph_from_bbox(bbox, **kw):
+        seen.update({name: getattr(ox.settings, name) for name in OSMNX_OFF})
+        return toy_graph()
+
+    monkeypatch.setattr(ox, "graph_from_bbox", fake_graph_from_bbox)
+    assert fetch_drive_graph(BBOX).number_of_nodes() == 5
+    assert seen == dict.fromkeys(OSMNX_OFF, False)
+    assert all(getattr(ox.settings, name) is True for name in OSMNX_OFF)  # put back afterwards
+
+
+def test_fetch_drive_graph_puts_settings_back_when_the_box_has_no_roads(monkeypatch, osmnx_cache_and_logs_on):
+    def no_roads(bbox, **kw):
+        raise ox._errors.InsufficientResponseError("no data")
+
+    monkeypatch.setattr(ox, "graph_from_bbox", no_roads)
+    with pytest.raises(NoRoute):
+        fetch_drive_graph(BBOX)
+    assert all(getattr(ox.settings, name) is True for name in OSMNX_OFF)
 
 
 def test_fetch_sensors_never_writes_the_cache(tmp_path):

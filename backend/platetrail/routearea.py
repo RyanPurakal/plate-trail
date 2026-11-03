@@ -5,7 +5,7 @@ so the check builds both for a box around the route's two ends:
 
 * roads: OSMnx drive network for the box (same filter and speeds as the
   study graph, platetrail.roads.graph), fetched with OSMnx's disk cache
-  switched off;
+  and logging switched off;
 * sensors: the same public sensors GET /area serves (OSM plus the region's
   file sources), snapped to those roads with the study pipeline's
   direction-aware snapping (platetrail.roads.snap).
@@ -53,7 +53,8 @@ ROUTE_PAD_M = 2000.0  # roads this far beyond the route's ends are included, for
 MAX_ROUTE_SPAN_DEG = 0.3  # about 25-33 km; larger boxes make the road download too slow
 NETWORK_CACHE_SIZE = 4
 NETWORK_CACHE_TTL_S = 3600.0
-_OSMNX_LOCK = threading.Lock()  # ox.settings is global; keep the cache switch-off atomic
+_OSMNX_LOCK = threading.Lock()  # ox.settings is global; keep the switch-off atomic
+_OSMNX_OFF = ("use_cache", "log_file", "log_console")  # settings held off while fetching a route box
 
 
 @dataclass
@@ -81,16 +82,22 @@ def route_bbox(start: tuple[float, float], end: tuple[float, float], pad_m: floa
 
 
 def fetch_drive_graph(bbox: BBox) -> nx.MultiDiGraph:
-    """OSMnx drive network for bbox, never touching OSMnx's disk cache. NoRoute if the box has no roads."""
+    """OSMnx drive network for bbox, with OSMnx's disk cache and logging off. NoRoute if the box has no roads.
+
+    OSMnx logs each Overpass query in full (box included) when log_file or
+    log_console is on, so both are switched off for the fetch like the cache.
+    """
     with _OSMNX_LOCK:
-        previous = ox.settings.use_cache
-        ox.settings.use_cache = False
+        previous = {name: getattr(ox.settings, name) for name in _OSMNX_OFF}
+        for name in _OSMNX_OFF:
+            setattr(ox.settings, name, False)
         try:
             G = ox.graph_from_bbox(bbox, custom_filter=CUSTOM_FILTER, truncate_by_edge=True)
         except (ox._errors.InsufficientResponseError, ValueError) as e:
             raise NoRoute("no mapped roads near this route") from e
         finally:
-            ox.settings.use_cache = previous
+            for name, value in previous.items():
+                setattr(ox.settings, name, value)
     G = ox.add_edge_speeds(G, hwy_speeds={"service": SERVICE_SPEED_KPH})
     return ox.add_edge_travel_times(G)
 

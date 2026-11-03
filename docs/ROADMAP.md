@@ -394,6 +394,8 @@ stored server-side. The Edison and New Brunswick study stays as the
       `typescript`). An npm override giving the lint packages TS 6
       (`@typescript/typescript6`) failed on peer resolution. Retry once
       typescript-eslint supports TS 7, or move `tsc` to a separate package.
+      Still blocked 2026-11-03: typescript-eslint 8.72.1 wants TypeScript
+      below 6.1.
 - [x] Frontend tests for the on-device storage helpers (`lib/routes.ts`,
       `lib/areas.ts`, `lib/snapshots.ts`), which were only checked with
       throwaway scripts. `npm test` runs `tests/*.test.ts` with Node's own
@@ -471,6 +473,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       route-check network loader reads the area cache without waiting) never
       sees a half-written file. In-process only; separate API workers can
       still fetch the same box once each.
+- [x] Route boxes stay out of OSMnx's logs. A route check outside the study
+      area downloads roads with OSMnx for a box around the route's two ends,
+      with OSMnx's disk cache off; but OSMnx logs every Overpass query in full
+      (box included) to a file or the console when `log_file` or
+      `log_console` is on. `fetch_drive_graph` now holds `use_cache`,
+      `log_file` and `log_console` off for the fetch and puts them back
+      afterwards, also when the box has no roads. Tested with a stubbed fetch
+      (no test covered this function before).
 
 ## Notes
 
