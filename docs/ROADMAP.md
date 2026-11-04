@@ -481,6 +481,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       `log_file` and `log_console` off for the fetch and puts them back
       afterwards, also when the box has no roads. Tested with a stubbed fetch
       (no test covered this function before).
+- [x] Route checks for one uncached box share a single build. A route's two
+      directions, a compare of two nearby routes or a re-check from another
+      tab can ask for the same box at once; each used to download the roads
+      and fetch the sensors itself (OSMnx's lock only queued them). In
+      `AreaNetworks.for_route` the first check builds the network and the
+      others wait for it and share the result or the error; an error is not
+      kept, so the next check tries again. Held in memory only, like the
+      networks themselves.
 
 ## Notes
 
@@ -578,3 +586,8 @@ stored server-side. The Edison and New Brunswick study stays as the
   with mocked Overpass in threads; backend suite without PostGIS: 454 passed,
   46 skipped. Next candidates: re-checking a saved route on a return visit in
   a browser, or the same sharing for the route-area road download.
+- 2026-11-04: shared route-network builds landed (backend only). Tested with
+  stubbed fetches in threads; backend suite without PostGIS: 458 passed, 46
+  skipped. Every product-direction item is done; next candidates are a
+  browser click-through of re-checking a saved route on a return visit, and
+  the lint item once typescript-eslint supports TypeScript 7.

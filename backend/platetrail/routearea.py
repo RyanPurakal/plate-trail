@@ -15,6 +15,7 @@ itself: nothing about it is written to disk or logged. A fresh /area cache
 entry for the box is read if one exists (it is never created or refreshed
 here), and built networks are held in memory only, a few at a time for an
 hour, so checking a route and its return trip doesn't refetch the roads.
+Checks that need the same uncached box at the same time share one build.
 """
 
 import math
@@ -160,8 +161,24 @@ def build_camera_set(router: Router, features: list[dict]) -> tuple[CameraSet, i
     return CameraSet(cameras), len(cameras)
 
 
+class _Build:
+    """One network build in progress; checks for the same box wait on it."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.network: AreaNetwork | None = None
+        self.error: BaseException | None = None
+
+
 class AreaNetworks:
-    """Builds route networks on demand and keeps the last few in memory (never on disk)."""
+    """Builds route networks on demand and keeps the last few in memory (never on disk).
+
+    Route checks run in FastAPI's thread pool, so a route's two directions,
+    a compare of two nearby routes or a re-check from another tab can ask for
+    the same uncached box at once. Only the first builds it (one road
+    download, one sensor fetch); the others wait and share its network or
+    its error, which is not cached, so a later check tries again.
+    """
 
     def __init__(
         self,
@@ -176,6 +193,7 @@ class AreaNetworks:
         self.ttl_s = ttl_s
         self._cache: OrderedDict[BBox, tuple[float, AreaNetwork]] = OrderedDict()
         self._lock = threading.Lock()
+        self._building: dict[BBox, _Build] = {}
 
     def for_route(self, start: tuple[float, float], end: tuple[float, float]) -> AreaNetwork:
         bbox = route_bbox(start, end)
@@ -185,13 +203,30 @@ class AreaNetworks:
             if hit and now - hit[0] <= self.ttl_s:
                 self._cache.move_to_end(bbox)
                 return hit[1]
-        network = self.build(bbox)
-        with self._lock:
-            self._cache[bbox] = (now, network)
-            self._cache.move_to_end(bbox)
-            while len(self._cache) > self.size:
-                self._cache.popitem(last=False)
-        return network
+            build = self._building.get(bbox)
+            leader = build is None
+            if leader:
+                build = self._building[bbox] = _Build()
+        if not leader:
+            build.done.wait()
+            if build.error is not None:
+                raise build.error
+            return build.network
+        try:
+            build.network = self.build(bbox)
+        except BaseException as e:
+            build.error = e
+            raise
+        finally:
+            with self._lock:
+                del self._building[bbox]
+                if build.network is not None:
+                    self._cache[bbox] = (now, build.network)
+                    self._cache.move_to_end(bbox)
+                    while len(self._cache) > self.size:
+                        self._cache.popitem(last=False)
+            build.done.set()
+        return build.network
 
     def build(self, bbox: BBox) -> AreaNetwork:
         router = Router(self.fetch_graph(bbox))

@@ -1,3 +1,6 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -98,6 +101,59 @@ def test_networks_expire():
     nets.for_route(a, b)
     nets.for_route(a, b)
     assert len(nets.calls) == 2
+
+
+def test_concurrent_checks_of_one_box_share_a_build():
+    started, release = threading.Event(), threading.Event()
+    calls = []
+
+    def fetch_graph(bbox):
+        calls.append(bbox)
+        started.set()
+        release.wait(5)
+        return elsewhere_graph()
+
+    nets = AreaNetworks(fetch_graph=fetch_graph, fetch_features=lambda bbox: (FEATURES, SOURCES))
+    a, b = shifted(xy(100, 5)), shifted(xy(900, 5))
+    results = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        first = pool.submit(nets.for_route, a, b)
+        assert started.wait(5)
+        others = [pool.submit(nets.for_route, b, a), pool.submit(nets.for_route, a, b)]
+        time.sleep(0.05)  # let the others reach the wait
+        release.set()
+        results = [first.result(5)] + [f.result(5) for f in others]
+    assert len(calls) == 1
+    assert all(r is results[0] for r in results)
+    assert nets.for_route(a, b) is results[0] and len(calls) == 1  # and it is cached afterwards
+
+
+def test_a_failed_build_is_shared_but_not_cached():
+    started, release = threading.Event(), threading.Event()
+    calls = []
+
+    def fetch_graph(bbox):
+        calls.append(bbox)
+        if len(calls) == 1:
+            started.set()
+            release.wait(5)
+            raise NoRoute("no mapped roads near this route")
+        return elsewhere_graph()
+
+    nets = AreaNetworks(fetch_graph=fetch_graph, fetch_features=lambda bbox: (FEATURES, SOURCES))
+    a, b = shifted(xy(100, 5)), shifted(xy(900, 5))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(nets.for_route, a, b)
+        assert started.wait(5)
+        second = pool.submit(nets.for_route, b, a)
+        time.sleep(0.05)
+        release.set()
+        for f in (first, second):
+            with pytest.raises(NoRoute):
+                f.result(5)
+    assert len(calls) == 1
+    nets.for_route(a, b)  # the next check tries again
+    assert len(calls) == 2
 
 
 RESPONSE = {"elements": [{"type": "node", "id": 5, "lat": 40.5, "lon": -74.4, "tags": {"direction": "90"}}]}
