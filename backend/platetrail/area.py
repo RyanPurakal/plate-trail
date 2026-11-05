@@ -18,7 +18,9 @@ import httpx
 
 from platetrail.config import get_settings
 from platetrail.etl.cache import RawCache
+from platetrail.etl.dedupe import dedupe
 from platetrail.etl.directions import direction_from_tags, parse_direction
+from platetrail.etl.loaders.base import CameraRecord
 from platetrail.etl.loaders.file import read_rows
 from platetrail.etl.loaders.overpass import OverpassClient
 from platetrail.region import Region, get_region
@@ -174,6 +176,48 @@ def file_area_features(bbox: tuple[float, float, float, float], region: Region) 
     return features, sources
 
 
+def source_priority(region: Region) -> tuple[str, ...]:
+    """Source names in the region's camera_sources order; OSM goes last if the region doesn't list it."""
+    names = [src.source or src.type for src in region.camera_sources]
+    return tuple(names if "osm" in names else [*names, "osm"])
+
+
+def merge_listed_twice(features: list[dict], priority: tuple[str, ...]) -> tuple[list[dict], int]:
+    """Show a sensor listed by more than one source once, by the same rules as the study ETL.
+
+    Uses etl.dedupe: across sources, points within 15 m with compatible
+    directions are one sensor; within a source, only double-mapped points
+    (<= 1 m, same directions). The kept feature is the one from the
+    highest-priority source; its direction comes from the first member that
+    has one, and `also_listed_by` names the other sources. Returns the kept
+    features (sorted by id) and how many listings were folded into another.
+    """
+    by_key: dict[str, dict] = {}
+    records = []
+    for f in features:
+        p = f["properties"]
+        lon, lat = f["geometry"]["coordinates"]
+        rec = CameraRecord(
+            source=p["source"], source_id=p["id"], lat=lat, lon=lon, town="",
+            directions_deg=p["directions_deg"], direction_raw=p["direction_raw"],
+        )
+        by_key[rec.key] = f
+        records.append(rec)
+    merged, stats = dedupe(records, source_priority=priority)
+    out = []
+    for cam in merged:
+        f = by_key[cam.primary.key]
+        others = sorted({m.source for m in cam.members} - {cam.primary.source})
+        out.append({**f, "properties": {
+            **f["properties"],
+            "directions_deg": cam.directions_deg,
+            "direction_raw": cam.direction_raw,
+            "also_listed_by": others,
+        }})
+    out.sort(key=lambda f: f["properties"]["id"])
+    return out, stats.input_records - stats.output_cameras
+
+
 def main_road_coverage(
     bbox: tuple[float, float, float, float],
     roads_response: dict,
@@ -245,23 +289,36 @@ def area_summary(
     fetched_at: datetime | None,
     file_sources: list[dict] | tuple = (),
     main_roads: dict | None = None,
+    merged: int = 0,
 ) -> dict:
     """Counts and per-source credits. OSM is listed first, then file sources in config order.
 
     `main_roads` is the main_road_coverage() result, or None if roads couldn't be loaded.
+    A source's `count` is the sensors it lists here, including ones shown once
+    under another source (`also_listed_by`); `merged` is how many listings were
+    folded into another (merge_listed_twice), so the counts can add up to more
+    than `sensor_count`.
     """
+
+    def listed_by(f: dict) -> set[str]:
+        return {f["properties"]["source"], *f["properties"].get("also_listed_by", ())}
+
+    def count(source: str) -> int:
+        return sum(1 for f in features if source in listed_by(f))
+
     osm = [f for f in features if f["properties"]["source"] == "osm"]
     edits = [f["properties"]["last_edited"] for f in osm if f["properties"]["last_edited"]]
     area = bbox_area_km2(bbox)
     return {
         "sensor_count": len(features),
+        "merged": merged,
         "with_direction": sum(1 for f in features if f["properties"]["directions_deg"]),
         "area_km2": round(area, 2),
         "sensors_per_100km2": round(100 * len(features) / area, 2) if area else None,
         "main_roads": main_roads,
         "sources": [{
             **OSM_SOURCE,
-            "count": len(osm),
+            "count": count("osm"),
             "fetched_at": fetched_at.isoformat() if fetched_at else None,
             "latest_edit": max(edits) if edits else None,
         }] + [{
@@ -269,7 +326,7 @@ def area_summary(
             "name": fs["name"],
             "license": None,
             "url": None,
-            "count": sum(1 for f in features if f["properties"]["source"] == fs["id"]),
+            "count": count(fs["id"]),
             "fetched_at": fs["updated_at"],  # file's last-modified time
             "latest_edit": None,
         } for fs in file_sources],
@@ -290,7 +347,8 @@ def load_area(
     """Sensors and summary for a bbox (snapped). Fetches from Overpass if not cached or stale.
 
     File sensors come from `region` (default: the active region) and are
-    included only where they fall inside the snapped box.
+    included only where they fall inside the snapped box. A sensor listed by
+    OSM and a file (or twice in one) is shown once (merge_listed_twice).
 
     Main roads (for the coverage figure) are fetched and cached the same way.
     A stale cached response is still used if the refetch fails, so a busy
@@ -304,9 +362,9 @@ def load_area(
     overpass = client or OverpassClient(attempts_per_url=2, backoff_s=2.0)
     query = build_area_query(snapped)
     response = _cached_fetch(query, cache, overpass, now)
-    features = parse_area_response(response)
-    file_features, file_sources = file_area_features(snapped, region or get_region())
-    features += file_features
+    region = region or get_region()
+    file_features, file_sources = file_area_features(snapped, region)
+    features, merged = merge_listed_twice(parse_area_response(response) + file_features, source_priority(region))
     try:
         roads = _cached_fetch(build_roads_query(snapped), cache, overpass, now)
         main_roads = main_road_coverage(snapped, roads, features)
@@ -316,7 +374,7 @@ def load_area(
         main_roads = None
     return {
         "bbox": list(snapped),
-        "summary": area_summary(snapped, features, cache.fetched_at(query), file_sources, main_roads),
+        "summary": area_summary(snapped, features, cache.fetched_at(query), file_sources, main_roads, merged),
         "sensors": {"type": "FeatureCollection", "features": features},
     }
 

@@ -212,6 +212,12 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
 
           <div className="ex-sources">
             <div className="ex-k">Data sources</div>
+            {!!s.merged && (
+              <div className="dim">
+                {s.merged === 1 ? "1 sensor is" : `${s.merged} sensors are`} listed by more than one source and shown
+                once, so the counts below can add up to more than the total.
+              </div>
+            )}
             {s.sources.map((src) => {
               const fetched = shortDate(src.fetched_at);
               const edit = shortDate(src.latest_edit);

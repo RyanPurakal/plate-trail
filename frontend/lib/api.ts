@@ -264,6 +264,7 @@ export type AreaSensorProps = {
   directions_deg: number[] | null;
   direction_raw: string | null;
   last_edited: string | null; // OSM edit time; null for file sensors
+  also_listed_by?: string[]; // other sources listing the same sensor (shown once); missing from older responses
 };
 
 export type AreaSource = {
@@ -271,7 +272,7 @@ export type AreaSource = {
   name: string;
   license: string | null;
   url: string | null;
-  count: number;
+  count: number; // sensors this source lists here, including ones shown once under another source
   fetched_at: string | null; // OSM: when the cached response was fetched; file: last-modified time
   latest_edit: string | null;
 };
@@ -289,6 +290,7 @@ export type AreaResult = {
   bbox: [number, number, number, number]; // west, south, east, north, snapped to a 0.01 deg grid
   summary: {
     sensor_count: number;
+    merged?: number; // listings folded into another source's (same sensor within 15 m); missing from older responses
     with_direction: number;
     area_km2: number;
     sensors_per_100km2: number | null;

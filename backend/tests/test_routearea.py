@@ -222,6 +222,23 @@ def test_fetch_sensors_reads_a_fresh_area_cache_entry(tmp_path):
     assert sorted(p.read_text() for p in (tmp_path / "areas").iterdir()) == files  # untouched
 
 
+def test_fetch_sensors_shows_a_sensor_listed_by_osm_and_a_file_once(tmp_path, monkeypatch):
+    from platetrail import routearea
+    from platetrail.region import parse_region
+
+    (tmp_path / "s.csv").write_text("id,lon,lat,direction\nsame,-74.4,40.50004,\nother,-74.39,40.51,\n")
+    region = parse_region({
+        "id": "t", "name": "T", "parent_iso3166_2": "US-NJ",
+        "towns": [{"label": "T", "osm_name": "T", "osm_relation": 1}],
+        "camera_sources": [{"type": "osm"}, {"type": "file", "path": "s.csv", "source": "s"}],
+    }, base_dir=tmp_path)
+    monkeypatch.setattr(routearea, "get_region", lambda: region)
+    features, sources = fetch_sensors(BBOX, RawCache(tmp_path / "areas"), client_for([]))
+    assert [f["properties"]["id"] for f in features] == ["osm:node/5", "s:other"]
+    assert features[0]["properties"]["also_listed_by"] == ["s"]
+    assert [s["id"] for s in sources] == ["osm", "s"]
+
+
 @pytest.fixture
 def client():
     nets = networks()

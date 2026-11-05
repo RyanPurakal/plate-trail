@@ -489,6 +489,18 @@ stored server-side. The Edison and New Brunswick study stays as the
       others wait for it and share the result or the error; an error is not
       kept, so the next check tries again. Held in memory only, like the
       networks themselves.
+- [x] A sensor listed by OpenStreetMap and a configured file is shown once.
+      The study ETL merged such listings, but `GET /area` and route checks
+      outside the study area kept both, so an area counted the sensor twice
+      and a route passed it twice. `merge_listed_twice` in `area.py` runs the
+      ETL's `dedupe` (15 m across sources with compatible directions; 1 m and
+      the same directions within one) in `camera_sources` priority order
+      (OSM last if the region doesn't list it). The kept sensor takes its
+      direction from the first listing that has one and names the others in
+      `also_listed_by`; the summary adds `merged`, and a source's `count` is
+      the sensors it lists, so the counts can add up to more than the total.
+      The sensor card shows "Also listed by" and the sources list says how
+      many were shown once.
 
 ## Notes
 
@@ -591,3 +603,10 @@ stored server-side. The Edison and New Brunswick study stays as the
   skipped. Every product-direction item is done; next candidates are a
   browser click-through of re-checking a saved route on a return visit, and
   the lint item once typescript-eslint supports TypeScript 7.
+- 2026-11-05: OSM and file listings of one sensor are merged in `/area` and
+  route checks. Lint still blocked (typescript-eslint 8.72.1 wants TypeScript
+  below 6.1). Backend suite without PostGIS: 462 passed, 46 skipped; checked by
+  typecheck, frontend tests and build, not clicked through in a browser. A
+  last look stored before this change will list a merged file sensor as no
+  longer listed once. Next candidates are unchanged: a browser click-through
+  of re-checking a saved route on a return visit, and the lint item.

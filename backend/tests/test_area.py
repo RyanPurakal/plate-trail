@@ -16,9 +16,11 @@ from platetrail.area import (
     file_area_features,
     load_area,
     main_road_coverage,
+    merge_listed_twice,
     parse_area_response,
     parse_bbox,
     snap_bbox,
+    source_priority,
 )
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
@@ -196,6 +198,66 @@ def test_load_area_includes_file_sensors(tmp_path):
     assert survey["fetched_at"] is not None
     ids = [f["properties"]["id"] for f in result["sensors"]["features"]]
     assert ids == ["osm:node/2", "osm:way/7", "survey:2", "survey:a"]
+    assert summary["merged"] == 0
+    assert all(f["properties"]["also_listed_by"] == [] for f in result["sensors"]["features"])
+
+
+def point(fid, source, lon, lat, dirs=None, raw=None):
+    return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": {"id": fid, "source": source, "directions_deg": dirs, "direction_raw": raw,
+                           "last_edited": None}}
+
+
+M = 1 / 111_000  # about a metre of latitude
+
+
+def test_merge_listed_twice_matches_the_study_etl_rules():
+    feats = [
+        point("osm:node/1", "osm", -74.4, 40.5),  # no direction
+        point("survey:a", "survey", -74.4, 40.5 + 8 * M, [90.0], "90"),  # same sensor, 8 m off
+        point("osm:node/2", "osm", -74.3, 40.5, [0.0], "0"),
+        point("survey:b", "survey", -74.3, 40.5 + 5 * M, [180.0], "180"),  # facing the other way: kept
+        point("survey:c", "survey", -74.2, 40.5 + 40 * M),  # 40 m from anything: kept
+    ]
+    out, merged = merge_listed_twice(feats, ("osm", "survey"))
+    assert merged == 1
+    assert [f["properties"]["id"] for f in out] == ["osm:node/1", "osm:node/2", "survey:b", "survey:c"]
+    kept = out[0]["properties"]
+    assert kept["source"] == "osm" and kept["also_listed_by"] == ["survey"]
+    assert kept["directions_deg"] == [90.0] and kept["direction_raw"] == "90"  # filled from the file
+    assert out[0]["geometry"]["coordinates"] == [-74.4, 40.5]  # position from the higher-priority source
+    assert feats[0]["properties"]["directions_deg"] is None  # inputs are not changed
+    # with the file first in priority, the file's listing is the one shown
+    out2, _ = merge_listed_twice(feats, ("survey", "osm"))
+    assert "survey:a" in [f["properties"]["id"] for f in out2] and "osm:node/1" not in [
+        f["properties"]["id"] for f in out2]
+
+
+def test_source_priority_follows_region_order(tmp_path):
+    assert source_priority(file_region(tmp_path)) == ("osm", "survey")
+    file_only = parse_region({
+        "id": "t", "name": "T", "parent_iso3166_2": "US-NJ",
+        "towns": [{"label": "T", "osm_name": "T", "osm_relation": 1}],
+        "camera_sources": [{"type": "file", "path": "survey.csv", "source": "survey"}],
+    }, base_dir=tmp_path)
+    assert source_priority(file_only) == ("survey", "osm")
+
+
+def test_load_area_shows_a_sensor_listed_by_osm_and_a_file_once(tmp_path):
+    (tmp_path / "survey.csv").write_text("id,lon,lat,direction\nsame,-74.41,40.52005,\nnew,-74.35,40.58,\n")
+    region = parse_region({
+        "id": "t", "name": "T", "parent_iso3166_2": "US-NJ",
+        "towns": [{"label": "T", "osm_name": "T", "osm_relation": 1}],
+        "camera_sources": [{"type": "osm"}, {"type": "file", "path": "survey.csv", "source": "survey"}],
+    }, base_dir=tmp_path)
+    result = load_area((-74.42, 40.5, -74.3, 40.6), cache=RawCache(tmp_path / "cache"),
+                       client=overpass_client([]), region=region)
+    summary = result["summary"]
+    assert summary["sensor_count"] == 3 and summary["merged"] == 1
+    osm, survey = summary["sources"]
+    assert osm["count"] == 2 and survey["count"] == 2  # "same" counts for both sources
+    node2 = next(f for f in result["sensors"]["features"] if f["properties"]["id"] == "osm:node/2")
+    assert node2["properties"]["also_listed_by"] == ["survey"]
 
 
 def test_roads_query_lists_main_classes_in_bbox():

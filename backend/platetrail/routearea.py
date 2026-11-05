@@ -37,7 +37,9 @@ from platetrail.area import (
     area_cache,
     build_area_query,
     file_area_features,
+    merge_listed_twice,
     parse_area_response,
+    source_priority,
     snap_bbox,
 )
 from platetrail.etl.cache import RawCache
@@ -124,12 +126,14 @@ def fetch_sensors(bbox: BBox, cache: RawCache | None = None, client: OverpassCli
             if fetched_at is None:
                 raise
             response = cache.get_or_fetch(query, _never)
-    features = parse_area_response(response)
-    file_features, file_sources = file_area_features(bbox, get_region())
+    region = get_region()
+    file_features, file_sources = file_area_features(bbox, region)
+    # a sensor listed by OSM and a file is one sensor, as in GET /area
+    features, _ = merge_listed_twice(parse_area_response(response) + file_features, source_priority(region))
     sources = [{**OSM_SOURCE, "fetched_at": fetched_at.isoformat()}]
     sources += [{"id": fs["id"], "name": fs["name"], "license": None, "url": None, "fetched_at": fs["updated_at"]}
                 for fs in file_sources]
-    return features + file_features, sources
+    return features, sources
 
 
 def _never():

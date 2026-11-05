@@ -56,6 +56,12 @@ export default function SensorDetail({ area, selectedId, onSelect }: Props) {
         <span>Source</span>
         <span>{src?.name ?? p.source}{src?.license && <span className="dim"> · {src.license}</span>}</span>
       </div>
+      {!!p.also_listed_by?.length && (
+        <div className="ex-row">
+          <span>Also listed by</span>
+          <span>{p.also_listed_by.map((id) => area.summary.sources.find((s) => s.id === id)?.name ?? id).join(", ")}</span>
+        </div>
+      )}
       {edited && <div className="ex-row"><span>Last edited in OSM</span><span>{edited}</span></div>}
       {fetched && (
         <div className="ex-row"><span>{p.source === "osm" ? "Data fetched" : "File updated"}</span><span>{fetched}</span></div>

@@ -52,6 +52,12 @@ being skipped. See `platetrail.etl.loaders.file`.
 that fall inside the requested box, alongside OpenStreetMap, each credited by
 its `source` name. There a missing or malformed file is logged and skipped
 instead of stopping the request.
+A sensor listed by more than one source is shown once, by the same rules
+as the ETL's deduplication (across sources: within 15 m with compatible
+directions), so route checks outside the study area don't pass it twice
+either. The listing from the higher-priority source in `camera_sources` is
+kept (OpenStreetMap goes last if the region doesn't list it), and
+`also_listed_by` names the others.
 
 ## Count cross-check
 
