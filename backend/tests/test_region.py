@@ -152,7 +152,7 @@ def test_invalid_bbox_towns_are_rejected(town):
 
 
 def test_worked_example_region_loads(monkeypatch):
-    """docs/new_region.md's example region and its sensor file stay valid."""
+    """The worked example in docs/examples/new_region (linked from the README) stays valid."""
     from pathlib import Path
 
     from platetrail.etl.loaders.file import FileCameraLoader

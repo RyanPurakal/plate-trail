@@ -2,7 +2,7 @@
 
 export type Topic = "sensors" | "retention" | "unicity";
 
-// Short, neutral explainers linked from where each one is relevant. Figures come from docs/findings.md.
+// Short, neutral explainers linked from where each one is relevant. The unicity figure is from de Montjoye et al. (2013).
 const TOPICS: Record<Topic, { title: string; body: string[] }> = {
   sensors: {
     title: "What fixed sensors record",
