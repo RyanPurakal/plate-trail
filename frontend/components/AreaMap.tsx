@@ -24,7 +24,13 @@ type Props = {
 };
 
 const FALLBACK_VIEW = { center: [-74.39, 40.53] as [number, number], zoom: 11.6 };
-const BASEMAP = "https://tiles.openfreemap.org/styles/dark";
+const BASEMAP = "https://tiles.openfreemap.org/styles/positron";
+// Map colours, matching the --ink, --signal, --route and --caution tokens in globals.css.
+const INK = "#16181b";
+const SIGNAL = "#ff5b14";
+const ROUTE = "#2347c9";
+const CAUTION = "#f2b705";
+const PAPER = "#f5f4ef";
 const EMPTY = { type: "FeatureCollection" as const, features: [] as Feature[] };
 const MIN_DRAW_DEG = 0.002; // smaller drags (about 200 m) are treated as clicks, not boxes
 
@@ -61,18 +67,18 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
       m.addSource("area-box", { type: "geojson", data: EMPTY });
       m.addSource("area-sensors", { type: "geojson", data: EMPTY });
       m.addSource("draw-box", { type: "geojson", data: EMPTY });
-      m.addLayer({ id: "area-box-fill", type: "fill", source: "area-box", paint: { "fill-color": "#e8e2d4", "fill-opacity": 0.03 } });
+      m.addLayer({ id: "area-box-fill", type: "fill", source: "area-box", paint: { "fill-color": CAUTION, "fill-opacity": 0.07 } });
       m.addLayer({
         id: "area-box-line", type: "line", source: "area-box",
-        paint: { "line-color": "#e8e2d4", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 },
+        paint: { "line-color": INK, "line-width": 2, "line-dasharray": [3, 2], "line-opacity": 0.85 },
       });
       m.addLayer({
         id: "area-sensors", type: "circle", source: "area-sensors",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 3.5, 15, 7],
-          "circle-color": ["case", ["get", "has_direction"], "#f2a541", "#0b0d0e"],
-          "circle-stroke-color": "#f2a541",
-          "circle-stroke-width": 1.5,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 4, 15, 8],
+          "circle-color": ["case", ["get", "has_direction"], SIGNAL, "#ffffff"],
+          "circle-stroke-color": ["case", ["get", "has_direction"], INK, SIGNAL],
+          "circle-stroke-width": ["case", ["get", "has_direction"], 1.5, 2.5],
         },
       });
       m.addLayer({
@@ -80,18 +86,27 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 15, 13],
           "circle-color": "transparent",
-          "circle-stroke-color": "#e8e2d4",
-          "circle-stroke-width": 2,
+          "circle-stroke-color": ROUTE,
+          "circle-stroke-width": 3,
         },
       });
       m.addSource("route-drive", { type: "geojson", data: EMPTY });
       m.addLayer({
+        id: "route-drive-casing", type: "line", source: "route-drive", filter: ["==", ["geometry-type"], "LineString"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": PAPER,
+          "line-width": ["case", ["==", ["get", "direction"], "outbound"], 8, 5],
+          "line-opacity": ["case", ["==", ["get", "direction"], "outbound"], 0.95, 0.5],
+        },
+      });
+      m.addLayer({
         id: "route-drive", type: "line", source: "route-drive", filter: ["==", ["geometry-type"], "LineString"],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": "#7fd1c7",
-          "line-width": ["case", ["==", ["get", "direction"], "outbound"], 3, 2],
-          "line-opacity": ["case", ["==", ["get", "direction"], "outbound"], 0.9, 0.35],
+          "line-color": ROUTE,
+          "line-width": ["case", ["==", ["get", "direction"], "outbound"], 4.5, 2.5],
+          "line-opacity": ["case", ["==", ["get", "direction"], "outbound"], 0.95, 0.4],
         },
       });
       m.addLayer({
@@ -99,8 +114,8 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 7, 15, 12],
           "circle-color": "transparent",
-          "circle-stroke-color": ["case", ["get", "read"], "#f2a541", "#8a8f94"],
-          "circle-stroke-width": 2,
+          "circle-stroke-color": ["case", ["get", "read"], SIGNAL, "#8a8d92"],
+          "circle-stroke-width": ["case", ["get", "read"], 3, 2],
         },
       });
       m.addLayer({
@@ -109,26 +124,26 @@ export default function AreaMap({ area, initialView = null, onView, drawing = fa
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 11, 15, 17],
           "circle-color": "transparent",
-          "circle-stroke-color": "#e8e2d4",
-          "circle-stroke-width": 2.5,
+          "circle-stroke-color": CAUTION,
+          "circle-stroke-width": 4,
         },
       });
       m.addSource("route-marks", { type: "geojson", data: EMPTY });
       m.addLayer({
         id: "route-line", type: "line", source: "route-marks", filter: ["==", ["geometry-type"], "LineString"],
-        paint: { "line-color": "#e8e2d4", "line-width": 1.5, "line-dasharray": [1, 2], "line-opacity": 0.8 },
+        paint: { "line-color": INK, "line-width": 2, "line-dasharray": [1, 2], "line-opacity": 0.8 },
       });
       m.addLayer({
         id: "route-points", type: "circle", source: "route-marks", filter: ["==", ["geometry-type"], "Point"],
         paint: {
           "circle-radius": 6,
-          "circle-color": ["case", ["==", ["get", "end"], "start"], "#e8e2d4", "#0b0d0e"],
-          "circle-stroke-color": "#e8e2d4",
-          "circle-stroke-width": 2,
+          "circle-color": ["case", ["==", ["get", "end"], "start"], INK, PAPER],
+          "circle-stroke-color": INK,
+          "circle-stroke-width": 2.5,
         },
       });
-      m.addLayer({ id: "draw-box-fill", type: "fill", source: "draw-box", paint: { "fill-color": "#f2a541", "fill-opacity": 0.08 } });
-      m.addLayer({ id: "draw-box-line", type: "line", source: "draw-box", paint: { "line-color": "#f2a541", "line-width": 1.5 } });
+      m.addLayer({ id: "draw-box-fill", type: "fill", source: "draw-box", paint: { "fill-color": CAUTION, "fill-opacity": 0.2 } });
+      m.addLayer({ id: "draw-box-line", type: "line", source: "draw-box", paint: { "line-color": INK, "line-width": 2, "line-dasharray": [2, 1.5] } });
 
       // Draw mode: press, drag and release to span a box (mouse or one finger).
       const drawSrc = m.getSource("draw-box") as GeoJSONSource;

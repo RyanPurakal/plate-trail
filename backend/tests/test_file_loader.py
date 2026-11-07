@@ -3,8 +3,6 @@ import json
 import pytest
 
 from platetrail.etl.loaders.file import FileCameraLoader, SensorFileError
-from platetrail.etl.run_etl import default_loaders
-from platetrail.etl.loaders.overpass import OverpassLoader
 from platetrail.region import CameraSource, Region, RegionConfigError, Town, load_region, parse_region
 
 ONE_TOWN = Region("solo", "Solo", "US-PA", (Town("Solo", "Solo", 1),))
@@ -95,8 +93,6 @@ def test_missing_file_fails(tmp_path):
 def test_default_region_uses_osm_only():
     region = load_region()
     assert region.camera_sources == (CameraSource("osm"),)
-    loaders = default_loaders(region)
-    assert len(loaders) == 1 and isinstance(loaders[0], OverpassLoader)
 
 
 def test_region_file_sources_resolve_relative_to_region(tmp_path):
@@ -109,9 +105,8 @@ def test_region_file_sources_resolve_relative_to_region(tmp_path):
     }))
     region = load_region(path)
     assert region.camera_sources[0] == CameraSource("file", tmp_path / "sensors.csv", "survey")
-    loaders = default_loaders(region)
-    assert [l.source for l in loaders] == ["survey", "osm"]
-    assert [r.key for r in loaders[0].load()] == ["survey:0"]
+    assert [r.key for r in FileCameraLoader(region.camera_sources[0].path, source="survey", region=region).load()] \
+        == ["survey:0"]
 
 
 @pytest.mark.parametrize("sources", [

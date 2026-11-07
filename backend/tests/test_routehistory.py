@@ -3,11 +3,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from platetrail.api.main import app, get_route_runner
-from platetrail.routearea import AreaNetworks, get_area_networks
+from platetrail.api.main import app
+from platetrail.routearea import get_area_networks
 from platetrail.routecheck import check_route
 from platetrail.routehistory import route_history
-from platetrail.sim.routing import NoRoute, Router
+from platetrail.sim.routing import Router
+from test_routecheck import FixedNetworks
 from test_trip import pair_on_main_st, toy_graph, xy
 
 START, END = xy(100, 5), xy(900, 5)  # either side of the camera pair at 500 m on Main St
@@ -72,11 +73,7 @@ def test_weekend_only_schedule(legs):
 
 @pytest.fixture
 def client(toy):
-    def no_roads(bbox):
-        raise NoRoute("no mapped roads")
-
-    app.dependency_overrides[get_route_runner] = lambda: toy
-    app.dependency_overrides[get_area_networks] = lambda: AreaNetworks(fetch_graph=no_roads)
+    app.dependency_overrides[get_area_networks] = lambda: FixedNetworks(toy)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -92,7 +89,7 @@ def test_endpoint_is_compute_only(client):
                                                    "leave": "07:30", "return": "16:45", "retention_days": [30, 7]})
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["stored"] is False and body["network"]["kind"] == "region"
+        assert body["stored"] is False and body["network"]["kind"] == "area"
         assert [p["days"] for p in body["periods"]] == [7, 30]
         assert body["schedule"]["leave"] == "07:30" and body["schedule"]["return"] == "16:45"
         assert not cache._d  # nothing cached

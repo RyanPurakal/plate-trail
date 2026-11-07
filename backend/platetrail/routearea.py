@@ -1,14 +1,14 @@
 """Route checks anywhere: a small drive network built around one route, on demand.
 
-Routes outside the study region have no prebuilt road graph or camera table,
-so the check builds both for a box around the route's two ends:
+There is no prebuilt road graph or camera table, so the check builds both for
+a box around the route's two ends:
 
-* roads: OSMnx drive network for the box (same filter and speeds as the
-  study graph, platetrail.roads.graph), fetched with OSMnx's disk cache
-  and logging switched off;
+* roads: OSMnx drive network for the box (filter and speeds from
+  platetrail.roads.graph), fetched with OSMnx's disk cache and logging
+  switched off;
 * sensors: the same public sensors GET /area serves (OSM plus the region's
-  file sources), snapped to those roads with the study pipeline's
-  direction-aware snapping (platetrail.roads.snap).
+  file sources), snapped to those roads with direction-aware snapping
+  (platetrail.roads.snap).
 
 The box follows the visitor's route, so it is treated like the route
 itself: nothing about it is written to disk or logged. A fresh /area cache
@@ -79,7 +79,7 @@ def route_bbox(start: tuple[float, float], end: tuple[float, float], pad_m: floa
     s, n = min(start[1], end[1]) - dlat, max(start[1], end[1]) + dlat
     bbox = snap_bbox((max(w, -180.0), max(s, -90.0), min(e, 180.0), min(n, 90.0)))
     if bbox[2] - bbox[0] > MAX_ROUTE_SPAN_DEG or bbox[3] - bbox[1] > MAX_ROUTE_SPAN_DEG:
-        raise AreaError("this route is too long to check outside the study area; "
+        raise AreaError("this route is too long to check; "
                         "routes up to about 25 km end to end are supported")
     return bbox
 

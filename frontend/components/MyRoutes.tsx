@@ -95,8 +95,8 @@ function CheckResult({ state, focus, onFocus }: { state: RouteCheckState } & Omi
   if (state.loading) {
     return (
       <div className="nb-note" role="status">
-        Working out the route by road… For a place outside the example study area, the first check downloads its
-        roads from OpenStreetMap and can take a minute.
+        Working out the route by road… The first check of a new place downloads its roads from OpenStreetMap
+        and can take a minute.
       </div>
     );
   }
@@ -108,7 +108,7 @@ function CheckResult({ state, focus, onFocus }: { state: RouteCheckState } & Omi
       {r.legs.map((leg) => <LegSummary key={leg.direction} leg={leg} focus={focus} onFocus={onFocus} />)}
       {state.change !== undefined && <ChangeNote change={state.change} what="along this route" />}
       <div className="nb-note">
-        Fastest route by road on {r.network.kind === "region" ? `the ${r.network.name} study roads` : "OpenStreetMap roads around this route"},
+        Fastest route by road on OpenStreetMap roads around this route,
         using mapped sensors only. A sensor with a known direction is counted for trips travelling the way it faces;
         one with no recorded direction is counted both ways. Times are minutes and seconds from leaving at modelled road speeds;
         click a step to see it on the map. This check was worked out on the server and not stored there.

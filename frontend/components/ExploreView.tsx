@@ -77,7 +77,11 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
 
   return (
     <div className="explore">
-      <section className="picker">
+      <section className="naive picker" aria-labelledby="ex-title">
+        <div className="nb-head">
+          <span id="ex-title">Explore an area</span>
+          <span className="nb-badge">public data</span>
+        </div>
         <p className="ex-lede">
           Search for a place, move the map to any area or draw a box on it, then load the fixed sensors (such as license-plate
           readers) recorded there in public map data.

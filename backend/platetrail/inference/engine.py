@@ -22,8 +22,7 @@ from GAPS between reads:
 * Anomalies: reads at a camera seen on only one day that belong to no
   regular pass, scored by rarity.
 
-All thresholds are ASSUMPTIONS. They are labelled here and in the README.
-Evaluation against ground truth is in evaluate_* below.
+All thresholds are ASSUMPTIONS and are labelled here.
 """
 
 import math
@@ -282,48 +281,3 @@ def infer(reads: list[EngineRead], camera_names: dict[str, str] | None = None) -
         conclusions.append("Too little stay evidence to place home or work.")
     return Inference(len(reads), len(days), home, work, regular, anom, conclusions)
 
-
-# ---- evaluation against ground truth ---------------------------------------------------
-
-
-def routine_trips(trips: list[dict], window_min: int = PATTERN_WINDOW_MIN, min_days: int = PATTERN_MIN_DAYS):
-    """Ground-truth recurring trips: same origin and destination at a similar departure time on >= min_days days.
-
-    trips: dicts with origin, dest (keys), depart (datetime), trip_id. Returns lists of trip_ids, one per routine.
-    """
-    groups: dict[tuple, list[dict]] = defaultdict(list)
-    for t in trips:
-        groups[(t["origin"], t["dest"])].append(t)
-    routines = []
-    for ts in groups.values():
-        ts = sorted(ts, key=lambda t: t["depart"].hour * 60 + t["depart"].minute)
-        used = set()
-        for i, s in enumerate(ts):
-            if i in used:
-                continue
-            m0 = s["depart"].hour * 60 + s["depart"].minute
-            g = [j for j, t in enumerate(ts) if j not in used
-                 and abs(t["depart"].hour * 60 + t["depart"].minute - m0) <= window_min]
-            if len({ts[j]["depart"].date() for j in g}) >= min_days:
-                used.update(g)
-                routines.append([ts[j]["trip_id"] for j in g])
-    return routines
-
-
-def schedule_recovery(routines: list[list], reads_by_trip: dict, regular: list[RegularPass]) -> tuple[int, int]:
-    """(recovered, observable): a routine is observable if any of its trips produced a read, and recovered
-    if at least half of its trips produced a read matching an inferred regular pass."""
-    recovered = observable = 0
-    for trip_ids in routines:
-        hits = [reads_by_trip.get(t, []) for t in trip_ids]
-        if not any(hits):
-            continue
-        observable += 1
-        matched = 0
-        for rs in hits:
-            if any(p.camera_label == r.camera_label
-                   and abs(r.time.hour * 60 + r.time.minute - p.minute_of_day) <= PATTERN_WINDOW_MIN
-                   for r in rs for p in regular):
-                matched += 1
-        recovered += matched >= len(trip_ids) / 2
-    return recovered, observable

@@ -2,14 +2,13 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 
 import httpx
 import osmnx as ox
 import pytest
 from fastapi.testclient import TestClient
 
-from platetrail.api.main import app, get_route_runner
+from platetrail.api.main import app
 from platetrail.area import AreaError, build_area_query
 from platetrail.etl.cache import RawCache
 from platetrail.etl.loaders.overpass import OverpassClient
@@ -17,7 +16,7 @@ from platetrail.routearea import (AreaNetworks, build_camera_set, fetch_drive_gr
                                   route_bbox)
 from platetrail.routecheck import check_route
 from platetrail.sim.routing import NoRoute, Router
-from test_trip import pair_on_main_st, toy_graph, xy
+from test_trip import toy_graph, xy
 
 SHIFT = 1.0  # the "elsewhere" network sits one degree east of the study toy network
 
@@ -242,8 +241,6 @@ def test_fetch_sensors_shows_a_sensor_listed_by_osm_and_a_file_once(tmp_path, mo
 @pytest.fixture
 def client():
     nets = networks()
-    app.dependency_overrides[get_route_runner] = lambda: SimpleNamespace(router=Router(toy_graph()),
-                                                                   cameras=pair_on_main_st())
     app.dependency_overrides[get_area_networks] = lambda: nets
     yield TestClient(app), nets
     app.dependency_overrides.clear()
@@ -253,28 +250,13 @@ def post(c, a, b):
     return c.post("/route/check", json={"start": {"lon": a[0], "lat": a[1]}, "end": {"lon": b[0], "lat": b[1]}})
 
 
-def test_endpoint_without_study_data_uses_a_network_around_the_route(client):
-    c, nets = client
-    app.dependency_overrides[get_route_runner] = lambda: None
-    resp = post(c, shifted(xy(100, 5)), shifted(xy(900, 5)))
-    assert resp.status_code == 200 and resp.json()["network"]["kind"] == "area"
-    assert len(nets.calls) == 1
-
-
-def test_endpoint_uses_study_roads_when_possible(client):
-    c, nets = client
-    resp = post(c, xy(100, 5), xy(900, 5))
-    assert resp.status_code == 200 and resp.json()["network"]["kind"] == "region"
-    assert nets.calls == []
-
-
 def test_endpoint_builds_a_network_for_routes_elsewhere(client):
     c, nets = client
     resp = post(c, shifted(xy(100, 5)), shifted(xy(900, 5)))
     assert resp.status_code == 200, resp.text
     body = resp.json()
     net = body["network"]
-    assert net["kind"] == "area" and net["region"] is None
+    assert net["kind"] == "area" and len(nets.calls) == 1
     assert net["sensors_mapped"] == 2 and net["sensors_on_roads"] == 1
     assert net["sources"][0]["id"] == "osm"
     assert body["stored"] is False and [leg["sensors_passed"] for leg in body["legs"]] == [1, 1]

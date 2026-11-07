@@ -18,11 +18,12 @@ import numpy as np
 
 from platetrail.geo import WGS84
 from platetrail.inference.engine import EngineRead, _days_text, _hhmm, infer
-from platetrail.sim.noise import NoiseConfig
 
 # Only times of day and weekdays are reported; this fixed date just anchors the calendar (a Sunday).
 REFERENCE_END = date(2026, 12, 27)
 JITTER_MIN = 10
+# ASSUMPTION: share of passes a sensor facing the right way still misses.
+P_MISS = 0.05
 RETENTION_DAYS = (7, 30, 365)
 
 
@@ -31,7 +32,6 @@ def _reads(legs: list[dict], days: int, weekdays: tuple[int, ...], leave_min: in
     """Reads over the `days` days ending REFERENCE_END, and how many trips were driven."""
     by_dir = {leg["direction"]: leg for leg in legs}
     reads, trips = [], 0
-    p_miss = NoiseConfig().p_miss
     for i in range(days):
         d = REFERENCE_END - timedelta(days=days - 1 - i)
         if d.weekday() not in weekdays:
@@ -44,7 +44,7 @@ def _reads(legs: list[dict], days: int, weekdays: tuple[int, ...], leave_min: in
             depart = datetime.combine(d, time()) + timedelta(minutes=minute + int(rng.integers(-JITTER_MIN,
                                                                                                 JITTER_MIN + 1)))
             for s in leg["steps"]:
-                if not s["read"] or s["lon"] is None or rng.random() < p_miss:
+                if not s["read"] or s["lon"] is None or rng.random() < P_MISS:
                     continue
                 reads.append(EngineRead(depart + timedelta(seconds=s["offset_s"]), s["label"], s["lon"], s["lat"]))
     return sorted(reads, key=lambda r: r.time), trips
@@ -133,8 +133,8 @@ def route_history(legs: list[dict], start: tuple[float, float], end: tuple[float
         "periods": periods,
         "assumptions": [
             f"The route is driven on the chosen days, leaving within {JITTER_MIN} minutes of the usual times.",
-            f"Each pass that would record does so, except about {NoiseConfig().p_miss:.0%} missed reads.",
-            "Estimates use the same inference engine as the example study: long gaps between reads are treated "
+            f"Each pass that would record does so, except about {P_MISS:.0%} missed reads.",
+            "Estimates treat long gaps between reads "
             "as stays, and repeated reads at similar times as a routine.",
         ],
         "stored": False,

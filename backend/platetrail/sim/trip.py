@@ -1,20 +1,17 @@
 """Route a trip and decide which cameras capture it.
 
-Cameras are loaded once into a CameraSet (indexed by directed edge for
+Cameras are held in a CameraSet (indexed by directed edge for
 public-road cameras, plus a list of lot cameras with their polygons).
 simulate_trip then routes the trip and returns ground-truth camera passes,
-each marked captured or not with a reason. Sensor noise (missed reads,
-misreads, downtime, jitter) is applied later, on top of captured passes.
+each marked captured or not with a reason.
 """
 
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from shapely import wkb
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import Engine, text
 
 from platetrail.geo import WGS84
 from platetrail.sim.matcher import (
@@ -71,44 +68,6 @@ class CameraSet:
         self.lot_groups: dict[str, list[SimCamera]] = defaultdict(list)
         for c in self.lots:
             self.lot_groups[c.lot_id or f"camera/{c.camera_id}"].append(c)
-
-
-def load_camera_set(engine: Engine) -> CameraSet:
-    with engine.connect() as conn:
-        cams = {
-            r.id: SimCamera(
-                camera_id=r.id,
-                label=r.source_id,
-                kind=r.camera_kind,
-                directions_deg=list(r.directions_deg) if r.directions_deg else None,
-                alt_directions_deg=list(r.alt_directions_deg) if r.alt_directions_deg else None,
-                snap_ambiguous=r.snap_ambiguous,
-                lon=r.lon,
-                lat=r.lat,
-            )
-            for r in conn.execute(
-                text(
-                    "SELECT id, source_id, camera_kind, directions_deg, alt_directions_deg, snap_ambiguous,"
-                    " ST_X(geom) AS lon, ST_Y(geom) AS lat FROM cameras"
-                )
-            )
-        }
-        for r in conn.execute(text("SELECT camera_id, u, v, key, fraction_along, edge_bearing_deg FROM camera_edges")):
-            cams[r.camera_id].edges.append(CameraEdge((r.u, r.v, r.key), r.fraction_along, r.edge_bearing_deg))
-        for r in conn.execute(
-            text(
-                "SELECT camera_id, ST_AsBinary(lot_geom) AS g, lot_osm_id, lot_name, facings, alt_facings,"
-                " access_node FROM camera_lots"
-            )
-        ):
-            c = cams[r.camera_id]
-            c.lot_geom = wkb.loads(bytes(r.g)) if r.g is not None else None
-            c.lot_id = r.lot_osm_id
-            c.access_node = r.access_node
-            c.lot_name = r.lot_name
-            c.facings = list(r.facings) if r.facings else None
-            c.alt_facings = list(r.alt_facings) if r.alt_facings else None
-    return CameraSet(list(cams.values()))
 
 
 @dataclass(frozen=True)

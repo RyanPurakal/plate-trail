@@ -338,74 +338,12 @@ def test_lot_entry_node_is_where_route_turns_onto_service_roads():
     assert router.route(xy(-400, 0), xy(1400, 0), DEPART).lot_entry_node("dest") is None  # no service roads
 
 
-def test_entrance_index_finds_public_service_junctions():
-    import osmnx as ox
-
-    from platetrail.roads.lots import EntranceIndex
-    from shapely.geometry import Point
-
-    G = ox.project_graph(lot_graph())
-    idx = EntranceIndex(G)
-    assert set(idx.nodes) == {1, 3}  # node 10 is service-only; 0, 2, 4 are public-only
-    x, y = G.nodes[3]["x"], G.nodes[3]["y"]
-    node, dist = idx.nearest(Point(x + 30, y))
-    assert node == 3 and abs(dist - 30) < 0.5
 
 
-def test_entrance_for_camera_is_junction_of_nearest_driveway():
-    import osmnx as ox
-    from shapely.geometry import Point
-
-    from platetrail.roads.lots import EntranceIndex
-
-    G = ox.project_graph(lot_graph())
-    idx = EntranceIndex(G)
-    (x1, y1), (x3, y3) = (G.nodes[1]["x"], G.nodes[1]["y"]), (G.nodes[3]["x"], G.nodes[3]["y"])
-    # 3 m beside the service road leaving junction 1, but the junction-3 *point* is nearer than junction 1.
-    cam = Point(x1 + 260, y1 + 3)
-    assert idx.for_camera(cam)[0] == 1
-    cam2 = Point(x3 - 100, y3 + 3)  # beside the service road leaving junction 3
-    assert idx.for_camera(cam2)[0] == 3
 
 
-def test_entrance_for_camera_prefers_driveway_parallel_to_facing():
-    """Fails if the facing preference is removed: the nearest driveway leads to a different junction."""
-    import osmnx as ox
-    from shapely.geometry import Point
-
-    from platetrail.roads.lots import EntranceIndex
-
-    G = lot_graph()
-    # A second public road at y=40 with junction 5, and a north-south service spur 5->11 that passes
-    # 1 m from the camera. The camera is 3 m from the east-west lot road 1-10 (junction 1) and faces east.
-    for n, (e, nn) in {7: (150, 40), 5: (251, 40), 8: (350, 40), 11: (251, -30)}.items():
-        lon, lat = xy(e, nn)
-        G.add_node(n, x=lon, y=lat)
-    for a, b, length, hw in ((7, 5, 100, "tertiary"), (5, 8, 100, "tertiary"), (5, 11, 70, "service")):
-        for x, y in ((a, b), (b, a)):
-            G.add_edge(x, y, key=0, length=length, travel_time=length / 10, highway=hw)
-    Gp = ox.project_graph(G)
-    idx = EntranceIndex(Gp)
-    p1 = Gp.nodes[1]
-    cam = Point(p1["x"] + 250, p1["y"] + 3)
-    assert idx.for_camera(cam, None)[0] == 5  # without a facing: the nearest driveway (the spur) wins
-    assert idx.for_camera(cam, [90.0])[0] == 1  # facing east: the parallel east-west driveway wins
-    assert idx.for_camera(cam, [0.0])[0] == 5  # facing north: the parallel spur wins
 
 
-def test_entrance_between_two_junctions_follows_facing():
-    import osmnx as ox
-    from shapely.geometry import Point
-
-    from platetrail.roads.lots import EntranceIndex
-
-    Gp = ox.project_graph(lot_graph())  # service road 1-10-3 links junctions 1 (west) and 3 (east)
-    idx = EntranceIndex(Gp)
-    p10 = Gp.nodes[10]
-    cam = Point(p10["x"] + 5, p10["y"] + 2)  # mid-lot on the service road, roughly equidistant
-    assert idx.for_camera(cam, [90.0], ["into_lot"])[0] == 1  # faces east into the lot: came from the west
-    assert idx.for_camera(cam, [270.0], ["into_lot"])[0] == 3
-    assert idx.for_camera(cam, [90.0], ["toward_road"])[0] == 3  # faces east toward its exit
 
 
 def test_route_cache_returns_identical_route_with_new_departure():

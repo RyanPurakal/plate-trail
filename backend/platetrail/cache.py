@@ -1,11 +1,8 @@
-"""Small key-value cache: Redis when REDIS_URL is set, otherwise in-process memory.
+"""Small in-process key-value cache, used for the route cache (routing.Router).
 
-Used for the route cache (routing.Router) and the run cache (jobs). Values
-are pickled. Both backends are best-effort: a cache failure never fails the
-computation, it just recomputes.
+Values are pickled. It is best-effort: a cache miss just recomputes.
 """
 
-import os
 import pickle
 from collections import OrderedDict
 from threading import Lock
@@ -43,35 +40,13 @@ class MemoryCache:
                 self._d.popitem(last=False)
 
 
-class RedisCache:
-    def __init__(self, url: str, prefix: str = "platetrail:"):
-        import redis
-
-        self.r = redis.Redis.from_url(url)
-        self.prefix = prefix
-
-    def get(self, key: str) -> Any:
-        try:
-            raw = self.r.get(self.prefix + key)
-        except Exception:  # noqa: BLE001 - cache is best-effort
-            return MISSING
-        return MISSING if raw is None else pickle.loads(raw)
-
-    def set(self, key: str, value: Any, ttl_s: int | None = None) -> None:
-        try:
-            self.r.set(self.prefix + key, pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL), ex=ttl_s)
-        except Exception:  # noqa: BLE001
-            pass
-
-
 _cache: Cache | None = None
 
 
 def get_cache() -> Cache:
     global _cache
     if _cache is None:
-        url = os.environ.get("REDIS_URL")
-        _cache = RedisCache(url) if url else MemoryCache()
+        _cache = MemoryCache()
     return _cache
 
 

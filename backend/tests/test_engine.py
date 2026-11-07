@@ -6,8 +6,6 @@ from platetrail.inference.engine import (
     EngineRead,
     infer,
     regular_passes,
-    routine_trips,
-    schedule_recovery,
     stay_evidence,
 )
 
@@ -69,18 +67,6 @@ def test_low_confidence_with_little_support():
     reads = [rd(0, 18, 0, HOME_CAM), rd(1, 8, 0, HOME_CAM)]  # one night
     inf = infer(reads)
     assert inf.home and inf.home.confidence == "low"
-
-
-def test_routine_trips_and_schedule_recovery():
-    trips = [{"trip_id": f"{d}a", "origin": "H", "dest": "W", "depart": MON + timedelta(days=d, hours=7, minutes=45)}
-             for d in range(5)]
-    trips.append({"trip_id": "x", "origin": "H", "dest": "S", "depart": MON + timedelta(hours=12)})
-    routines = routine_trips(trips)
-    assert routines == [[f"{d}a" for d in range(5)]]
-    reads_by_trip = {f"{d}a": [rd(d, 7, 50, HOME_CAM)] for d in range(5)}
-    regular = regular_passes([r for rs in reads_by_trip.values() for r in rs])
-    assert schedule_recovery(routines, reads_by_trip, regular) == (1, 1)
-    assert schedule_recovery(routines, {}, regular) == (0, 0)  # unobservable routine
 
 
 def test_clustering_handles_coincident_and_nearby_points():

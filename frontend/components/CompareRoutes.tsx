@@ -26,7 +26,6 @@ const ROWS: Row[] = [
   ...legRows("outbound", "Start to end"),
   ...legRows("return", "Way back"),
   ["Different sensors passed", (r) => String(new Set(r.legs.flatMap((l) => l.steps.map((st) => st.sensor_id))).size)],
-  ["Roads used", (r) => (r.network.kind === "region" ? `${r.network.name} study roads` : "OpenStreetMap roads")],
 ];
 
 /**
@@ -53,7 +52,7 @@ export default function CompareRoutes({ routes, checks, onCheck, onShow }: Props
 
   async function compare() {
     setLoading(true);
-    // One at a time: a first check outside the study area downloads roads, so don't start two at once.
+    // One at a time: a first check of a new place downloads roads, so don't start two at once.
     for (const id of pick) if (!checks[id]?.result) await onCheck(id);
     setLoading(false);
     setShown(true);
@@ -90,7 +89,7 @@ export default function CompareRoutes({ routes, checks, onCheck, onShow }: Props
           </div>
           {busy && (
             <div className="nb-note" role="status">
-              Routes not checked yet are checked first. Outside the example study area, a first check downloads roads
+              Routes not checked yet are checked first. A first check of a new place downloads roads
               and can take a minute.
             </div>
           )}

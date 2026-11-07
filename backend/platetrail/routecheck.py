@@ -1,14 +1,13 @@
 """Route check: which fixed sensors one saved route passes, and where reads would happen.
 
-The visitor's route (start and end, kept in their browser) is driven on the
-study region's road network and matched against its cameras with the
-default, direction-aware matching. By default the route is checked both
+The visitor's route (start and end, kept in their browser) is driven on a
+road network built around it (platetrail.routearea) and matched against its
+sensors with the default, direction-aware matching. By default the route is checked both
 ways, since a sensor facing one direction of traffic may read the trip
 there but not the trip back.
 
-Like "your week", this is compute-only: no database writes, the route cache
-is bypassed (so the points never reach Redis), nothing is cached and the
-inputs are not logged. The response exists only in the HTTP reply.
+This is compute-only: the route cache is bypassed, nothing is stored or
+cached and the inputs are not logged. The response exists only in the HTTP reply.
 """
 
 from datetime import datetime

@@ -24,8 +24,8 @@ const TOPICS: Record<Topic, { title: string; body: string[] }> = {
     title: "Why a few reads can be distinctive",
     body: [
       "Unicity asks how many points it takes to tell one trace apart from everyone else's, even with names or plates removed (after de Montjoye et al., 2013).",
-      "In the example study of simulated drivers in Edison and New Brunswick, NJ, two sightings (a sensor and an hour each) were enough to single out about 80% of drivers in a crowd of 1,000, and four sightings singled out nearly everyone who had four.",
-      "Real crowds are larger, so these simulated shares are upper bounds. The point is that a short list of places and times is often unique to one person.",
+      "In de Montjoye et al.'s study of 1.5 million phone users, four points of place and hour were enough to single out 95% of people.",
+      "The point is that a short list of places and times is often unique to one person.",
     ],
   },
 };
