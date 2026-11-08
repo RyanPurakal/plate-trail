@@ -114,6 +114,34 @@ def test_retries_then_falls_back_to_mirror(tmp_path):
     assert hosts == ["primary.test", "primary.test", "mirror.test"]
 
 
+@pytest.mark.parametrize("busy", [
+    httpx.Response(200, text="<html><body>Dispatcher_Client::request_read_and_idx::timeout</body></html>"),
+    httpx.Response(200, json={"elements": [], "remark": 'runtime error: Query timed out in "query" at line 2 after 91 seconds.'}),
+    httpx.Response(200, json={"remark": "runtime error: Query run out of memory using about 2048 MB of RAM."}),
+])
+def test_incomplete_answer_is_retried_on_the_mirror(tmp_path, busy):
+    hosts = []
+
+    def handler(request):
+        hosts.append(request.url.host)
+        return busy if request.url.host == "primary.test" else httpx.Response(200, json=FIXTURE)
+
+    loader = _loader(tmp_path, handler, urls=("https://primary.test/api", "https://mirror.test/api"),
+                     attempts_per_url=1)
+    assert len(loader.load()) == 5
+    assert hosts == ["primary.test", "mirror.test"]
+
+
+def test_incomplete_answers_everywhere_fail_and_are_not_cached(tmp_path):
+    def handler(request):
+        return httpx.Response(200, json={"elements": [], "remark": "runtime error: Query timed out"})
+
+    loader = _loader(tmp_path, handler, urls=("https://primary.test/api",), attempts_per_url=2)
+    with pytest.raises(RuntimeError):
+        loader.load()
+    assert not list(tmp_path.glob("*.json"))
+
+
 def test_non_retryable_error_raises_immediately(tmp_path):
     def handler(request):
         return httpx.Response(400, text="bad query")

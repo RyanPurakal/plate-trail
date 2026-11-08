@@ -139,6 +139,23 @@ def test_load_area_uses_stale_cache_when_overpass_fails(tmp_path):
         load_area((0.0, 0.0, 0.1, 0.1), cache=cache, client=overpass_client(calls, status=504))
 
 
+def test_timed_out_overpass_answer_keeps_the_last_good_sensor_list(tmp_path):
+    # A timed-out query comes back as a 200 with no elements; it must not replace the cached
+    # list, or a return visit would report every sensor in the area as removed.
+    cache, calls = RawCache(tmp_path), []
+    box = (-74.42, 40.5, -74.3, 40.6)
+    load_area(box, cache=cache, client=overpass_client(calls))
+
+    def timed_out(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"elements": [], "remark": "runtime error: Query timed out"})
+
+    busy = OverpassClient(httpx.Client(transport=httpx.MockTransport(timed_out)), urls=("http://overpass.test",),
+                          attempts_per_url=1, backoff_s=0)
+    later = datetime.now(timezone.utc) + area_mod.MAX_AGE + timedelta(days=1)
+    assert load_area(box, cache=cache, client=busy, now=later)["summary"]["sensor_count"] == 2
+    assert load_area(box, cache=cache, client=overpass_client(calls), now=later)["summary"]["sensor_count"] == 2
+
+
 def test_area_endpoint(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(area_mod, "area_cache", lambda: RawCache(tmp_path))

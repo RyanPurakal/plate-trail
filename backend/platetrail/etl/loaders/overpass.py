@@ -22,6 +22,26 @@ OVERPASS_URLS = (
     "https://overpass.private.coffee/api/interpreter",
 )
 RETRYABLE_STATUS = {429, 502, 503, 504}
+
+
+class IncompleteResponse(Exception):
+    """A 200 from Overpass that is not a whole answer: an HTML error page, or JSON whose
+    `remark` reports a runtime error (query timed out or ran out of memory), which comes
+    with partial or no elements. Retried like a 504 and never cached."""
+
+
+def checked_json(resp: httpx.Response) -> dict:
+    """The response body as a complete Overpass answer, or IncompleteResponse."""
+    try:
+        data = resp.json()
+    except ValueError as e:
+        raise IncompleteResponse(f"non-JSON answer from {resp.request.url}") from e
+    if not isinstance(data, dict) or not isinstance(data.get("elements"), list):
+        raise IncompleteResponse(f"answer from {resp.request.url} has no element list")
+    remark = data.get("remark")
+    if isinstance(remark, str) and "runtime error" in remark.lower():
+        raise IncompleteResponse(f"{resp.request.url}: {remark.strip()}")
+    return data
 USER_AGENT = "PlateTrail/0.1 (privacy-audit research; synthetic drivers only)"
 
 QUERY_TEMPLATE = """[out:json][timeout:90];
@@ -140,8 +160,8 @@ class OverpassClient:
                     if resp.status_code in RETRYABLE_STATUS:
                         raise httpx.HTTPStatusError(f"{resp.status_code} from {url}", request=resp.request, response=resp)
                     resp.raise_for_status()
-                    return resp.json()
-                except (httpx.HTTPStatusError, httpx.TransportError) as e:
+                    return checked_json(resp)
+                except (httpx.HTTPStatusError, httpx.TransportError, IncompleteResponse) as e:
                     status = getattr(getattr(e, "response", None), "status_code", None)
                     if status is not None and status not in RETRYABLE_STATUS:
                         raise
