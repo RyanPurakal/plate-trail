@@ -16,6 +16,7 @@ import { areaKey, areaSnapshot, forgetLooks, loadSnapshots, makeSnapshot, record
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
 import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 import { areaAnnouncement, nextAnnouncement, routeAnnouncement } from "@/lib/announce";
+import { latestOnly } from "@/lib/latest";
 
 const AreaMap = dynamic(() => import("@/components/AreaMap"), { ssr: false });
 
@@ -44,13 +45,17 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState(""); // read by screen readers when an area loads or a route is checked
   const announce = (text: string) => setAnnouncement((prev) => nextAnnouncement(prev, text));
   const viewBox = useRef<BBox | null>(null);
+  const areaRequests = useRef(latestOnly());
 
   async function loadArea(bbox: BBox) {
+    // Some openers (Compare, Since your last visit) stay clickable while an area loads; the newest request wins.
+    const ticket = areaRequests.current.start();
     setAreaLoading(true);
     setAreaError(null);
     announce("Loading public map data for this area…");
     try {
       const a = await getArea(bbox);
+      if (!areaRequests.current.isCurrent(ticket)) return; // superseded: not shown, so not recorded as a look
       setArea(a);
       // Saved areas' looks are kept however long ago they were; read fresh so another tab's saves count too.
       const pinned = new Set(loadAreas().map((x) => areaKey(x.bbox)));
@@ -60,9 +65,9 @@ export default function Home() {
       setSensorId(null);
       setPageUrl(a.bbox);
     } catch (e) {
-      setAreaError((e as Error).message);
+      if (areaRequests.current.isCurrent(ticket)) setAreaError((e as Error).message);
     } finally {
-      setAreaLoading(false);
+      if (areaRequests.current.isCurrent(ticket)) setAreaLoading(false);
     }
   }
 
