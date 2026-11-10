@@ -14,7 +14,7 @@ import { formatBBox, parseBBox, viewToBBox, type BBox } from "@/lib/area";
 import { makeBackup, mergeBackup, mergeSummary, type Backup } from "@/lib/backup";
 import { areaKey, areaSnapshot, forgetLooks, loadSnapshots, makeSnapshot, recordLook, routeKey, saveSnapshots, type SnapshotChange } from "@/lib/snapshots";
 import { addArea, AREAS_KEY, loadAreas, removeArea, renameArea, saveAreas, type SavedArea } from "@/lib/areas";
-import { addRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
+import { addRoute, findRoute, loadRoutes, removeRoute, renameRoute, saveRoutes, STORAGE_KEY, type Pt, type SavedRoute } from "@/lib/routes";
 import { areaAnnouncement, nextAnnouncement, routeAnnouncement } from "@/lib/announce";
 import { latestOnly } from "@/lib/latest";
 
@@ -37,6 +37,8 @@ export default function Home() {
   const [savedAreas, setSavedAreas] = useState<SavedArea[]>([]);
   const [areasSaved, setAreasSaved] = useState(true);
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
+  const routesNow = useRef<SavedRoute[]>([]); // the saved list as of now, for checks that finish later
+  routesNow.current = routes;
   const [routesSaved, setRoutesSaved] = useState(true);
   const [routeDraft, setRouteDraft] = useState<RouteDraft | null>(null);
   const [shownRoute, setShownRoute] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export default function Home() {
     setRoutes(loadRoutes());
     setSavedAreas(loadAreas());
     const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) setRoutes(loadRoutes());
+      if (e.key === STORAGE_KEY) setRoutes((routesNow.current = loadRoutes()));
       if (e.key === AREAS_KEY) setSavedAreas(loadAreas());
     };
     window.addEventListener("storage", onStorage);
@@ -104,6 +106,7 @@ export default function Home() {
   }
 
   function updateRoutes(next: SavedRoute[]) {
+    routesNow.current = next;
     setRoutes(next);
     setRoutesSaved(saveRoutes(next));
     if (shownRoute && !next.some((r) => r.id === shownRoute)) setShownRoute(null);
@@ -120,17 +123,20 @@ export default function Home() {
   }
 
   // Results stay in page memory only; reloading the page or deleting the route drops them.
+  // A route deleted while its check runs stays deleted: the answer is dropped and no look is stored for it.
   async function runRouteCheck(id: string) {
-    const r = routes.find((x) => x.id === id);
+    const r = findRoute(routesNow.current, id);
     if (!r) return;
     setRouteChecks((c) => ({ ...c, [id]: { loading: true, result: null, error: null } }));
     announce(`Checking ${r.name}…`);
     try {
       const result = await checkRoute(r.start, r.end);
+      if (!findRoute(routesNow.current, id)) return;
       const change = recordLook(routeKey(id), makeSnapshot(result.legs.flatMap((l) => l.steps.map((st) => st.sensor_id))));
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result, error: null, change } }));
       announce(routeAnnouncement(r.name, result, change));
     } catch (e) {
+      if (!findRoute(routesNow.current, id)) return;
       setRouteChecks((c) => ({ ...c, [id]: { loading: false, result: null, error: (e as Error).message } }));
     }
   }

@@ -5,7 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import type { BBox } from "../lib/area";
 import { addArea, MAX_AREAS, nextAreaName, parseAreas, renameArea, saveAreas, loadAreas, AREAS_KEY } from "../lib/areas";
-import { addRoute, cleanName, MAX_NAME, MAX_ROUTES, nextRouteName, parseRoutes, removeRoute, renameRoute } from "../lib/routes";
+import { addRoute, cleanName, findRoute, MAX_NAME, MAX_ROUTES, nextRouteName, parseRoutes, removeRoute, renameRoute } from "../lib/routes";
 import {
   areaKey, diffSnapshot, forgetLooks, KEEP_CHANGE_DAYS, latestChange, loadSnapshots, makeSnapshot, MAX_AREA_SNAPSHOTS, parseSnapshots, putSnapshot, recordLook, routeKey,
   SNAP_KEY, type Snapshot,
@@ -75,6 +75,8 @@ describe("routes", () => {
     assert.equal(renameRoute(routes, "r1", "   "), routes);
     assert.equal(renameRoute(routes, "r1", "School run")[0].name, "School run");
     assert.deepEqual(removeRoute(routes, "r1"), []);
+    assert.equal(findRoute(routes, "r1")?.name, "Commute");
+    assert.equal(findRoute(removeRoute(routes, "r1"), "r1"), undefined);
   });
 });
 

@@ -96,7 +96,10 @@ export function renameRoute(routes: SavedRoute[], id: string, name: string): Sav
 
 export const removeRoute = (routes: SavedRoute[], id: string) => routes.filter((r) => r.id !== id);
 
-/** Straight-line distance in km (haversine), shown as a rough size until routing lands. */
+/** The saved route with this id, if it is still saved (a check can finish after its route was deleted). */
+export const findRoute = (routes: SavedRoute[], id: string) => routes.find((r) => r.id === id);
+
+/** Straight-line distance in km (haversine), shown as a rough size before a route is checked by road. */
 export function straightKm([lon1, lat1]: Pt, [lon2, lat2]: Pt): number {
   const rad = Math.PI / 180;
   const a = Math.sin(((lat2 - lat1) * rad) / 2) ** 2 +
