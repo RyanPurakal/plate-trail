@@ -1,6 +1,6 @@
 """Explore any area: public fixed sensors inside a bounding box.
 
-An area needs no config file. The
+Unlike the study region (platetrail.region), an area needs no config file. The
 box is snapped outward to a GRID_DEG grid so nearby requests share one cached
 Overpass response, and a cached response older than MAX_AGE is refetched so
 summaries stay reasonably fresh. Only public map data is involved: the box
@@ -183,7 +183,7 @@ def source_priority(region: Region) -> tuple[str, ...]:
 
 
 def merge_listed_twice(features: list[dict], priority: tuple[str, ...]) -> tuple[list[dict], int]:
-    """Show a sensor listed by more than one source once, using etl.dedupe.
+    """Show a sensor listed by more than one source once, by the same rules as the study ETL.
 
     Uses etl.dedupe: across sources, points within 15 m with compatible
     directions are one sensor; within a source, only double-mapped points

@@ -4,7 +4,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 *.egg-info/
-build/
 .coverage
 
 # Node / Next.js

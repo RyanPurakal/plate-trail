@@ -1,18 +1,20 @@
 [project]
 name = "platetrail"
 version = "0.1.0"
-description = "Location-privacy check-up: public fixed sensors near an area or a route"
+description = "Privacy audit of what ALPR read histories reveal about a driver (synthetic drivers only)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
+    "sqlalchemy>=2.0",
+    "geoalchemy2",
+    "psycopg[binary]>=3.1",
     "numpy",
     "httpx",
-    "requests",
     "networkx",
     "osmnx>=2.0",
-    "shapely>=2.0",
-    "pyproj",
+    "celery>=5.4",
+    "redis>=5.0",
     "scikit-learn>=1.3",
 ]
 
@@ -20,14 +22,17 @@ dependencies = [
 dev = ["pytest"]
 
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+# The C++ router (src/fastroute.cpp, platetrail._fastroute) is built with pybind11 via scikit-build-core.
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
 
-[tool.setuptools.packages.find]
-include = ["platetrail*"]
-
-[tool.setuptools.package-data]
-platetrail = ["regions/*.json"]
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.build-type = "Release"
+wheel.packages = ["platetrail"]
+# Everything under platetrail/ ships (Python, sql/*.sql, etl/data/*.json); keep build junk out.
+sdist.exclude = ["**/__pycache__", "**/*.pyc", ".venv", "build"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["db: test requires a PostGIS database (DATABASE_URL)"]

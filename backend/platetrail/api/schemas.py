@@ -1,6 +1,113 @@
-"""Request models for the API (responses are plain JSON dicts)."""
+"""Request models for the API (responses are plain JSON / GeoJSON dicts)."""
 
-from pydantic import BaseModel, Field, field_validator
+from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from platetrail.sim.matcher import MatchConfig
+from platetrail.sim.noise import NoiseConfig
+from platetrail.sim.runner import SimulationRequest
+
+MAX_WEEKS = 8  # keeps a synchronous request to a few seconds
+
+
+def _region_town(v: str | None) -> str | None:
+    """scenario_town must name a town of the active region (None: the region's default)."""
+    if v is None:
+        return v
+    from platetrail.region import get_region
+
+    labels = get_region().labels
+    if v not in labels:
+        raise ValueError(f"scenario_town must be one of {list(labels)}")
+    return v
+
+
+class MatchSettings(BaseModel):
+    tolerance_deg: float = Field(45.0, ge=0, le=180)
+    facing: Literal["rear_plate", "oncoming"] = "rear_plate"
+    undirected: Literal["best", "worst"] = "best"
+    ambiguous_direction: Literal["primary", "alternate"] = "primary"
+    lot_entrance: Literal["access_road", "nearest", "all"] = "access_road"
+
+
+class NoiseSettings(BaseModel):
+    p_miss: float = Field(0.05, ge=0, le=1)
+    p_char_misread: float = Field(0.01, ge=0, le=1)
+    downtime_rate_per_week: float = Field(0.25, ge=0)
+    downtime_mean_hours: float = Field(12.0, ge=0)
+    jitter_sd_s: float = Field(2.0, ge=0)
+
+
+class SimulateRequest(BaseModel):
+    generator: Literal["nhts", "template"] = "nhts"
+    # template: commuter / student / shift_worker; nhts persona: worker / student / non_worker
+    template: Literal["commuter", "student", "shift_worker", "worker", "non_worker"] | None = None
+    weeks: int = Field(1, ge=1, le=MAX_WEEKS)
+    start: date = date(2026, 10, 12)
+    seed: int = Field(0, ge=0)
+    zero_noise: bool = False
+    extra_cameras: int = Field(0, ge=0, le=200)  # density scenario: synthetic cameras in scenario_town
+    scenario_town: str | None = None  # any town of the active region; None: the region's scenario_town
+    match: MatchSettings = MatchSettings()
+    noise: NoiseSettings = NoiseSettings()
+
+    @model_validator(mode="after")
+    def _template_matches_generator(self):
+        allowed = {"nhts": {"worker", "student", "non_worker"}, "template": {"commuter", "student", "shift_worker"}}
+        if self.template is not None and self.template not in allowed[self.generator]:
+            raise ValueError(f"template {self.template!r} is not valid for generator {self.generator!r}")
+        return self
+
+    @field_validator("start")
+    @classmethod
+    def _monday(cls, v: date) -> date:
+        if v.weekday() != 0:
+            raise ValueError("start must be a Monday")
+        return v
+
+    check_scenario_town = field_validator("scenario_town")(_region_town)
+
+    def to_request(self) -> SimulationRequest:
+        noise = (NoiseConfig.noiseless(self.seed) if self.zero_noise
+                 else NoiseConfig(seed=self.seed, **self.noise.model_dump()))
+        return SimulationRequest(self.template, self.weeks, self.start, self.seed,
+                                 MatchConfig(**self.match.model_dump()), noise, self.extra_cameras,
+                                 self.scenario_town, generator=self.generator)
+
+
+class PopulationRequestBody(BaseModel):
+    drivers: int = Field(1000, ge=2, le=2000)
+    weeks: int = Field(1, ge=1, le=MAX_WEEKS)
+    start: date = date(2026, 10, 12)
+    seed: int = Field(0, ge=0)
+    generator: Literal["nhts", "template"] = "nhts"
+    extra_cameras: int = Field(0, ge=0, le=200)
+    scenario_town: str | None = None  # any town of the active region; None: the region's scenario_town
+    match: MatchSettings = MatchSettings()
+    noise: NoiseSettings = NoiseSettings()
+
+    check_scenario_town = field_validator("scenario_town")(_region_town)
+
+    @field_validator("start")
+    @classmethod
+    def _monday(cls, v: date) -> date:
+        if v.weekday() != 0:
+            raise ValueError("start must be a Monday")
+        return v
+
+    def to_request(self):
+        from platetrail.population import PopulationRequest
+
+        return PopulationRequest(self.drivers, self.weeks, self.start, self.seed, self.generator,
+                                 MatchConfig(**self.match.model_dump()), NoiseConfig(**self.noise.model_dump()),
+                                 self.extra_cameras, self.scenario_town)
+
+
+class LonLat(BaseModel):
+    lon: float = Field(ge=-75.0, le=-73.5)
+    lat: float = Field(ge=40.0, le=41.0)
 
 
 class AnyLonLat(BaseModel):
@@ -41,3 +148,30 @@ class RouteHistoryBody(RouteCheckBody):
         if any(d < 1 or d > 365 for d in v):
             raise ValueError("retention periods are 1 to 365 days")
         return sorted(set(v))
+
+
+class YourWeekBody(BaseModel):
+    """Session-only inputs; never stored."""
+    home: LonLat
+    work: LonLat | None = None
+    workdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    leave_home: str = Field("07:45", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    leave_work: str = Field("17:15", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    errands_per_week: int = Field(3, ge=0, le=5)
+    weekend_outings: int = Field(2, ge=0, le=6)
+    weeks: int = Field(1, ge=1, le=4)
+
+    @field_validator("workdays")
+    @classmethod
+    def _days(cls, v):
+        if any(d not in range(7) for d in v):
+            raise ValueError("workdays are 0 (Monday) to 6 (Sunday)")
+        return sorted(set(v))
+
+    def to_input(self):
+        from platetrail.yourweek import WeekInput
+
+        mins = lambda s: int(s[:2]) * 60 + int(s[3:])  # noqa: E731
+        return WeekInput((self.home.lon, self.home.lat), (self.work.lon, self.work.lat) if self.work else None,
+                         tuple(self.workdays), mins(self.leave_home), mins(self.leave_work), self.errands_per_week,
+                         self.weekend_outings)

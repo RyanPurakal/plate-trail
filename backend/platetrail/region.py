@@ -1,4 +1,4 @@
-"""Region configuration: default map view and optional sensor files.
+"""Study-area (region) configuration.
 
 A region is the set of municipalities the simulation covers: their labels,
 OSM boundary relations, and the parent area (ISO 3166-2 code) used to look

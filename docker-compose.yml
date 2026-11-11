@@ -1,16 +1,55 @@
 services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: platetrail
+      POSTGRES_PASSWORD: platetrail
+      POSTGRES_DB: platetrail
+    ports:
+      - "${PLATETRAIL_DB_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platetrail -d platetrail"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   api:
     build: ./backend
-    environment:
+    environment: &backend-env
+      DATABASE_URL: postgresql+psycopg://platetrail:platetrail@db:5432/platetrail
       PLATETRAIL_DATA_DIR: /data
       CORS_ORIGINS: http://localhost:3000
-      # Bundled region id or a .json path under /data; empty = the NJ default.
+      REDIS_URL: redis://redis:6379/0
+      # Bundled region id or a .json path under /data; empty = the NJ study.
       PLATETRAIL_REGION: ${PLATETRAIL_REGION:-}
     volumes:
-      # Overpass and OSMnx caches persist on the host so reruns don't refetch.
+      # Overpass, OSMnx and NHTS caches persist on the host so reruns don't refetch.
       - ./data:/data
     ports:
       - "8000:8000"
+    depends_on: &backend-deps
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: ["celery", "-A", "platetrail.worker", "worker", "--loglevel=info", "--concurrency=2"]
+    environment: *backend-env
+    volumes:
+      - ./data:/data
+    depends_on: *backend-deps
 
   web:
     build:
@@ -21,3 +60,6 @@ services:
       - "3000:3000"
     depends_on:
       - api
+
+volumes:
+  pgdata:

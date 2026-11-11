@@ -1,0 +1,7 @@
+id,lon,lat,town,direction,note
+t-1,-74.397047,40.509081,West,90,synthetic sensor for the smoke test
+t-2,-74.39114,40.508937,West,270,synthetic sensor for the smoke test
+t-3,-74.379327,40.509081,East,90;270,synthetic sensor for the smoke test
+t-4,-74.382185,40.502252,East,0,synthetic sensor for the smoke test
+t-5,-74.382374,40.515766,East,180,synthetic sensor for the smoke test
+t-6,-74.37342,40.508937,East,,synthetic sensor for the smoke test

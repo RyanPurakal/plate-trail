@@ -3,6 +3,7 @@ import json
 import pytest
 
 from platetrail.region import DEFAULT_REGION, RegionConfigError, load_region, parse_region
+from platetrail.roads.graph import graph_path
 
 
 def test_default_region_is_the_nj_study():
@@ -45,6 +46,9 @@ def test_invalid_configs_are_rejected(bad):
         parse_region(bad)
 
 
+def test_graph_cache_path_keeps_default_name(tmp_path):
+    assert graph_path(tmp_path, DEFAULT_REGION).name == "study_area_drive_service.graphml"
+    assert graph_path(tmp_path, "elsewhere").name == "study_area_drive_service_elsewhere.graphml"
 
 
 def test_default_region_names_student_and_scenario_towns():
@@ -147,14 +151,33 @@ def test_invalid_bbox_towns_are_rejected(town):
         _box_region(**town)
 
 
+def test_town_polygons_use_boxes_without_network():
+    from platetrail.roads.graph import town_polygons
+
+    r = parse_region({"id": "b", "name": "B", "parent_iso3166_2": "US-PA",
+                      "towns": [{"label": "Downtown", "bbox": [-75.2, 39.9, -75.1, 40.0]}]})
+    shapes = town_polygons(r)
+    assert list(shapes) == ["Downtown"]
+    assert shapes["Downtown"].bounds == (-75.2, 39.9, -75.1, 40.0)
 
 
+def test_places_query_covers_bbox_towns(monkeypatch):
+    from platetrail.routines import places
+
+    r = _box_region(bbox=[-75.2, 39.9, -75.1, 40.0])
+    monkeypatch.setattr(places, "get_region", lambda: r)
+    q = places.build_query()
+    assert "area(id:3600000007)->.a;" in q
+    assert 'nwr(area.a)["shop"];' in q
+    assert 'nwr(39.9,-75.2,40.0,-75.1)["shop"];' in q  # south,west,north,east
+    assert q.endswith(");\nout center tags;")
 
 
 def test_worked_example_region_loads(monkeypatch):
-    """The worked example in docs/examples/new_region (linked from the README) stays valid."""
+    """docs/new_region.md's example region and its sensor file stay valid."""
     from pathlib import Path
 
+    from platetrail.etl.run_etl import default_loaders
     from platetrail.etl.loaders.file import FileCameraLoader
 
     path = Path(__file__).resolve().parents[2] / "docs" / "examples" / "new_region" / "example_region.json"
@@ -165,8 +188,9 @@ def test_worked_example_region_loads(monkeypatch):
     assert [s.source or s.type for s in r.camera_sources] == ["example-hypothetical", "osm"]
     assert r.map.bounds == r.towns[0].bbox
 
-    src = r.camera_sources[0]
-    recs = FileCameraLoader(src.path, region=r, source=src.source).load()
+    file_loader = default_loaders(r)[0]
+    assert isinstance(file_loader, FileCameraLoader)
+    recs = file_loader.load()
     w, s, e, n = r.towns[0].bbox
     assert [x.source_id for x in recs] == ["ex-1", "ex-2", "ex-3"]
     assert all(w <= x.lon <= e and s <= x.lat <= n and x.source == "example-hypothetical" for x in recs)

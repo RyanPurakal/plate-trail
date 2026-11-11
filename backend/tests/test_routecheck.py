@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from platetrail.api.main import app
+from platetrail.api.main import app, get_route_runner
 from platetrail.routearea import AreaNetworks, get_area_networks
 from platetrail.routecheck import check_route
 from platetrail.sim.routing import NoRoute, Router
@@ -17,20 +17,14 @@ def toy():
     return SimpleNamespace(router=Router(toy_graph()), cameras=pair_on_main_st())
 
 
-class FixedNetworks:
-    """Stands in for AreaNetworks: every route gets the toy network."""
-
-    def __init__(self, toy):
-        self.toy = toy
-
-    def for_route(self, start, end):
-        return SimpleNamespace(router=self.toy.router, cameras=self.toy.cameras, bbox=(0.0, 0.0, 0.1, 0.1),
-                               sensors_mapped=2, sensors_on_roads=2, sources=[])
-
-
 @pytest.fixture
 def client(toy):
-    app.dependency_overrides[get_area_networks] = lambda: FixedNetworks(toy)
+    def no_roads(bbox):
+        raise NoRoute("no mapped roads")
+
+    app.dependency_overrides[get_route_runner] = lambda: toy
+    app.dependency_overrides[get_area_networks] = lambda: AreaNetworks(fetch_graph=no_roads)
+    # No `with`: the app's lifespan (database migrations) is not needed here.
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -79,21 +73,14 @@ def test_endpoint_is_compute_only(client):
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["stored"] is False and len(body["legs"]) == 2
-        assert body["network"]["kind"] == "area"
+        assert body["network"]["region"] == "nj_edison_new_brunswick"
         assert not any(k.startswith("route:") for k in cache._d)  # route cache bypassed
     finally:
         reset_cache(None)
 
 
-def test_endpoint_explains_routes_with_no_roads():
-    def no_roads(bbox):
-        raise NoRoute("no mapped roads")
-
-    app.dependency_overrides[get_area_networks] = lambda: AreaNetworks(fetch_graph=no_roads)
-    try:
-        resp = TestClient(app).post("/route/check", json={"start": {"lon": 2.35, "lat": 48.85}, "end": {"lon": 2.36, "lat": 48.86}})
-    finally:
-        app.dependency_overrides.clear()
+def test_endpoint_explains_routes_outside_the_network(client):
+    resp = client.post("/route/check", json={"start": {"lon": 2.35, "lat": 48.85}, "end": {"lon": 2.36, "lat": 48.86}})
     assert resp.status_code == 422
     assert "mapped road" in resp.json()["detail"]
 
