@@ -155,6 +155,11 @@ export function recordLook(key: string, snap: Snapshot, pinned?: ReadonlySet<str
   return change && earlier ? { ...change, earlier } : change;
 }
 
+/** When each item was last looked at from this browser (ISO time), or null if never; for the My areas / My routes lists. */
+export function lastLooks<T extends { id: string }>(items: readonly T[], key: (item: T) => string, all: Record<string, Snapshot> = loadSnapshots()): Record<string, string | null> {
+  return Object.fromEntries(items.map((it) => [it.id, all[key(it)]?.seen ?? null]));
+}
+
 /** Remove stored looks matching `drop` from this browser. */
 export function forgetLooks(drop: (key: string) => boolean) {
   saveSnapshots(dropSnapshots(loadSnapshots(), (k) => !drop(k)));

@@ -154,6 +154,13 @@ stored server-side. The Edison and New Brunswick study stays as the
       before (they have a stored look) are re-checked only on a button, since
       that uses the compute-only `/route/check`. Removed sensors are counted,
       not drawn.
+- [x] My routes shows when each route was last checked. My areas already
+      said "last look <date>"; a saved route only showed how far apart its
+      ends are, so there was no way to tell which routes were stale before
+      re-checking. Each route now reads "last check <date>" or "not checked
+      yet", from its stored look on this device (`lastLooks` in
+      `lib/snapshots.ts`, shared with My areas), updated as soon as a check
+      finishes or a saved file adds looks.
 
 ### 4. Compare and drill down
 
@@ -610,3 +617,19 @@ stored server-side. The Edison and New Brunswick study stays as the
   last look stored before this change will list a merged file sensor as no
   longer listed once. Next candidates are unchanged: a browser click-through
   of re-checking a saved route on a return visit, and the lint item.
+- 2026-11-06 to 11-10: the frontend got a roadside-survey redesign (guide-sign
+  masthead, Overpass type, numbered panels, light basemap). An MVP cut
+  briefly removed the study backend; it was restored as of 51f86d8 and the
+  example study tabs came back in the new look. Overpass timeouts and
+  non-JSON answers are retried and never cached as empty; overlapping area
+  loads and routes deleted mid-check are handled.
+- 2026-11-11: route last-check dates landed (frontend only). Checked by
+  typecheck, frontend tests (32) and build; backend suite without PostGIS or
+  the C++ router: 431 passed, 82 skipped. Not clicked through in a browser
+  (the scheduled run can't start local servers). Lint still blocked
+  (typescript-eslint 8.72.2 wants TypeScript below 6.1). The first `next
+  build` of the run hung for over 10 minutes waiting on a `tsc --showConfig`
+  child; a rerun finished normally. Next candidates: a browser click-through
+  of the redesigned check-up (return visit with a route re-check), and a
+  "Learn more: where the sensor data comes from" explainer by the area
+  card's sources list.

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RouteCheck, RouteLeg, RouteStep } from "@/lib/api";
-import type { SnapshotChange } from "@/lib/snapshots";
+import { shortDate } from "@/lib/area";
+import { lastLooks, routeKey, type SnapshotChange } from "@/lib/snapshots";
 import ChangeNote from "./ChangeNote";
 import RouteHistory from "./RouteHistory";
 import { MAX_NAME, MAX_ROUTES, nextRouteName, straightKm, type Pt, type SavedRoute } from "@/lib/routes";
@@ -127,6 +128,12 @@ export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, on
     if (draft?.end) setName(nextRouteName(routes));
   }, [draft?.end, routes]);
 
+  // When each route was last checked from this browser (its stored look); re-read when the list or a check changes.
+  const lastCheck = useMemo(() => {
+    const looks = lastLooks(routes, (r) => routeKey(r.id));
+    return Object.fromEntries(routes.map((r) => [r.id, shortDate(looks[r.id])]));
+  }, [routes, checks]);
+
   function save(e: React.FormEvent) {
     e.preventDefault();
     onSave(name);
@@ -174,7 +181,8 @@ export default function MyRoutes({ routes, storageOk, draft, onAdd, onCancel, on
               ) : (
                 <>
                   <button className="mr-name" aria-pressed={shownId === r.id} onClick={() => onShow(shownId === r.id ? null : r.id)}>
-                    {r.name}<span className="dim"> · {km(r)}</span>
+                    {r.name}
+                    <span className="dim"> · {km(r)} · {lastCheck[r.id] ? `last check ${lastCheck[r.id]}` : "not checked yet"}</span>
                   </button>
                   {confirm === r.id ? (
                     <span className="mr-tools">

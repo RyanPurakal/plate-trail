@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { shortDate, type BBox } from "@/lib/area";
 import { findArea, MAX_AREAS, nextAreaName, type SavedArea } from "@/lib/areas";
 import { MAX_NAME } from "@/lib/routes";
-import { areaKey, loadSnapshots } from "@/lib/snapshots";
+import { areaKey, lastLooks } from "@/lib/snapshots";
 
 type Props = {
   areas: SavedArea[];
@@ -28,8 +28,8 @@ export default function MyAreas({ areas, storageOk, current, loading, onOpen, on
   useEffect(() => setNaming(null), [current]);
   // When each saved area was last looked at from this browser; re-read whenever the list or loaded area changes.
   const lastSeen = useMemo(() => {
-    const snaps = loadSnapshots();
-    return Object.fromEntries(areas.map((a) => [a.id, shortDate(snaps[areaKey(a.bbox)]?.seen ?? null)]));
+    const looks = lastLooks(areas, (a) => areaKey(a.bbox));
+    return Object.fromEntries(areas.map((a) => [a.id, shortDate(looks[a.id])]));
   }, [areas, current]);
 
   function save(e: React.FormEvent) {

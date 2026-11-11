@@ -7,7 +7,7 @@ import type { BBox } from "../lib/area";
 import { addArea, MAX_AREAS, nextAreaName, parseAreas, renameArea, saveAreas, loadAreas, AREAS_KEY } from "../lib/areas";
 import { addRoute, cleanName, findRoute, MAX_NAME, MAX_ROUTES, nextRouteName, parseRoutes, removeRoute, renameRoute } from "../lib/routes";
 import {
-  areaKey, diffSnapshot, forgetLooks, KEEP_CHANGE_DAYS, latestChange, loadSnapshots, makeSnapshot, MAX_AREA_SNAPSHOTS, parseSnapshots, putSnapshot, recordLook, routeKey,
+  areaKey, diffSnapshot, forgetLooks, KEEP_CHANGE_DAYS, lastLooks, latestChange, loadSnapshots, makeSnapshot, MAX_AREA_SNAPSHOTS, parseSnapshots, putSnapshot, recordLook, routeKey,
   SNAP_KEY, type Snapshot,
 } from "../lib/snapshots";
 
@@ -229,5 +229,16 @@ describe("snapshots", () => {
     assert.deepEqual(Object.keys(loadSnapshots()), [routeKey("r1")]);
     forgetLooks(() => true);
     assert.equal(store.getItem(SNAP_KEY), null);
+  });
+
+  test("lastLooks gives each saved item's last look time, null when never looked at", () => {
+    recordLook(routeKey("r1"), snap(["a"], {}, "2026-11-01T08:00:00Z"));
+    recordLook(routeKey("r1"), snap(["a"], {}, "2026-11-03T08:00:00Z"));
+    recordLook(areaKey([0, 0, 0.1, 0.1]), snap(["b"], {}, "2026-11-02T08:00:00Z"));
+    const routes = [route(), route({ id: "r2" })];
+    assert.deepEqual(lastLooks(routes, (r) => routeKey(r.id)), { r1: "2026-11-03T08:00:00Z", r2: null });
+    const areas = [{ id: "a1", bbox: [0, 0, 0.1, 0.1] as BBox }];
+    assert.deepEqual(lastLooks(areas, (a) => areaKey(a.bbox)), { a1: "2026-11-02T08:00:00Z" });
+    assert.deepEqual(lastLooks([], () => "x"), {});
   });
 });
