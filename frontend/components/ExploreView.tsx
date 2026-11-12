@@ -240,6 +240,7 @@ export default function ExploreView({ area, loading, error, shrunk, onExplore, o
                 </div>
               );
             })}
+            <LearnMore topic="sources" />
           </div>
 
           <div className="ex-foot">

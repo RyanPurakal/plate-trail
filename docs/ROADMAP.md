@@ -216,6 +216,14 @@ stored server-side. The Edison and New Brunswick study stays as the
       Camera-count tables still name the manufacturer where it is the OSM tag
       or a source's own count.
 
+- [x] "Learn more: where the sensor data comes from" under the area card's
+      data sources list. A fourth `LearnMore` topic (`sources`) says that most
+      locations come from volunteer-edited OpenStreetMap (ODbL), that the map
+      is cached for up to 7 days so a recent edit can take that long to show,
+      what "latest edit here" and a file's date mean, that a sensor listed by
+      more than one source is shown once, and that counts describe what has
+      been mapped rather than every sensor that exists.
+
 ### 6. Polish
 
 - [x] Mobile layout, keyboard and screen-reader access for the new views.
@@ -633,3 +641,10 @@ stored server-side. The Edison and New Brunswick study stays as the
   of the redesigned check-up (return visit with a route re-check), and a
   "Learn more: where the sensor data comes from" explainer by the area
   card's sources list.
+- 2026-11-12: data-sources explainer landed (frontend only). Checked by
+  typecheck, frontend tests (32) and build; backend suite without PostGIS or
+  the C++ router: 431 passed, 82 skipped. Not clicked through in a browser.
+  The untracked `frontend/AGENTS.md` from `next dev` is still left out of
+  commits. Next candidates: a browser click-through of the redesigned
+  check-up (return visit with a route re-check), and the lint item once
+  typescript-eslint supports TypeScript 7.
