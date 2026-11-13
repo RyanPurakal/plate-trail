@@ -6,6 +6,7 @@ import { shortDate, type BBox } from "@/lib/area";
 import type { SavedArea } from "@/lib/areas";
 import type { SavedRoute } from "@/lib/routes";
 import { areaKey, areaSnapshot, latestChange, loadSnapshots, recordLook, routeKey, sensorChangeText, type FoundChange, type SnapshotChange } from "@/lib/snapshots";
+import { replaceById } from "@/lib/visits";
 import type { RouteCheckState } from "./MyRoutes";
 
 type AreaVisit = { id: string; status: "recent" | "first" | "error"; seen?: string; earlier?: FoundChange | null } | { id: string; status: "done"; change: SnapshotChange };
@@ -26,9 +27,10 @@ export const RECHECK_AFTER_MS = 60 * 60 * 1000;
 // One run per page load, so switching tabs and back does not re-check.
 let visitRun: Promise<AreaVisit[]> | null = null;
 
-async function checkAreas(areas: SavedArea[], onProgress: (i: number) => void): Promise<AreaVisit[]> {
+// `saved` is every saved area, so their looks are kept when `areas` is only some of them (a retry).
+async function checkAreas(areas: SavedArea[], saved: SavedArea[], onProgress: (i: number) => void): Promise<AreaVisit[]> {
   const snaps = loadSnapshots();
-  const pinned = new Set(areas.map((a) => areaKey(a.bbox)));
+  const pinned = new Set(saved.map((a) => areaKey(a.bbox)));
   const out: AreaVisit[] = [];
   for (const [i, a] of areas.entries()) {
     onProgress(i);
@@ -61,13 +63,13 @@ const visitEarlier = (v: AreaVisit) => v.status === "done" ? v.change.earlier : 
  *  routes checked before can be re-checked with one click (they use the compute-only route check). */
 export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRoutes, onOpenArea, onShowRoute }: Props) {
   const [results, setResults] = useState<AreaVisit[] | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
+  const [progress, setProgress] = useState<{ i: number; of: number } | null>(null);
 
   useEffect(() => {
     if (!ready || (!visitRun && !areas.length)) return;
     let live = true;
     // Areas saved after the run started are not part of it; they show up on the next visit.
-    visitRun ??= checkAreas(areas, (i) => live && setProgress(i));
+    visitRun ??= checkAreas(areas, areas, (i) => live && setProgress({ i, of: areas.length }));
     visitRun.then((r) => {
       if (!live) return;
       setResults(r);
@@ -75,6 +77,15 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
     });
     return () => { live = false; };
   }, [ready, areas]);
+
+  // Check again only the saved areas that couldn't be checked; the rest keep their result.
+  const retry = (failed: SavedArea[]) => {
+    const before = visitRun;
+    if (!before || progress !== null) return;
+    visitRun = before.then(async (prev) =>
+      replaceById(prev, await checkAreas(failed, areas, (i) => setProgress({ i, of: failed.length }))));
+    visitRun.then((r) => { setResults(r); setProgress(null); });
+  };
 
   const snaps = loadSnapshots();
   const checkedBefore = routes.filter((r) => snaps[routeKey(r.id)]);
@@ -88,6 +99,7 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
   const byId = new Map(areas.map((a) => [a.id, a]));
   const shown = (results ?? []).filter((v) => byId.has(v.id));
   const withChange = shown.filter((v) => v.status === "done" && changed(v.change));
+  const failed = shown.filter((v) => v.status === "error").map((v) => byId.get(v.id)!);
 
   return (
     <section className="naive visit" aria-live="polite">
@@ -97,7 +109,7 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
       </div>
 
       {areas.length > 0 && progress !== null && (
-        <div className="nb-note">Checking saved areas against public map data ({progress + 1} of {areas.length})…</div>
+        <div className="nb-note">Checking saved areas against public map data ({progress.i + 1} of {progress.of})…</div>
       )}
 
       {shown.length > 0 && (
@@ -125,6 +137,13 @@ export default function SinceLastVisit({ areas, routes, ready, checks, onCheckRo
               );
             })}
           </ul>
+          {failed.length > 0 && progress === null && (
+            <div className="ex-actions">
+              <button className="ex-share" onClick={() => retry(failed)}>
+                {failed.length === 1 ? "Try that area again" : `Try ${failed.length} areas again`}
+              </button>
+            </div>
+          )}
         </>
       )}
 

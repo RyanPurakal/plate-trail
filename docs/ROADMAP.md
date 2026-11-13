@@ -289,6 +289,13 @@ stored server-side. The Edison and New Brunswick study stays as the
       buttons, and the panel lists it for areas looked at in the last hour and
       for routes not re-checked yet. Saved files carry it.
 
+- [x] Saved areas that couldn't be checked on a return visit can be tried
+      again. The visit check runs once per page load, so an area that failed
+      (Overpass busy or offline) stayed "couldn't be checked right now" until a
+      reload. The panel now offers "Try that area again" / "Try n areas
+      again", which re-checks only those areas and keeps the others' results
+      (`replaceById` in `lib/visits.ts`).
+
 ## Reusability (configurable region and sensors)
 
 - [x] Region config: study-area towns, OSM boundary relations, parent ISO 3166-2
@@ -648,3 +655,9 @@ stored server-side. The Edison and New Brunswick study stays as the
   commits. Next candidates: a browser click-through of the redesigned
   check-up (return visit with a route re-check), and the lint item once
   typescript-eslint supports TypeScript 7.
+- 2026-11-13: retry for saved areas that failed on a return visit landed
+  (frontend only). Checked by typecheck, frontend tests (34) and build;
+  backend suite without PostGIS or the C++ router: 431 passed, 82 skipped. Not
+  clicked through in a browser. Next candidates are unchanged: a browser
+  click-through of the redesigned check-up (return visit with a route
+  re-check), and the lint item once typescript-eslint supports TypeScript 7.
